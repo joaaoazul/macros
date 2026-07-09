@@ -135,7 +135,7 @@ export default function Onboarding({ onDone }: Props) {
           <h1 className="text-3xl font-bold tracking-tight">O teu plano, {name.trim()}</h1>
           <p className="mt-2 text-ink-2">Calculado com a equação de Mifflin-St Jeor. Podes ajustar tudo depois no Perfil.</p>
 
-          <div className="mt-8 rounded-2xl border border-line bg-surface p-6 text-center shadow-sm">
+          <div className="mt-8 rounded-card bg-surface p-6 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
             <div className="text-sm font-medium text-muted uppercase tracking-wide">Calorias diárias</div>
             <div className="mt-1 text-5xl font-bold tracking-tight">{targets.kcal.toLocaleString('pt-PT')}</div>
             <div className="text-sm text-muted">kcal</div>
@@ -160,7 +160,7 @@ export default function Onboarding({ onDone }: Props) {
 }
 
 const inputCls =
-  'w-full rounded-xl border border-line bg-surface px-4 py-3 text-ink placeholder:text-muted focus:border-accent focus:outline-none'
+  'w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -187,7 +187,7 @@ function ChoiceButton({
       type="button"
       onClick={onClick}
       className={`rounded-xl border px-4 py-3 text-left transition-colors ${block ? 'block w-full' : ''} ${
-        active ? 'border-accent bg-accent-soft' : 'border-line bg-surface hover:border-muted'
+        active ? 'border-accent bg-accent-soft' : 'border-transparent bg-surface'
       }`}
     >
       {children}
@@ -211,7 +211,7 @@ export function PrimaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl bg-accent px-6 py-3.5 font-semibold text-white transition-opacity disabled:opacity-40 ${className}`}
+      className={`rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40 ${className}`}
     >
       {children}
     </button>
@@ -220,7 +220,7 @@ export function PrimaryButton({
 
 export function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="rounded-xl border border-line bg-surface px-6 py-3.5 font-semibold text-ink">
+    <button type="button" onClick={onClick} className="rounded-full bg-surface px-6 py-3.5 font-semibold text-ink">
       {children}
     </button>
   )
@@ -228,7 +228,7 @@ export function SecondaryButton({ children, onClick }: { children: React.ReactNo
 
 function MacroCard({ color, label, grams }: { color: string; label: string; grams: number }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface p-4 text-center shadow-sm">
+    <div className="rounded-card bg-surface p-4 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <span className={`mx-auto block h-2 w-2 rounded-full ${color}`} aria-hidden />
       <div className="mt-2 text-xl font-bold">{grams} g</div>
       <div className="text-xs text-muted">{label}</div>

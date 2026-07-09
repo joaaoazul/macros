@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Profile } from '../types'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
+import { Card, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
@@ -39,12 +40,11 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
 
   return (
     <div>
-      <header className="bg-accent px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-center">
-        <h1 className="text-xl font-bold text-white">Perfil</h1>
-      </header>
+      <LargeTitle title={profile.name} subtitle="Perfil" />
 
+      <div className="space-y-3.5 px-4 pt-2">
       {/* dados base */}
-      <section className="bg-surface px-4 py-4 shadow-sm">
+      <Card className="p-5">
         <div className="grid grid-cols-3 divide-x divide-line text-center">
           <div>
             <div className="text-xl font-bold text-carbs">{profile.heightCm}</div>
@@ -67,11 +67,9 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
           <div className="font-bold">{goalInfo?.label}</div>
           <div className="text-xs uppercase tracking-wide text-muted">Objetivo</div>
         </div>
-      </section>
-
-      <div className="space-y-4 px-4 pt-4">
+      </Card>
         {/* peso */}
-        <section className="rounded-2xl bg-surface p-4 shadow-sm">
+        <Card className="p-4">
           <div className="flex items-center gap-4">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>
               ⚖️
@@ -84,24 +82,24 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
                   inputMode="decimal"
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
-                  className="w-24 rounded-lg border border-line bg-bg px-3 py-1.5 text-xl font-bold focus:border-accent focus:outline-none"
+                  className="w-24 rounded-lg bg-bg px-3 py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
                   aria-label="Peso em kg"
                 />
                 <span className="self-center text-lg font-bold">kg</span>
                 <button
                   onClick={updateWeight}
                   disabled={Number(weight) === profile.weightKg || !(Number(weight) >= 35 && Number(weight) <= 250)}
-                  className="ml-auto rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                  className="ml-auto rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
                 >
                   Atualizar
                 </button>
               </div>
             </div>
           </div>
-        </section>
+        </Card>
 
         {/* métricas */}
-        <section className="divide-y divide-line rounded-2xl bg-surface shadow-sm">
+        <Card className="divide-y divide-line">
           <MetricRow emoji="🔥" label="TMB (metabolismo basal)" value={`${tmb.toLocaleString('pt-PT')} kcal`} />
           <MetricRow emoji="📐" label="IMC" value={imc.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} hint={imcClass(imc)} />
           <div className="flex items-center gap-4 p-4">
@@ -116,60 +114,60 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
                   inputMode="numeric"
                   value={waterMl}
                   onChange={(e) => setWaterMl(e.target.value)}
-                  className="w-28 rounded-lg border border-line bg-bg px-3 py-1.5 text-xl font-bold focus:border-accent focus:outline-none"
+                  className="w-28 rounded-lg bg-bg px-3 py-1.5 text-xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
                   aria-label="Meta de água em ml"
                 />
                 <span className="self-center text-lg font-bold">ml</span>
                 <button
                   onClick={updateWater}
                   disabled={Number(waterMl) === profile.targets.waterMl || !(Number(waterMl) >= 500 && Number(waterMl) <= 8000)}
-                  className="ml-auto rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+                  className="ml-auto rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
                 >
                   Atualizar
                 </button>
               </div>
             </div>
           </div>
-        </section>
+        </Card>
 
         {/* objetivo */}
-        <section className="rounded-2xl bg-surface p-5 shadow-sm">
-          <h2 className="font-bold">Objetivo</h2>
+        <Card className="p-5">
+          <h2 className="text-[17px] font-semibold">Objetivo</h2>
           <div className="mt-3 space-y-2">
             {GOALS.map((g) => (
               <button
                 key={g.value}
                 onClick={() => recompute({ goal: g.value })}
                 className={`block w-full rounded-xl border px-4 py-2.5 text-left text-sm ${
-                  profile.goal === g.value ? 'border-accent bg-accent-soft font-semibold' : 'border-line bg-bg'
+                  profile.goal === g.value ? 'border-accent bg-accent-soft font-semibold' : 'border-transparent bg-bg'
                 }`}
               >
                 <span aria-hidden>{g.emoji}</span> {g.label} <span className="text-muted">· {g.hint}</span>
               </button>
             ))}
           </div>
-        </section>
+        </Card>
 
         {/* atividade */}
-        <section className="rounded-2xl bg-surface p-5 shadow-sm">
-          <h2 className="font-bold">Nível de atividade</h2>
+        <Card className="p-5">
+          <h2 className="text-[17px] font-semibold">Nível de atividade</h2>
           <div className="mt-3 space-y-2">
             {ACTIVITY_LEVELS.map((a) => (
               <button
                 key={a.value}
                 onClick={() => recompute({ activity: a.value })}
                 className={`block w-full rounded-xl border px-4 py-2.5 text-left text-sm ${
-                  profile.activity === a.value ? 'border-accent bg-accent-soft font-semibold' : 'border-line bg-bg'
+                  profile.activity === a.value ? 'border-accent bg-accent-soft font-semibold' : 'border-transparent bg-bg'
                 }`}
               >
                 {a.label} <span className="text-muted">· {a.hint}</span>
               </button>
             ))}
           </div>
-        </section>
+        </Card>
 
         {/* zona de perigo */}
-        <section className="mb-2 rounded-2xl bg-surface p-5 shadow-sm">
+        <Card className="mb-2 p-5">
           {!confirmReset ? (
             <button onClick={() => setConfirmReset(true)} className="text-sm font-medium text-critical">
               Apagar todos os dados…
@@ -178,16 +176,16 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
             <div>
               <p className="text-sm text-ink-2">Isto apaga o perfil e todo o diário. Não há volta a dar.</p>
               <div className="mt-3 flex gap-2">
-                <button onClick={onReset} className="rounded-xl bg-critical px-4 py-2 text-sm font-semibold text-white">
+                <button onClick={onReset} className="rounded-full bg-critical px-4 py-2 text-sm font-semibold text-white">
                   Sim, apagar tudo
                 </button>
-                <button onClick={() => setConfirmReset(false)} className="rounded-xl border border-line px-4 py-2 text-sm font-medium">
+                <button onClick={() => setConfirmReset(false)} className="rounded-full bg-bg px-4 py-2 text-sm font-medium">
                   Cancelar
                 </button>
               </div>
             </div>
           )}
-        </section>
+        </Card>
       </div>
     </div>
   )

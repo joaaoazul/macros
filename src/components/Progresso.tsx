@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Diary, Profile } from '../types'
 import { sumEntries } from '../lib/calc'
 import { shiftDate, todayISO } from '../lib/store'
+import { Card, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
@@ -41,22 +42,19 @@ export default function Progresso({ profile, diary }: Props) {
 
   return (
     <div>
-      <header className="bg-accent px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-center">
-        <h1 className="text-xl font-bold text-white">Progresso</h1>
-        <p className="text-xs text-white/85">Os teus últimos 7 dias</p>
-      </header>
+      <LargeTitle title="Progresso" subtitle="Últimos 7 dias" />
 
       {/* tiles de estatística */}
-      <div className="mt-4 grid grid-cols-3 gap-3 px-4">
+      <div className="grid grid-cols-3 gap-3 px-4 pt-2">
         <StatTile value={avgKcal.toLocaleString('pt-PT')} label="média kcal/dia" />
         <StatTile value={`${avgProtein} g`} label="média proteína" />
         <StatTile value={`${daysOnPlan}/${loggedDays.length || 0}`} label="dias no plano" />
       </div>
 
       {/* gráfico semanal */}
-      <section className="mx-4 mt-4 rounded-2xl bg-surface p-5 shadow-sm">
+      <Card className="mx-4 mt-3.5 p-5">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-semibold">Calorias por dia</h2>
+          <h2 className="text-[17px] font-semibold">Calorias por dia</h2>
           <button onClick={() => setShowTable((s) => !s)} className="text-xs font-medium text-accent">
             {showTable ? 'Ver gráfico' : 'Ver tabela'}
           </button>
@@ -90,7 +88,7 @@ export default function Progresso({ profile, diary }: Props) {
             </table>
           </div>
         )}
-      </section>
+      </Card>
 
       <p className="mt-4 text-center text-xs text-muted">
         Alvo diário: {targets.kcal.toLocaleString('pt-PT')} kcal · H {targets.carbs} g · P {targets.protein} g · G {targets.fat} g
@@ -101,7 +99,7 @@ export default function Progresso({ profile, diary }: Props) {
 
 function StatTile({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface p-4 text-center shadow-sm">
+    <div className="rounded-card bg-surface p-4 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="text-xl font-bold">{value}</div>
       <div className="mt-0.5 text-[11px] text-muted">{label}</div>
     </div>

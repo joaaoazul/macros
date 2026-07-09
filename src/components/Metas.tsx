@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Profile } from '../types'
 import { splitFromTargets, targetsFromSplit } from '../lib/calc'
+import { Card, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
@@ -14,13 +15,11 @@ export default function Metas({ profile, setProfile }: Props) {
 
   return (
     <div>
-      <header className="bg-accent px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-center">
-        <h1 className="text-xl font-bold text-white">Metas</h1>
-      </header>
+      <LargeTitle title="Metas" subtitle="Os teus alvos diários" />
 
-      <div className="space-y-4 px-4 pt-4">
+      <div className="space-y-3.5 px-4 pt-2">
         {/* meta de calorias */}
-        <section className="flex items-center gap-4 rounded-2xl bg-surface p-4 shadow-sm">
+        <Card className="flex items-center gap-4 p-5">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-2xl" aria-hidden>
             🔥
           </span>
@@ -28,11 +27,11 @@ export default function Metas({ profile, setProfile }: Props) {
             <div className="text-xs font-semibold uppercase tracking-wide text-muted">Meta de calorias</div>
             <div className="text-3xl font-bold tracking-tight">{targets.kcal.toLocaleString('pt-PT')} kcal</div>
           </div>
-        </section>
+        </Card>
 
         {/* macronutrientes */}
-        <section className="rounded-2xl bg-surface p-5 shadow-sm">
-          <h2 className="text-lg font-bold">Macronutrientes</h2>
+        <Card className="p-5">
+          <h2 className="text-[17px] font-semibold">Macronutrientes</h2>
 
           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
             <MacroCol label="Hidratos" grams={targets.carbs} kcal={targets.carbs * 4} colorVar="--carbs" />
@@ -51,19 +50,19 @@ export default function Metas({ profile, setProfile }: Props) {
 
           <button
             onClick={() => setEditing(true)}
-            className="mt-5 flex w-full items-center justify-between border-t border-line pt-4 text-left font-semibold text-ink"
+            className="mt-5 flex w-full items-center justify-between border-t border-line pt-4 text-left text-[15px] font-semibold text-accent"
           >
             Editar macronutrientes <span className="text-muted">›</span>
           </button>
-        </section>
+        </Card>
 
-        <section className="rounded-2xl bg-surface p-4 shadow-sm">
+        <Card className="p-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="font-bold">Meta de água</h2>
+            <h2 className="text-[17px] font-semibold">Meta de água</h2>
             <span className="tabular-nums text-ink-2">💧 {targets.waterMl.toLocaleString('pt-PT')} ml</span>
           </div>
           <p className="mt-1 text-xs text-muted">Ajustável no Perfil — por omissão ~35 ml por kg de peso.</p>
-        </section>
+        </Card>
       </div>
 
       {editing && (
@@ -183,16 +182,16 @@ function EditSheet({
   const valid = total === 100 && kcalN >= 800 && kcalN <= 8000
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-t-3xl bg-bg px-5 pb-8 pt-2"
+        className="w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Editar macronutrientes"
       >
-        <div className="mx-auto h-1 w-10 rounded-full bg-line" aria-hidden />
-        <h2 className="mt-3 text-lg font-bold">Editar macronutrientes</h2>
+        <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden />
+        <h2 className="mt-4 text-xl font-bold">Editar macronutrientes</h2>
 
         <label className="mt-4 block">
           <span className="mb-1.5 block text-sm font-medium text-ink-2">Meta de calorias (kcal)</span>
@@ -212,7 +211,7 @@ function EditSheet({
         <button
           onClick={() => onSave(kcalN, Number(carbs), Number(protein), Number(fat))}
           disabled={!valid}
-          className="mt-4 w-full rounded-xl bg-accent px-6 py-3.5 font-semibold text-white disabled:opacity-40"
+          className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
         >
           Guardar
         </button>
@@ -222,7 +221,7 @@ function EditSheet({
 }
 
 const inputCls =
-  'w-full rounded-xl border border-line bg-surface px-4 py-3 text-ink font-semibold focus:border-accent focus:outline-none'
+  'w-full rounded-xl bg-surface px-4 py-3 text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-accent'
 
 function PctField({ label, colorVar, value, onChange }: { label: string; colorVar: string; value: string; onChange: (v: string) => void }) {
   return (

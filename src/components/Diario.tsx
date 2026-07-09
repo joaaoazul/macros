@@ -4,6 +4,8 @@ import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
 import { formatDatePT, shiftDate, todayISO, uid } from '../lib/store'
 import AddFoodSheet from './AddFoodSheet'
+import Rings from './Rings'
+import { Card, Chevron, CircleButton, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
@@ -30,6 +32,12 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
   const { targets } = profile
   const eaten = Math.round(totals.kcal)
   const net = eaten - burned
+  const remaining = targets.kcal - net
+
+  const dateLabel = useMemo(() => {
+    const [y, m, d] = date.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })
+  }, [date])
 
   const addEntry = (entry: Entry) => {
     setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), entry] }))
@@ -51,93 +59,83 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
 
   return (
     <div>
-      {/* cabeçalho coral com navegação de dias */}
-      <header className="bg-accent px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <div className="flex items-center justify-between">
-          <button onClick={() => setDate((d) => shiftDate(d, -1))} className={dayNavCls} aria-label="Dia anterior">
-            ‹
-          </button>
-          <div className="text-center text-white">
-            <h1 className="text-xl font-bold capitalize">📅 {formatDatePT(date)}</h1>
-            {date !== todayISO() && (
-              <button onClick={() => setDate(todayISO())} className="text-xs font-semibold text-white/90 underline">
-                Voltar a hoje
-              </button>
-            )}
+      <LargeTitle
+        title={formatDatePT(date)}
+        subtitle={dateLabel}
+        right={
+          <div className="mb-1 flex gap-2">
+            <CircleButton onClick={() => setDate((d) => shiftDate(d, -1))} label="Dia anterior">
+              <Chevron dir="left" />
+            </CircleButton>
+            <CircleButton onClick={() => setDate((d) => shiftDate(d, 1))} label="Dia seguinte" disabled={date >= todayISO()}>
+              <Chevron dir="right" />
+            </CircleButton>
           </div>
-          <button
-            onClick={() => setDate((d) => shiftDate(d, 1))}
-            className={dayNavCls}
-            aria-label="Dia seguinte"
-            disabled={date >= todayISO()}
-          >
-            ›
-          </button>
-        </div>
-      </header>
+        }
+      />
+      {date !== todayISO() && (
+        <button onClick={() => setDate(todayISO())} className="mx-5 -mt-1 mb-1 text-sm font-semibold text-accent">
+          Voltar a hoje
+        </button>
+      )}
 
-      {/* resumo: barras de macros + fórmula de calorias */}
-      <section className="bg-surface px-4 pb-4 pt-3 shadow-sm">
-        <div className="grid grid-cols-3 gap-4">
-          <SummaryBar label="Hidratos" value={totals.carbs} target={targets.carbs} colorVar="--carbs" />
-          <SummaryBar label="Proteína" value={totals.protein} target={targets.protein} colorVar="--protein" />
-          <SummaryBar label="Gordura" value={totals.fat} target={targets.fat} colorVar="--fat" />
-        </div>
+      <div className="space-y-3.5 px-4 pt-2">
+        {/* hero: anéis + estatísticas */}
+        <Card className="p-5">
+          <div className="flex items-center gap-5">
+            <Rings
+              rings={[
+                { value: totals.carbs, target: targets.carbs, colorVar: '--carbs', label: 'Hidratos' },
+                { value: totals.protein, target: targets.protein, colorVar: '--protein', label: 'Proteína' },
+                { value: totals.fat, target: targets.fat, colorVar: '--fat', label: 'Gordura' },
+              ]}
+            >
+              <span className="text-[1.75rem] font-bold leading-none tracking-tight">{Math.abs(Math.round(remaining)).toLocaleString('pt-PT')}</span>
+              <span className="mt-1 text-[11px] font-medium text-muted">{remaining >= 0 ? 'kcal restantes' : 'kcal a mais'}</span>
+            </Rings>
 
-        <div className="mt-4">
-          <div
-            className="h-2 overflow-hidden rounded-full bg-line"
-            role="progressbar"
-            aria-valuenow={net}
-            aria-valuemax={targets.kcal}
-            aria-label="Calorias líquidas"
-          >
-            <div
-              className="h-full rounded-full bg-accent transition-[width] duration-500"
-              style={{ width: `${targets.kcal > 0 ? Math.min(Math.max(net / targets.kcal, 0) * 100, 100) : 0}%` }}
-            />
+            <div className="flex-1 space-y-2.5">
+              <StatRow label="Hidratos" value={totals.carbs} target={targets.carbs} unit="g" colorVar="--carbs" />
+              <StatRow label="Proteína" value={totals.protein} target={targets.protein} unit="g" colorVar="--protein" />
+              <StatRow label="Gordura" value={totals.fat} target={targets.fat} unit="g" colorVar="--fat" />
+            </div>
           </div>
-          <p className="mt-2 text-center text-sm text-ink-2">
-            {eaten.toLocaleString('pt-PT')} − {burned} ={' '}
-            <span className={`font-bold ${net > targets.kcal ? 'text-critical' : 'text-ink'}`}>{net.toLocaleString('pt-PT')}</span> /{' '}
-            {targets.kcal.toLocaleString('pt-PT')} kcal
+
+          <p className="mt-4 border-t border-line pt-3 text-center text-[13px] text-muted">
+            <span className="font-semibold text-ink-2">{eaten.toLocaleString('pt-PT')}</span> ingeridas −{' '}
+            <span className="font-semibold text-ink-2">{burned}</span> exercício ={' '}
+            <span className="font-semibold text-ink-2">{net.toLocaleString('pt-PT')}</span> / {targets.kcal.toLocaleString('pt-PT')} kcal
           </p>
-        </div>
-      </section>
+        </Card>
 
-      <div className="space-y-4 px-4 pt-4">
         {/* refeições */}
         {MEALS.map((meal) => {
           const mealEntries = entries.filter((e) => e.meal === meal.id)
           const t = sumEntries(mealEntries)
           return (
-            <section key={meal.id} className="overflow-hidden rounded-2xl bg-surface shadow-sm">
-              <h2 className="px-4 pt-3.5 text-lg font-bold">{meal.label}</h2>
-
-              <div className="mt-2 grid grid-cols-4 gap-1 border-t border-line px-4 py-3 text-center">
-                <MealStat value={t.carbs} label="Hidratos" colorVar="--carbs" />
-                <MealStat value={t.protein} label="Proteína" colorVar="--protein" />
-                <MealStat value={t.fat} label="Gordura" colorVar="--fat" />
-                <MealStat value={t.kcal} label="Calorias" />
+            <Card key={meal.id} className="overflow-hidden">
+              <div className="flex items-baseline justify-between gap-3 px-5 pt-4">
+                <h2 className="truncate text-[17px] font-semibold">{meal.label}</h2>
+                {t.kcal > 0 && <span className="shrink-0 text-[13px] tabular-nums text-muted">{Math.round(t.kcal)} kcal</span>}
               </div>
 
               {mealEntries.length > 0 && (
-                <ul className="divide-y divide-line border-t border-line">
+                <ul className="mt-3 divide-y divide-line border-t border-line">
                   {mealEntries.map((e) => (
-                    <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <li key={e.id} className="flex items-center gap-3 py-2.5 pl-5 pr-3">
                       <span className="text-lg" aria-hidden>
                         {e.emoji}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{e.foodName}</div>
-                        <div className="text-xs text-muted">
+                        <div className="truncate text-[15px] font-medium">{e.foodName}</div>
+                        <div className="text-[12px] text-muted">
                           {e.grams} {e.unit} · H {Math.round(e.carbs)} · P {Math.round(e.protein)} · G {Math.round(e.fat)}
                         </div>
                       </div>
-                      <span className="text-sm font-semibold tabular-nums">{Math.round(e.kcal)}</span>
+                      <span className="text-[15px] font-semibold tabular-nums">{Math.round(e.kcal)}</span>
                       <button
                         onClick={() => removeEntry(e.id)}
-                        className="ml-1 rounded-lg px-2 py-1 text-muted transition-colors hover:bg-bg hover:text-critical"
+                        className="rounded-full px-2 py-1 text-muted transition-colors hover:text-critical"
                         aria-label={`Remover ${e.foodName}`}
                       >
                         ✕
@@ -149,32 +147,34 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
 
               <button
                 onClick={() => setAddingTo(meal.id)}
-                className="block w-full border-t border-line px-4 py-3 text-center text-sm font-bold text-accent transition-colors hover:bg-bg"
+                className={`mt-3 block w-full border-t border-line py-3 text-center text-[15px] font-semibold text-accent transition-colors hover:bg-accent-soft ${
+                  mealEntries.length > 0 ? '' : ''
+                }`}
               >
-                ＋ Adicionar alimentos
+                ＋ Adicionar alimento
               </button>
-            </section>
+            </Card>
           )
         })}
 
         {/* exercício */}
-        <section className="overflow-hidden rounded-2xl bg-surface shadow-sm">
-          <div className="flex items-baseline justify-between px-4 pt-3.5">
-            <h2 className="text-lg font-bold">Exercício</h2>
-            <span className="text-sm font-semibold tabular-nums text-ink-2">{burned} kcal</span>
+        <Card className="overflow-hidden">
+          <div className="flex items-baseline justify-between px-5 pt-4">
+            <h2 className="text-[17px] font-semibold">Exercício</h2>
+            <span className="text-[13px] tabular-nums text-muted">{burned} kcal</span>
           </div>
           {dayExercises.length > 0 && (
-            <ul className="mt-2 divide-y divide-line border-t border-line">
+            <ul className="mt-3 divide-y divide-line border-t border-line">
               {dayExercises.map((e) => (
-                <li key={e.id} className="flex items-center gap-3 px-4 py-2.5">
+                <li key={e.id} className="flex items-center gap-3 py-2.5 pl-5 pr-3">
                   <span className="text-lg" aria-hidden>
                     🏃
                   </span>
-                  <div className="min-w-0 flex-1 truncate text-sm font-medium">{e.name}</div>
-                  <span className="text-sm font-semibold tabular-nums text-fat">{Math.round(e.kcal)}</span>
+                  <div className="min-w-0 flex-1 truncate text-[15px] font-medium">{e.name}</div>
+                  <span className="text-[15px] font-semibold tabular-nums text-good">−{Math.round(e.kcal)}</span>
                   <button
                     onClick={() => removeExercise(e.id)}
-                    className="ml-1 rounded-lg px-2 py-1 text-muted transition-colors hover:bg-bg hover:text-critical"
+                    className="rounded-full px-2 py-1 text-muted transition-colors hover:text-critical"
                     aria-label={`Remover ${e.name}`}
                   >
                     ✕
@@ -185,46 +185,44 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
           )}
           <button
             onClick={() => setAddingExercise(true)}
-            className="block w-full border-t border-line px-4 py-3 text-center text-sm font-bold text-accent transition-colors hover:bg-bg"
+            className="mt-3 block w-full border-t border-line py-3 text-center text-[15px] font-semibold text-accent transition-colors hover:bg-accent-soft"
           >
             ＋ Adicionar exercício
           </button>
-        </section>
+        </Card>
 
         {/* água */}
-        <section className="rounded-2xl bg-surface p-4 shadow-sm">
+        <Card className="p-5">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-bold">Água</h2>
-            <span className="text-sm tabular-nums text-ink-2">
-              {waterMl} / {targets.waterMl} ml
+            <h2 className="text-[17px] font-semibold">Água</h2>
+            <span className="text-[13px] tabular-nums text-muted">
+              {waterMl} / {targets.waterMl} ml · {targets.waterMl > 0 ? Math.round((waterMl / targets.waterMl) * 100) : 0}%
             </span>
           </div>
-          <div
-            className="mt-3 h-6 overflow-hidden rounded-lg bg-line"
-            role="progressbar"
-            aria-valuenow={waterMl}
-            aria-valuemax={targets.waterMl}
-            aria-label="Água"
-          >
-            <div
-              className="flex h-full items-center justify-center rounded-lg bg-water text-xs font-bold text-white transition-[width] duration-500"
-              style={{ width: `${Math.min((waterMl / targets.waterMl) * 100, 100)}%`, minWidth: waterMl > 0 ? '2.5rem' : 0 }}
-            >
-              {targets.waterMl > 0 ? Math.round((waterMl / targets.waterMl) * 100) : 0} %
-            </div>
+          {/* gotas: uma por cada 250 ml da meta */}
+          <div className="mt-3 flex flex-wrap gap-1.5" role="progressbar" aria-valuenow={waterMl} aria-valuemax={targets.waterMl} aria-label="Água">
+            {Array.from({ length: Math.max(Math.ceil(targets.waterMl / 250), 1) }, (_, i) => (
+              <svg key={i} width="22" height="26" viewBox="0 0 24 28" aria-hidden>
+                <path
+                  d="M12 2C12 2 4 12.5 4 18a8 8 0 0 0 16 0C20 12.5 12 2 12 2z"
+                  fill={waterMl >= (i + 1) * 250 ? 'var(--water)' : 'var(--line)'}
+                  style={{ transition: 'fill 300ms ease' }}
+                />
+              </svg>
+            ))}
           </div>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-4 flex gap-2">
             <button onClick={() => addWater(250)} className={waterBtnCls}>
-              🥛 +250 ml
+              +250 ml
             </button>
             <button onClick={() => addWater(500)} className={waterBtnCls}>
-              🍶 +500 ml
+              +500 ml
             </button>
-            <button onClick={() => addWater(-250)} className={waterBtnCls} disabled={waterMl === 0}>
-              −250 ml
+            <button onClick={() => addWater(-250)} className="rounded-full px-4 py-2 text-sm font-semibold text-muted disabled:opacity-40" disabled={waterMl === 0}>
+              −250
             </button>
           </div>
-        </section>
+        </Card>
       </div>
 
       {addingTo && (
@@ -241,41 +239,20 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
   )
 }
 
-const dayNavCls =
-  'flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-2xl text-white disabled:opacity-30'
-const waterBtnCls =
-  'flex-1 rounded-xl border border-line bg-bg px-2 py-2 text-sm font-medium text-ink-2 transition-colors hover:border-water disabled:opacity-40'
+const waterBtnCls = 'rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent transition-opacity active:opacity-70'
 
-function SummaryBar({ label, value, target, colorVar }: { label: string; value: number; target: number; colorVar: string }) {
-  const pct = target > 0 ? Math.min((value / target) * 100, 100) : 0
+function StatRow({ label, value, target, unit, colorVar }: { label: string; value: number; target: number; unit: string; colorVar: string }) {
   return (
-    <div className="text-center">
-      <div className="text-sm font-bold" style={{ color: `var(${colorVar})` }}>
-        {label}
-      </div>
-      <div
-        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-line"
-        role="progressbar"
-        aria-valuenow={Math.round(value)}
-        aria-valuemax={target}
-        aria-label={label}
-      >
-        <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, background: `var(${colorVar})` }} />
-      </div>
-      <div className="mt-1 text-sm font-semibold tabular-nums text-ink">
-        {Math.round(value)} <span className="font-normal text-muted">/ {target} g</span>
-      </div>
-    </div>
-  )
-}
-
-function MealStat({ value, label, colorVar }: { value: number; label: string; colorVar?: string }) {
-  return (
-    <div>
-      <div className="text-lg font-bold tabular-nums" style={colorVar ? { color: `var(${colorVar})` } : undefined}>
+    <div className="flex items-center gap-2">
+      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: `var(${colorVar})` }} aria-hidden />
+      <span className="flex-1 text-[13px] font-medium text-ink-2">{label}</span>
+      <span className="text-[15px] font-semibold tabular-nums">
         {Math.round(value)}
-      </div>
-      <div className="text-[11px] text-muted">{label}</div>
+        <span className="font-normal text-muted">
+          {' '}
+          / {target} {unit}
+        </span>
+      </span>
     </div>
   )
 }
@@ -286,22 +263,22 @@ function AddExerciseSheet({ onAdd, onClose }: { onAdd: (e: Exercise) => void; on
   const valid = name.trim().length > 0 && Number(kcal) > 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-t-3xl bg-bg px-5 pb-8 pt-2"
+        className="w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Adicionar exercício"
       >
-        <div className="mx-auto h-1 w-10 rounded-full bg-line" aria-hidden />
-        <h2 className="mt-3 text-lg font-bold">Adicionar exercício</h2>
+        <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden />
+        <h2 className="mt-4 text-xl font-bold">Adicionar exercício</h2>
         <div className="mt-4 space-y-3">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ex.: corrida, ginásio, caminhada…"
-            className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+            className="w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
             autoFocus
           />
           <input
@@ -310,13 +287,13 @@ function AddExerciseSheet({ onAdd, onClose }: { onAdd: (e: Exercise) => void; on
             value={kcal}
             onChange={(e) => setKcal(e.target.value)}
             placeholder="Calorias queimadas"
-            className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+            className="w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </div>
         <button
           onClick={() => onAdd({ id: uid(), name: name.trim(), kcal: Number(kcal) })}
           disabled={!valid}
-          className="mt-5 w-full rounded-xl bg-accent px-6 py-3.5 font-semibold text-white disabled:opacity-40"
+          className="mt-5 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
         >
           Adicionar
         </button>

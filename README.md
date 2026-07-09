@@ -12,7 +12,8 @@ Tracker de macros e nutrição — rápido, bonito e 100% local (os dados nunca 
 - **Metas** — meta de calorias, repartição de macros com gráfico donut e edição da percentagem de cada macro.
 - **Progresso semanal** — médias, dias no plano e gráfico das calorias dos últimos 7 dias com linha do alvo, tooltip e vista em tabela.
 - **Perfil** — peso, TMB, IMC, meta de água, objetivo e nível de atividade; os alvos são recalculados automaticamente.
-- **Tema claro e escuro** — segue a preferência do sistema.
+- **Design ao estilo iOS** — large titles, cartões "inset grouped", tab bar translúcida com blur e anéis de atividade à Apple Fitness; tema claro e escuro seguem o sistema.
+- **PWA instalável** — no iPhone: Safari → Partilhar → "Adicionar ao ecrã principal" e abre em fullscreen como app nativa.
 - **Persistência local** — tudo guardado em `localStorage`, sem contas nem servidores.
 
 ## Stack
@@ -28,6 +29,12 @@ npm run build     # typecheck + build de produção
 npm run preview   # servir a build
 ```
 
+## Deploy (GitHub Pages)
+
+O workflow em `.github/workflows/deploy.yml` publica a app no GitHub Pages a cada
+push ao `main`. Para ativar (uma vez): **Settings → Pages → Source: GitHub Actions**.
+A app fica em `https://<utilizador>.github.io/macros/`.
+
 ## Estrutura
 
 ```
@@ -42,6 +49,8 @@ src/
     Diario.tsx        # diário do dia, resumo, água e exercício
     AddFoodSheet.tsx  # pesquisa local + OFF, quantidades, alimentos personalizados
     Metas.tsx         # metas de calorias e repartição de macros (donut)
+    Rings.tsx         # anéis de atividade concêntricos em SVG
+    ui.tsx            # peças iOS partilhadas (large title, cartões, ícones)
     Progresso.tsx     # estatísticas e gráfico semanal
     Perfil.tsx        # peso, TMB, IMC, água, objetivo e atividade
 

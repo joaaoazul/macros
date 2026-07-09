@@ -75,15 +75,15 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
   const mealLabel = MEALS.find((m) => m.id === meal)?.label ?? ''
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="flex h-[88dvh] w-full max-w-md flex-col rounded-t-3xl bg-bg"
+        className="flex h-[88dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`Adicionar alimento ao ${mealLabel}`}
       >
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line" aria-hidden />
+        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
 
         <header className="flex items-center justify-between px-5 pt-3">
           <h2 className="text-lg font-bold">Adicionar ao {mealLabel}</h2>
@@ -99,7 +99,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Pesquisar alimento ou código de barras…"
-                className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
+                className="w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
                 autoFocus
               />
             </div>
@@ -173,7 +173,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 inputMode="decimal"
                 value={grams}
                 onChange={(e) => setGrams(e.target.value)}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-2xl font-bold focus:border-accent focus:outline-none"
+                className="w-full rounded-xl bg-surface px-4 py-3 text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
                 autoFocus
               />
             </label>
@@ -184,7 +184,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                   key={g}
                   onClick={() => setGrams(String(g))}
                   className={`flex-1 rounded-lg border px-2 py-1.5 text-sm font-medium ${
-                    grams === String(g) ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-surface text-ink-2'
+                    grams === String(g) ? 'border-accent bg-accent-soft text-accent' : 'border-transparent bg-surface text-ink-2'
                   }`}
                 >
                   {g} {selected.unit}
@@ -202,7 +202,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
             <button
               onClick={confirm}
               disabled={factor <= 0}
-              className="mt-auto mb-6 rounded-xl bg-accent px-6 py-3.5 font-semibold text-white disabled:opacity-40"
+              className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
             >
               Adicionar
             </button>
@@ -277,7 +277,7 @@ function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate
   const valid = name.trim() && Number(kcal) >= 0 && Number(protein) >= 0 && Number(carbs) >= 0 && Number(fat) >= 0 && kcal !== ''
 
   const numCls =
-    'w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-ink placeholder:text-muted focus:border-accent focus:outline-none'
+    'w-full rounded-xl bg-surface px-3 py-2.5 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent'
 
   return (
     <div className="flex flex-1 flex-col px-5 pt-4">
@@ -311,7 +311,7 @@ function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate
           })
         }
         disabled={!valid}
-        className="mt-auto mb-6 rounded-xl bg-accent px-6 py-3.5 font-semibold text-white disabled:opacity-40"
+        className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
       >
         Guardar alimento
       </button>
