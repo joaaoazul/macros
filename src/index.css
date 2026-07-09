@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* Paleta validada (dataviz) — luz/escuro trocam aqui, o resto do código usa papéis */
+:root {
+  --bg: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --line: #e1e0d9;
+  --ring: rgba(11, 11, 11, 0.1);
+
+  --protein: #2a78d6;
+  --carbs: #1baf7a;
+  --fat: #eda100;
+  --accent: #2a78d6;
+  --accent-soft: #cde2fb;
+  --good: #006300;
+  --critical: #d03b3b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --line: #2c2c2a;
+    --ring: rgba(255, 255, 255, 0.1);
+
+    --protein: #3987e5;
+    --carbs: #199e70;
+    --fat: #c98500;
+    --accent: #3987e5;
+    --accent-soft: #10305a;
+    --good: #0ca30c;
+    --critical: #e66767;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-ring-soft: var(--ring);
+  --color-protein: var(--protein);
+  --color-carbs: var(--carbs);
+  --color-fat: var(--fat);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-critical: var(--critical);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
