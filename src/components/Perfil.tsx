@@ -89,7 +89,7 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
                 <button
                   onClick={updateWeight}
                   disabled={Number(weight) === profile.weightKg || !(Number(weight) >= 35 && Number(weight) <= 250)}
-                  className="ml-auto rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+                  className="ml-auto rounded-full bg-accent px-4 py-2 text-sm font-semibold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
                 >
                   Atualizar
                 </button>
@@ -121,7 +121,7 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
                 <button
                   onClick={updateWater}
                   disabled={Number(waterMl) === profile.targets.waterMl || !(Number(waterMl) >= 500 && Number(waterMl) <= 8000)}
-                  className="ml-auto rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+                  className="ml-auto rounded-full bg-accent px-4 py-2 text-sm font-semibold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
                 >
                   Atualizar
                 </button>

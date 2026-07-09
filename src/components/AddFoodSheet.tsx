@@ -6,7 +6,8 @@ import { searchOpenFoodFacts } from '../lib/off'
 import { uid } from '../lib/store'
 
 interface Props {
-  meal: MealId
+  /** null = escolher a refeição dentro da folha (botão + central) */
+  meal: MealId | null
   customFoods: Food[]
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
   onAdd: (entry: Entry) => void
@@ -15,7 +16,17 @@ interface Props {
 
 type OffState = { status: 'idle' | 'loading' | 'done' | 'error'; results: Food[] }
 
+function guessMeal(): MealId {
+  const h = new Date().getHours()
+  if (h < 11) return 'breakfast'
+  if (h < 15) return 'lunch'
+  if (h < 19) return 'snack'
+  if (h < 22) return 'dinner'
+  return 'supper'
+}
+
 export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd, onClose }: Props) {
+  const [selMeal, setSelMeal] = useState<MealId>(meal ?? guessMeal())
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
   const [grams, setGrams] = useState('100')
@@ -55,7 +66,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
     if (!selected || factor <= 0) return
     onAdd({
       id: uid(),
-      meal,
+      meal: selMeal,
       foodName: selected.brand ? `${selected.name} (${selected.brand})` : selected.name,
       emoji: selected.emoji,
       grams: gramsN,
@@ -72,7 +83,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
     setGrams('100')
   }
 
-  const mealLabel = MEALS.find((m) => m.id === meal)?.label ?? ''
+  const mealLabel = MEALS.find((m) => m.id === selMeal)?.label ?? ''
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
@@ -94,6 +105,21 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
 
         {!selected && !creating && (
           <>
+            {meal === null && (
+              <div className="flex gap-1.5 overflow-x-auto px-5 pt-3">
+                {MEALS.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelMeal(m.id)}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-colors ${
+                      selMeal === m.id ? 'bg-accent text-on-accent' : 'bg-surface text-ink-2'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="px-5 pt-3">
               <input
                 value={query}
@@ -202,7 +228,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
             <button
               onClick={confirm}
               disabled={factor <= 0}
-              className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+              className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
             >
               Adicionar
             </button>
@@ -311,7 +337,7 @@ function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate
           })
         }
         disabled={!valid}
-        className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+        className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
       >
         Guardar alimento
       </button>

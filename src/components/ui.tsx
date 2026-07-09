@@ -66,6 +66,19 @@ const iconProps = {
   strokeLinejoin: 'round',
 } as const
 
+export const IconHome = () => (
+  <svg {...iconProps} aria-hidden>
+    <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" />
+  </svg>
+)
+
+export const IconTrend = () => (
+  <svg {...iconProps} aria-hidden>
+    <path d="M4 17l5-5 3.5 3.5L20 9" />
+    <path d="M15 9h5v5" />
+  </svg>
+)
+
 export const IconBook = () => (
   <svg {...iconProps} aria-hidden>
     <path d="M12 6c-1.5-1.4-3.6-2-6-2H4v14h2c2.4 0 4.5.6 6 2 1.5-1.4 3.6-2 6-2h2V4h-2c-2.4 0-4.5.6-6 2z" />

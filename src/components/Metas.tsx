@@ -211,7 +211,7 @@ function EditSheet({
         <button
           onClick={() => onSave(kcalN, Number(carbs), Number(protein), Number(fat))}
           disabled={!valid}
-          className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+          className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
         >
           Guardar
         </button>
