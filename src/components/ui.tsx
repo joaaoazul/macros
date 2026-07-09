@@ -2,10 +2,10 @@
 
 export function LargeTitle({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
   return (
-    <header className="flex items-end justify-between px-5 pb-2 pt-[max(1.75rem,env(safe-area-inset-top))]">
-      <div>
-        {subtitle && <div className="text-[13px] font-semibold uppercase tracking-wide text-muted">{subtitle}</div>}
-        <h1 className="text-[2.125rem] font-bold leading-tight tracking-tight">{title}</h1>
+    <header className="flex items-end justify-between px-5 pb-3 pt-[max(1.75rem,env(safe-area-inset-top))]">
+      <div className="min-w-0">
+        {subtitle && <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-muted">{subtitle}</div>}
+        <h1 className="mt-0.5 truncate text-[2rem] font-extrabold leading-tight">{title}</h1>
       </div>
       {right}
     </header>
@@ -13,7 +13,25 @@ export function LargeTitle({ title, subtitle, right }: { title: string; subtitle
 }
 
 export function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-card bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>{children}</section>
+  return <section className={`rounded-card bg-surface shadow-card ring-1 ring-ring-soft ${className}`}>{children}</section>
+}
+
+/** Etiqueta de secção à iOS (por cima de um grupo de cartões). */
+export function SectionHeader({ children }: { children: React.ReactNode }) {
+  return <h3 className="px-2 pt-3 pb-0.5 text-[12px] font-bold uppercase tracking-[0.08em] text-muted">{children}</h3>
+}
+
+/** Círculo com emoji/ícone, com a tinta suave por trás (à iOS Definições). */
+export function IconCircle({ children, tint }: { children: React.ReactNode; tint?: string }) {
+  return (
+    <span
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-lg"
+      style={{ background: tint ?? 'var(--accent-soft)' }}
+      aria-hidden
+    >
+      {children}
+    </span>
+  )
 }
 
 /** Botão circular "ghost" (ex.: setas de navegação de dias). */

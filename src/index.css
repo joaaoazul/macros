@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@fontsource-variable/manrope";
 
 /* Tokens ao estilo iOS (grouped backgrounds + tint) — paleta de macros validada (dataviz) */
 :root {
@@ -57,7 +58,8 @@
   --color-accent-soft: var(--accent-soft);
   --color-good: var(--good);
   --color-critical: var(--critical);
-  --font-sans: -apple-system, system-ui, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-sans: "Manrope Variable", -apple-system, system-ui, "Segoe UI", sans-serif;
+  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.03), 0 8px 24px -12px rgba(0, 0, 0, 0.16);
   --radius-card: 1.375rem; /* raio de widget iOS */
 }
 
@@ -69,6 +71,11 @@ body {
   font-family: var(--font-sans);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  font-optical-sizing: auto;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.02em;
 }
 
 input[type="number"]::-webkit-outer-spin-button,

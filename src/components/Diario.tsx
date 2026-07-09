@@ -5,7 +5,7 @@ import { sumEntries } from '../lib/calc'
 import { formatDatePT, shiftDate, todayISO, uid } from '../lib/store'
 import AddFoodSheet from './AddFoodSheet'
 import Rings from './Rings'
-import { Card, Chevron, CircleButton, LargeTitle } from './ui'
+import { Card, Chevron, CircleButton, IconCircle, LargeTitle, SectionHeader } from './ui'
 
 interface Props {
   profile: Profile
@@ -63,7 +63,7 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
         title={formatDatePT(date)}
         subtitle={dateLabel}
         right={
-          <div className="mb-1 flex gap-2">
+          <div className="mb-1.5 flex gap-2">
             <CircleButton onClick={() => setDate((d) => shiftDate(d, -1))} label="Dia anterior">
               <Chevron dir="left" />
             </CircleButton>
@@ -74,104 +74,129 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
         }
       />
       {date !== todayISO() && (
-        <button onClick={() => setDate(todayISO())} className="mx-5 -mt-1 mb-1 text-sm font-semibold text-accent">
-          Voltar a hoje
+        <button onClick={() => setDate(todayISO())} className="mx-5 -mt-2 mb-1 text-sm font-bold text-accent">
+          Voltar a hoje ↩
         </button>
       )}
 
-      <div className="space-y-3.5 px-4 pt-2">
-        {/* hero: anéis + estatísticas */}
-        <Card className="p-5">
-          <div className="flex items-center gap-5">
+      <div className="px-4">
+        {/* hero: anéis + macros */}
+        <Card className="p-6">
+          <div className="flex items-center gap-6">
             <Rings
+              size={158}
               rings={[
                 { value: totals.carbs, target: targets.carbs, colorVar: '--carbs', label: 'Hidratos' },
                 { value: totals.protein, target: targets.protein, colorVar: '--protein', label: 'Proteína' },
                 { value: totals.fat, target: targets.fat, colorVar: '--fat', label: 'Gordura' },
               ]}
             >
-              <span className="text-[1.75rem] font-bold leading-none tracking-tight">{Math.abs(Math.round(remaining)).toLocaleString('pt-PT')}</span>
-              <span className="mt-1 text-[11px] font-medium text-muted">{remaining >= 0 ? 'kcal restantes' : 'kcal a mais'}</span>
+              <span className="text-[2rem] font-extrabold leading-none tracking-tight tabular-nums">
+                {Math.abs(Math.round(remaining)).toLocaleString('pt-PT')}
+              </span>
+              <span className="mt-1 text-[11px] font-semibold text-muted">{remaining >= 0 ? 'restantes' : 'a mais'}</span>
             </Rings>
 
-            <div className="flex-1 space-y-2.5">
-              <StatRow label="Hidratos" value={totals.carbs} target={targets.carbs} unit="g" colorVar="--carbs" />
-              <StatRow label="Proteína" value={totals.protein} target={targets.protein} unit="g" colorVar="--protein" />
-              <StatRow label="Gordura" value={totals.fat} target={targets.fat} unit="g" colorVar="--fat" />
+            <div className="flex-1 space-y-3.5">
+              <MacroRow label="Hidratos" value={totals.carbs} target={targets.carbs} colorVar="--carbs" />
+              <MacroRow label="Proteína" value={totals.protein} target={targets.protein} colorVar="--protein" />
+              <MacroRow label="Gordura" value={totals.fat} target={targets.fat} colorVar="--fat" />
             </div>
           </div>
 
-          <p className="mt-4 border-t border-line pt-3 text-center text-[13px] text-muted">
-            <span className="font-semibold text-ink-2">{eaten.toLocaleString('pt-PT')}</span> ingeridas −{' '}
-            <span className="font-semibold text-ink-2">{burned}</span> exercício ={' '}
-            <span className="font-semibold text-ink-2">{net.toLocaleString('pt-PT')}</span> / {targets.kcal.toLocaleString('pt-PT')} kcal
-          </p>
+          <div className="mt-5 grid grid-cols-3 divide-x divide-line border-t border-line pt-4 text-center">
+            <HeroStat value={eaten} label="ingeridas" />
+            <HeroStat value={burned} label="exercício" prefix={burned > 0 ? '−' : ''} />
+            <HeroStat value={net} label={`de ${targets.kcal.toLocaleString('pt-PT')} kcal`} strong over={net > targets.kcal} />
+          </div>
         </Card>
 
         {/* refeições */}
-        {MEALS.map((meal) => {
-          const mealEntries = entries.filter((e) => e.meal === meal.id)
-          const t = sumEntries(mealEntries)
-          return (
-            <Card key={meal.id} className="overflow-hidden">
-              <div className="flex items-baseline justify-between gap-3 px-5 pt-4">
-                <h2 className="truncate text-[17px] font-semibold">{meal.label}</h2>
-                {t.kcal > 0 && <span className="shrink-0 text-[13px] tabular-nums text-muted">{Math.round(t.kcal)} kcal</span>}
-              </div>
+        <SectionHeader>Refeições</SectionHeader>
+        <div className="space-y-3">
+          {MEALS.map((meal) => {
+            const mealEntries = entries.filter((e) => e.meal === meal.id)
+            const t = sumEntries(mealEntries)
+            return (
+              <Card key={meal.id} className="overflow-hidden">
+                <button onClick={() => setAddingTo(meal.id)} className="flex w-full items-center gap-3.5 p-4 text-left">
+                  <IconCircle>{meal.emoji}</IconCircle>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[16px] font-bold">{meal.label}</div>
+                    <div className="text-[12.5px] text-muted">
+                      {mealEntries.length === 0
+                        ? 'Toca para adicionar'
+                        : `${mealEntries.length} ${mealEntries.length === 1 ? 'item' : 'itens'} · H ${Math.round(t.carbs)} · P ${Math.round(t.protein)} · G ${Math.round(t.fat)}`}
+                    </div>
+                  </div>
+                  {t.kcal > 0 && (
+                    <span className="text-[15px] font-extrabold tabular-nums">
+                      {Math.round(t.kcal)} <span className="text-[11px] font-semibold text-muted">kcal</span>
+                    </span>
+                  )}
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-accent" aria-hidden>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </span>
+                </button>
 
-              {mealEntries.length > 0 && (
-                <ul className="mt-3 divide-y divide-line border-t border-line">
-                  {mealEntries.map((e) => (
-                    <li key={e.id} className="flex items-center gap-3 py-2.5 pl-5 pr-3">
-                      <span className="text-lg" aria-hidden>
-                        {e.emoji}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[15px] font-medium">{e.foodName}</div>
-                        <div className="text-[12px] text-muted">
-                          {e.grams} {e.unit} · H {Math.round(e.carbs)} · P {Math.round(e.protein)} · G {Math.round(e.fat)}
+                {mealEntries.length > 0 && (
+                  <ul className="divide-y divide-line border-t border-line">
+                    {mealEntries.map((e) => (
+                      <li key={e.id} className="flex items-center gap-3 py-2.5 pl-5 pr-3">
+                        <span className="text-lg" aria-hidden>
+                          {e.emoji}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[14.5px] font-semibold">{e.foodName}</div>
+                          <div className="text-[12px] text-muted">
+                            {e.grams} {e.unit} · H {Math.round(e.carbs)} · P {Math.round(e.protein)} · G {Math.round(e.fat)}
+                          </div>
                         </div>
-                      </div>
-                      <span className="text-[15px] font-semibold tabular-nums">{Math.round(e.kcal)}</span>
-                      <button
-                        onClick={() => removeEntry(e.id)}
-                        className="rounded-full px-2 py-1 text-muted transition-colors hover:text-critical"
-                        aria-label={`Remover ${e.foodName}`}
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                        <span className="text-[14.5px] font-bold tabular-nums">{Math.round(e.kcal)}</span>
+                        <button
+                          onClick={() => removeEntry(e.id)}
+                          className="rounded-full px-2 py-1 text-muted transition-colors hover:text-critical"
+                          aria-label={`Remover ${e.foodName}`}
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            )
+          })}
+        </div>
 
-              <button
-                onClick={() => setAddingTo(meal.id)}
-                className={`mt-3 block w-full border-t border-line py-3 text-center text-[15px] font-semibold text-accent transition-colors hover:bg-accent-soft ${
-                  mealEntries.length > 0 ? '' : ''
-                }`}
-              >
-                ＋ Adicionar alimento
-              </button>
-            </Card>
-          )
-        })}
-
-        {/* exercício */}
+        {/* atividade */}
+        <SectionHeader>Atividade</SectionHeader>
         <Card className="overflow-hidden">
-          <div className="flex items-baseline justify-between px-5 pt-4">
-            <h2 className="text-[17px] font-semibold">Exercício</h2>
-            <span className="text-[13px] tabular-nums text-muted">{burned} kcal</span>
-          </div>
+          <button onClick={() => setAddingExercise(true)} className="flex w-full items-center gap-3.5 p-4 text-left">
+            <IconCircle tint="color-mix(in srgb, var(--good) 14%, transparent)">🏃</IconCircle>
+            <div className="min-w-0 flex-1">
+              <div className="text-[16px] font-bold">Exercício</div>
+              <div className="text-[12.5px] text-muted">{dayExercises.length === 0 ? 'Toca para registar' : `${dayExercises.length} ${dayExercises.length === 1 ? 'registo' : 'registos'}`}</div>
+            </div>
+            {burned > 0 && (
+              <span className="text-[15px] font-extrabold tabular-nums text-good">
+                −{burned} <span className="text-[11px] font-semibold text-muted">kcal</span>
+              </span>
+            )}
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-accent" aria-hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </span>
+          </button>
           {dayExercises.length > 0 && (
-            <ul className="mt-3 divide-y divide-line border-t border-line">
+            <ul className="divide-y divide-line border-t border-line">
               {dayExercises.map((e) => (
                 <li key={e.id} className="flex items-center gap-3 py-2.5 pl-5 pr-3">
-                  <span className="text-lg" aria-hidden>
-                    🏃
-                  </span>
-                  <div className="min-w-0 flex-1 truncate text-[15px] font-medium">{e.name}</div>
-                  <span className="text-[15px] font-semibold tabular-nums text-good">−{Math.round(e.kcal)}</span>
+                  <div className="min-w-0 flex-1 truncate text-[14.5px] font-semibold">{e.name}</div>
+                  <span className="text-[14.5px] font-bold tabular-nums text-good">−{Math.round(e.kcal)}</span>
                   <button
                     onClick={() => removeExercise(e.id)}
                     className="rounded-full px-2 py-1 text-muted transition-colors hover:text-critical"
@@ -183,26 +208,33 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
               ))}
             </ul>
           )}
-          <button
-            onClick={() => setAddingExercise(true)}
-            className="mt-3 block w-full border-t border-line py-3 text-center text-[15px] font-semibold text-accent transition-colors hover:bg-accent-soft"
-          >
-            ＋ Adicionar exercício
-          </button>
         </Card>
 
-        {/* água */}
-        <Card className="p-5">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-[17px] font-semibold">Água</h2>
-            <span className="text-[13px] tabular-nums text-muted">
-              {waterMl} / {targets.waterMl} ml · {targets.waterMl > 0 ? Math.round((waterMl / targets.waterMl) * 100) : 0}%
+        {/* hidratação */}
+        <SectionHeader>Hidratação</SectionHeader>
+        <Card className="mb-2 p-4">
+          <div className="flex items-center gap-3.5">
+            <IconCircle tint="color-mix(in srgb, var(--water) 14%, transparent)">💧</IconCircle>
+            <div className="min-w-0 flex-1">
+              <div className="text-[16px] font-bold">Água</div>
+              <div className="text-[12.5px] text-muted">
+                {waterMl} / {targets.waterMl} ml
+              </div>
+            </div>
+            <span className="text-[15px] font-extrabold tabular-nums">
+              {targets.waterMl > 0 ? Math.round((waterMl / targets.waterMl) * 100) : 0}
+              <span className="text-[11px] font-semibold text-muted"> %</span>
             </span>
           </div>
-          {/* gotas: uma por cada 250 ml da meta */}
-          <div className="mt-3 flex flex-wrap gap-1.5" role="progressbar" aria-valuenow={waterMl} aria-valuemax={targets.waterMl} aria-label="Água">
+          <div
+            className="mt-3.5 flex flex-wrap gap-1.5"
+            role="progressbar"
+            aria-valuenow={waterMl}
+            aria-valuemax={targets.waterMl}
+            aria-label="Água"
+          >
             {Array.from({ length: Math.max(Math.ceil(targets.waterMl / 250), 1) }, (_, i) => (
-              <svg key={i} width="22" height="26" viewBox="0 0 24 28" aria-hidden>
+              <svg key={i} width="21" height="25" viewBox="0 0 24 28" aria-hidden>
                 <path
                   d="M12 2C12 2 4 12.5 4 18a8 8 0 0 0 16 0C20 12.5 12 2 12 2z"
                   fill={waterMl >= (i + 1) * 250 ? 'var(--water)' : 'var(--line)'}
@@ -218,7 +250,11 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
             <button onClick={() => addWater(500)} className={waterBtnCls}>
               +500 ml
             </button>
-            <button onClick={() => addWater(-250)} className="rounded-full px-4 py-2 text-sm font-semibold text-muted disabled:opacity-40" disabled={waterMl === 0}>
+            <button
+              onClick={() => addWater(-250)}
+              className="ml-auto rounded-full px-4 py-2 text-sm font-bold text-muted disabled:opacity-40"
+              disabled={waterMl === 0}
+            >
               −250
             </button>
           </div>
@@ -239,20 +275,34 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
   )
 }
 
-const waterBtnCls = 'rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent transition-opacity active:opacity-70'
+const waterBtnCls = 'rounded-full bg-accent-soft px-4 py-2 text-sm font-bold text-accent transition-opacity active:opacity-70'
 
-function StatRow({ label, value, target, unit, colorVar }: { label: string; value: number; target: number; unit: string; colorVar: string }) {
+function MacroRow({ label, value, target, colorVar }: { label: string; value: number; target: number; colorVar: string }) {
+  const pct = target > 0 ? Math.min((value / target) * 100, 100) : 0
   return (
-    <div className="flex items-center gap-2">
-      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: `var(${colorVar})` }} aria-hidden />
-      <span className="flex-1 text-[13px] font-medium text-ink-2">{label}</span>
-      <span className="text-[15px] font-semibold tabular-nums">
-        {Math.round(value)}
-        <span className="font-normal text-muted">
-          {' '}
-          / {target} {unit}
+    <div>
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-[12.5px] font-bold text-ink-2">{label}</span>
+        <span className="text-[12.5px] font-bold tabular-nums">
+          {Math.round(value)}
+          <span className="font-semibold text-muted"> / {target} g</span>
         </span>
-      </span>
+      </div>
+      <div className="h-[5px] overflow-hidden rounded-full bg-line" role="presentation">
+        <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, background: `var(${colorVar})` }} />
+      </div>
+    </div>
+  )
+}
+
+function HeroStat({ value, label, prefix = '', strong, over }: { value: number; label: string; prefix?: string; strong?: boolean; over?: boolean }) {
+  return (
+    <div className="px-1">
+      <div className={`tabular-nums ${strong ? 'text-[17px] font-extrabold' : 'text-[17px] font-bold text-ink-2'} ${over ? 'text-critical' : ''}`}>
+        {prefix}
+        {Math.round(value).toLocaleString('pt-PT')}
+      </div>
+      <div className="mt-0.5 text-[11px] font-semibold text-muted">{label}</div>
     </div>
   )
 }
@@ -272,7 +322,7 @@ function AddExerciseSheet({ onAdd, onClose }: { onAdd: (e: Exercise) => void; on
         aria-label="Adicionar exercício"
       >
         <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden />
-        <h2 className="mt-4 text-xl font-bold">Adicionar exercício</h2>
+        <h2 className="mt-4 text-xl font-extrabold">Adicionar exercício</h2>
         <div className="mt-4 space-y-3">
           <input
             value={name}
@@ -293,7 +343,7 @@ function AddExerciseSheet({ onAdd, onClose }: { onAdd: (e: Exercise) => void; on
         <button
           onClick={() => onAdd({ id: uid(), name: name.trim(), kcal: Number(kcal) })}
           disabled={!valid}
-          className="mt-5 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+          className="mt-5 w-full rounded-full bg-accent px-6 py-3.5 font-bold text-white transition-opacity active:opacity-80 disabled:opacity-40"
         >
           Adicionar
         </button>
