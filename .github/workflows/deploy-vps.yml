@@ -1,0 +1,55 @@
+name: Deploy to VPS
+
+# Faz build e envia o dist/ para o VPS por SSH.
+# Requer 3 secrets no repositório (Settings → Secrets and variables → Actions):
+#   VPS_HOST — IP ou hostname do VPS
+#   VPS_USER — utilizador SSH (ex.: root ou deploy)
+#   VPS_SSH_KEY — chave privada SSH (o par público em ~/.ssh/authorized_keys do VPS)
+# Opcional:
+#   VPS_PORT — porta SSH se não for a 22
+#   VPS_PATH — pasta de destino (por omissão /var/www/macros)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vps-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SECRETS: ${{ secrets.VPS_HOST != '' && secrets.VPS_SSH_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_SECRETS == 'true'
+      - uses: actions/setup-node@v4
+        if: env.HAS_SECRETS == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.HAS_SECRETS == 'true'
+        run: npm ci && npm run build
+      - name: Enviar para o VPS
+        if: env.HAS_SECRETS == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_PATH: ${{ secrets.VPS_PATH }}
+        run: |
+          PORT="${VPS_PORT:-22}"
+          DEST="${VPS_PATH:-/var/www/macros}"
+          mkdir -p ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p $PORT" dist/ "$VPS_USER@$VPS_HOST:$DEST/"
+          echo "✅ Publicado em $DEST no $VPS_HOST"
+      - name: Secrets em falta
+        if: env.HAS_SECRETS != 'true'
+        run: echo "Secrets VPS_HOST/VPS_SSH_KEY não configurados — deploy ignorado (ver comentários no topo do workflow)."

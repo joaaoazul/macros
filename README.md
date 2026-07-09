@@ -29,11 +29,39 @@ npm run build     # typecheck + build de produção
 npm run preview   # servir a build
 ```
 
-## Deploy (GitHub Pages)
+## Deploy
 
-O workflow em `.github/workflows/deploy.yml` publica a app no GitHub Pages a cada
-push ao `main`. Para ativar (uma vez): **Settings → Pages → Source: GitHub Actions**.
-A app fica em `https://<utilizador>.github.io/macros/`.
+### VPS (nginx, um comando)
+
+No VPS (Debian/Ubuntu), primeira instalação e atualizações:
+
+```bash
+git clone https://github.com/joaaoazul/macros.git && cd macros   # primeira vez
+sudo bash deploy/setup-vps.sh
+```
+
+Instala nginx + node se faltarem, faz build e publica em `/var/www/macros`.
+Com domínio: edita `server_name` em `/etc/nginx/sites-available/macros` e corre
+`sudo certbot --nginx -d oteu.dominio.pt` para HTTPS.
+
+### VPS com deploy automático (GitHub Actions)
+
+O workflow `.github/workflows/deploy-vps.yml` envia a build para o VPS a cada
+push ao `main`. Configura os secrets `VPS_HOST`, `VPS_USER` e `VPS_SSH_KEY`
+(opcional: `VPS_PORT`, `VPS_PATH`) em **Settings → Secrets and variables →
+Actions**. Sem secrets, o workflow não faz nada.
+
+### Docker
+
+```bash
+docker compose up -d --build   # fica em http://<ip>:8080
+```
+
+### GitHub Pages
+
+O workflow `.github/workflows/deploy.yml` publica no Pages a cada push ao
+`main`. Ativa uma vez em **Settings → Pages → Source: GitHub Actions**;
+a app fica em `https://<utilizador>.github.io/macros/`.
 
 ## Estrutura
 
