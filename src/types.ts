@@ -1,12 +1,13 @@
 export type Sex = 'M' | 'F'
 export type Goal = 'cut' | 'maintain' | 'bulk'
-export type MealId = 'breakfast' | 'lunch' | 'snack' | 'dinner'
+export type MealId = 'breakfast' | 'lunch' | 'snack' | 'dinner' | 'supper'
 
 export interface Targets {
   kcal: number
   protein: number
   carbs: number
   fat: number
+  waterMl: number
 }
 
 export interface Profile {
@@ -31,6 +32,7 @@ export interface Food {
   fat: number
   unit: 'g' | 'ml'
   custom?: boolean
+  brand?: string
 }
 
 export interface Entry {
@@ -46,12 +48,21 @@ export interface Entry {
   fat: number
 }
 
+export interface Exercise {
+  id: string
+  name: string
+  kcal: number
+}
+
 /** Diário: chave é a data em ISO (YYYY-MM-DD). */
 export type Diary = Record<string, Entry[]>
+export type WaterLog = Record<string, number>
+export type ExerciseLog = Record<string, Exercise[]>
 
 export const MEALS: { id: MealId; label: string; emoji: string }[] = [
   { id: 'breakfast', label: 'Pequeno-almoço', emoji: '🌅' },
   { id: 'lunch', label: 'Almoço', emoji: '🍽️' },
   { id: 'snack', label: 'Lanche', emoji: '🥪' },
   { id: 'dinner', label: 'Jantar', emoji: '🌙' },
+  { id: 'supper', label: 'Ceia', emoji: '🌃' },
 ]

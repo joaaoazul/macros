@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Entry, Food, MealId } from '../types'
 import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
+import { searchOpenFoodFacts } from '../lib/off'
 import { uid } from '../lib/store'
 
 interface Props {
@@ -12,14 +13,40 @@ interface Props {
   onClose: () => void
 }
 
+type OffState = { status: 'idle' | 'loading' | 'done' | 'error'; results: Food[] }
+
 export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
   const [grams, setGrams] = useState('100')
   const [creating, setCreating] = useState(false)
+  const [off, setOff] = useState<OffState>({ status: 'idle', results: [] })
 
-  const allFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
-  const results = useMemo(() => searchFoods(allFoods, query), [allFoods, query])
+  const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
+  const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
+
+  // pesquisa no Open Food Facts com debounce; aborta a anterior
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 3) {
+      setOff({ status: 'idle', results: [] })
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      setOff((s) => ({ ...s, status: 'loading' }))
+      try {
+        const results = await searchOpenFoodFacts(q, controller.signal)
+        setOff({ status: 'done', results })
+      } catch (err) {
+        if (!controller.signal.aborted) setOff({ status: 'error', results: [] })
+      }
+    }, 450)
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [query])
 
   const gramsN = Number(grams)
   const factor = gramsN > 0 ? gramsN / 100 : 0
@@ -29,7 +56,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
     onAdd({
       id: uid(),
       meal,
-      foodName: selected.name,
+      foodName: selected.brand ? `${selected.name} (${selected.brand})` : selected.name,
       emoji: selected.emoji,
       grams: gramsN,
       unit: selected.unit,
@@ -40,12 +67,17 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
     })
   }
 
+  const pick = (f: Food) => {
+    setSelected(f)
+    setGrams('100')
+  }
+
   const mealLabel = MEALS.find((m) => m.id === meal)?.label ?? ''
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
       <div
-        className="flex h-[85dvh] w-full max-w-md flex-col rounded-t-3xl bg-bg"
+        className="flex h-[88dvh] w-full max-w-md flex-col rounded-t-3xl bg-bg"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -66,52 +98,58 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Pesquisar alimento…"
+                placeholder="Pesquisar alimento ou código de barras…"
                 className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-ink placeholder:text-muted focus:border-accent focus:outline-none"
                 autoFocus
               />
             </div>
 
-            <ul className="mt-3 flex-1 overflow-y-auto px-5 pb-5">
-              {results.map((f) => (
-                <li key={f.id}>
-                  <button
-                    onClick={() => {
-                      setSelected(f)
-                      setGrams('100')
-                    }}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface"
-                  >
-                    <span className="text-xl" aria-hidden>
-                      {f.emoji}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {f.name}
-                        {f.custom && <span className="ml-1.5 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent">meu</span>}
-                      </div>
-                      <div className="text-xs text-muted">
-                        {f.kcal} kcal · P {f.protein} · H {f.carbs} · G {f.fat} (100 {f.unit})
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-              {results.length === 0 && <li className="py-8 text-center text-sm text-muted">Nenhum resultado para “{query}”.</li>}
-              <li className="mt-2">
-                <button
-                  onClick={() => setCreating(true)}
-                  className="w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-accent"
-                >
-                  + Criar alimento personalizado
-                </button>
-              </li>
-            </ul>
+            <div className="mt-3 flex-1 overflow-y-auto px-5 pb-5">
+              {localResults.length > 0 && (
+                <>
+                  <SectionLabel>Básicos e meus alimentos</SectionLabel>
+                  <ul>
+                    {localResults.map((f) => (
+                      <FoodRow key={f.id} food={f} onPick={pick} />
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {query.trim().length >= 3 && (
+                <>
+                  <SectionLabel>Open Food Facts 🇵🇹 · produtos de supermercado</SectionLabel>
+                  {off.status === 'loading' && <p className="py-3 text-center text-sm text-muted">A pesquisar…</p>}
+                  {off.status === 'error' && (
+                    <p className="py-3 text-center text-sm text-muted">Sem ligação ao Open Food Facts — usa a lista local ou tenta mais tarde.</p>
+                  )}
+                  {off.status === 'done' && off.results.length === 0 && (
+                    <p className="py-3 text-center text-sm text-muted">Nenhum produto encontrado para “{query}”.</p>
+                  )}
+                  <ul>
+                    {off.results.map((f) => (
+                      <FoodRow key={f.id} food={f} onPick={pick} />
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {localResults.length === 0 && query.trim().length < 3 && (
+                <p className="py-6 text-center text-sm text-muted">Escreve pelo menos 3 letras para pesquisar também no Open Food Facts.</p>
+              )}
+
+              <button
+                onClick={() => setCreating(true)}
+                className="mt-3 w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-accent"
+              >
+                + Criar alimento personalizado
+              </button>
+            </div>
           </>
         )}
 
         {selected && (
-          <div className="flex flex-1 flex-col px-5 pt-4">
+          <div className="flex flex-1 flex-col overflow-y-auto px-5 pt-4">
             <button onClick={() => setSelected(null)} className="self-start text-sm font-medium text-accent">
               ‹ Voltar à pesquisa
             </button>
@@ -122,7 +160,9 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
               </span>
               <div>
                 <div className="font-semibold">{selected.name}</div>
-                <div className="text-xs text-muted">valores por 100 {selected.unit}</div>
+                <div className="text-xs text-muted">
+                  {selected.brand ? `${selected.brand} · ` : ''}valores por 100 {selected.unit}
+                </div>
               </div>
             </div>
 
@@ -152,11 +192,11 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
               ))}
             </div>
 
-            <div className="mt-5 grid grid-cols-4 gap-2 rounded-2xl border border-line bg-surface p-4 text-center">
-              <Preview label="kcal" value={selected.kcal * factor} />
-              <Preview label="Proteína" value={selected.protein * factor} suffix="g" dotVar="--protein" />
+            <div className="mt-5 grid grid-cols-4 gap-2 rounded-2xl bg-surface p-4 text-center">
               <Preview label="Hidratos" value={selected.carbs * factor} suffix="g" dotVar="--carbs" />
+              <Preview label="Proteína" value={selected.protein * factor} suffix="g" dotVar="--protein" />
               <Preview label="Gordura" value={selected.fat * factor} suffix="g" dotVar="--fat" />
+              <Preview label="kcal" value={selected.kcal * factor} />
             </div>
 
             <button
@@ -175,13 +215,38 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
             onCreate={(food) => {
               setCustomFoods((c) => [food, ...c])
               setCreating(false)
-              setSelected(food)
-              setGrams('100')
+              pick(food)
             }}
           />
         )}
       </div>
     </div>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-muted first:mt-0">{children}</div>
+}
+
+function FoodRow({ food, onPick }: { food: Food; onPick: (f: Food) => void }) {
+  return (
+    <li>
+      <button onClick={() => onPick(food)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
+        <span className="text-xl" aria-hidden>
+          {food.emoji}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">
+            {food.name}
+            {food.brand && <span className="ml-1.5 text-xs text-muted">{food.brand}</span>}
+            {food.custom && <span className="ml-1.5 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent">meu</span>}
+          </div>
+          <div className="text-xs text-muted">
+            {food.kcal} kcal · H {food.carbs} · P {food.protein} · G {food.fat} (100 {food.unit})
+          </div>
+        </div>
+      </button>
+    </li>
   )
 }
 
@@ -225,8 +290,8 @@ function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do alimento" className={numCls} autoFocus />
         <input type="number" inputMode="decimal" value={kcal} onChange={(e) => setKcal(e.target.value)} placeholder="Calorias (kcal)" className={numCls} />
         <div className="grid grid-cols-3 gap-2">
-          <input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="Proteína g" className={numCls} />
           <input type="number" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} placeholder="Hidratos g" className={numCls} />
+          <input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="Proteína g" className={numCls} />
           <input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} placeholder="Gordura g" className={numCls} />
         </div>
       </div>

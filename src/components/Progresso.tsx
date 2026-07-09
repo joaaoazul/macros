@@ -40,19 +40,21 @@ export default function Progresso({ profile, diary }: Props) {
   const daysOnPlan = loggedDays.filter((d) => d.kcal <= targets.kcal * 1.05).length
 
   return (
-    <div className="px-4 pt-6">
-      <h1 className="text-2xl font-bold tracking-tight">Progresso</h1>
-      <p className="mt-1 text-sm text-ink-2">Os teus últimos 7 dias.</p>
+    <div>
+      <header className="bg-accent px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-center">
+        <h1 className="text-xl font-bold text-white">Progresso</h1>
+        <p className="text-xs text-white/85">Os teus últimos 7 dias</p>
+      </header>
 
       {/* tiles de estatística */}
-      <div className="mt-5 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-3 gap-3 px-4">
         <StatTile value={avgKcal.toLocaleString('pt-PT')} label="média kcal/dia" />
         <StatTile value={`${avgProtein} g`} label="média proteína" />
         <StatTile value={`${daysOnPlan}/${loggedDays.length || 0}`} label="dias no plano" />
       </div>
 
       {/* gráfico semanal */}
-      <section className="mt-5 rounded-2xl border border-line bg-surface p-5 shadow-sm">
+      <section className="mx-4 mt-4 rounded-2xl bg-surface p-5 shadow-sm">
         <div className="flex items-baseline justify-between">
           <h2 className="font-semibold">Calorias por dia</h2>
           <button onClick={() => setShowTable((s) => !s)} className="text-xs font-medium text-accent">
@@ -91,7 +93,7 @@ export default function Progresso({ profile, diary }: Props) {
       </section>
 
       <p className="mt-4 text-center text-xs text-muted">
-        Alvo diário: {targets.kcal.toLocaleString('pt-PT')} kcal · P {targets.protein} g · H {targets.carbs} g · G {targets.fat} g
+        Alvo diário: {targets.kcal.toLocaleString('pt-PT')} kcal · H {targets.carbs} g · P {targets.protein} g · G {targets.fat} g
       </p>
     </div>
   )
