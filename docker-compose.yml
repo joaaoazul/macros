@@ -1,0 +1,7 @@
+services:
+  macros:
+    build: .
+    container_name: macros
+    restart: unless-stopped
+    ports:
+      - "8080:80" # muda para "80:80" se o VPS não tiver mais nada na porta 80
