@@ -58,6 +58,17 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
     setAddingTo(null)
     setOpenMeal(entry.meal)
   }
+  const addEntries = (newEntries: Entry[]) => {
+    setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), ...newEntries] }))
+    setAddingTo(null)
+    if (newEntries[0]) setOpenMeal(newEntries[0].meal)
+  }
+  const yesterday = shiftDate(date, -1)
+  const canCopyYesterday = entries.length === 0 && (diary[yesterday]?.length ?? 0) > 0
+  const copyYesterday = () => {
+    const copied = (diary[yesterday] ?? []).map((e) => ({ ...e, id: uid() }))
+    setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), ...copied] }))
+  }
   const removeEntry = (id: string) => {
     setDiary((d) => ({ ...d, [date]: (d[date] ?? []).filter((e) => e.id !== id) }))
   }
@@ -150,7 +161,12 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2.5 px-5 pt-4 pb-1">
             <IconCircle>🍽️</IconCircle>
-            <h2 className="text-[17px] font-extrabold">Refeições de {isToday ? 'Hoje' : 'Dia'}</h2>
+            <h2 className="flex-1 text-[17px] font-extrabold">Refeições de {isToday ? 'Hoje' : 'Dia'}</h2>
+            {canCopyYesterday && (
+              <button onClick={copyYesterday} className="rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] font-bold text-accent">
+                ⧉ Copiar ontem
+              </button>
+            )}
           </div>
 
           <ul className="divide-y divide-line">
@@ -311,6 +327,7 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
           customFoods={customFoods}
           setCustomFoods={setCustomFoods}
           onAdd={addEntry}
+          onAddMany={addEntries}
           onClose={() => setAddingTo(null)}
         />
       )}

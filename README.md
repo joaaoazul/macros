@@ -9,6 +9,11 @@ Tracker de macros e nutrição — rápido, bonito e 100% local (os dados nunca 
 - **Open Food Facts 🇵🇹** — pesquisa em milhares de produtos à venda nos supermercados portugueses (Continente, Pingo Doce, Auchan, Lidl…); a base local (~60 alimentos básicos) funciona offline.
 - **Leitor de códigos de barras** — lê o código com a câmara (ZXing, carregado sob demanda) e vai buscar o produto ao Open Food Facts; também aceita códigos escritos à mão.
 - **Favoritos e recentes** — marca alimentos com ⭐ e reutiliza os últimos registados sem pesquisar.
+- **Análise de prato por IA 📸** — tira uma foto e a API da Claude (Anthropic) estima alimentos, porções e macros; revês e ajustas antes de registar. Requer chave API própria (guardada só no dispositivo, configurável no Perfil).
+- **Peso ao longo do tempo** — cada atualização de peso fica registada; gráfico de tendência no Progresso.
+- **Copiar dia anterior** — repete as refeições de ontem com um toque em dias vazios.
+- **Exportar dados** — diário em CSV (para folha de cálculo) ou tudo em JSON (backup), a partir do Perfil.
+- **Lembretes de água** — notificações a cada 2 h (9h–21h) com a app aberta, se estiveres abaixo da meta.
 - **Guia de nutrição e Sobre** — mini-artigos (macros, proteína, défice/superavit, rótulos, hidratação) e informação da app no Perfil.
 - **Exercício** — regista calorias queimadas, que entram na fórmula do dia (consumido − exercício = líquido / meta).
 - **Água** — meta diária (~35 ml/kg, ajustável) com registo rápido de +250/+500 ml.

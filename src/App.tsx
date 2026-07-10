@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import type { Diary, Entry, ExerciseLog, Food, Profile, WaterLog } from './types'
+import { useEffect, useState } from 'react'
+import type { Diary, Entry, ExerciseLog, Food, Profile, WaterLog, WeightLog } from './types'
 import { usePersistedState, todayISO } from './lib/store'
 import { withWaterTarget } from './lib/calc'
 import Onboarding from './components/Onboarding'
@@ -18,8 +18,31 @@ export default function App() {
   const [water, setWater] = usePersistedState<WaterLog>('macros.water', {})
   const [exercise, setExercise] = usePersistedState<ExerciseLog>('macros.exercise', {})
   const [customFoods, setCustomFoods] = usePersistedState<Food[]>('macros.customFoods', [])
+  const [weightLog, setWeightLog] = usePersistedState<WeightLog>('macros.weightLog', {})
+  const [waterReminders] = usePersistedState<boolean>('macros.waterReminders', false)
   const [tab, setTab] = useState<Tab>('diario')
   const [quickAdd, setQuickAdd] = useState(false)
+
+  useEffect(() => {
+    if (!waterReminders || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    const check = () => {
+      const h = new Date().getHours()
+      if (h < 9 || h >= 21) return
+      const last = Number(localStorage.getItem('macros.lastWaterNotif') ?? 0)
+      if (Date.now() - last < 2 * 60 * 60 * 1000) return
+      const today = todayISO()
+      const target = rawProfile?.targets.waterMl ?? 2500
+      if ((water[today] ?? 0) >= target) return
+      localStorage.setItem('macros.lastWaterNotif', String(Date.now()))
+      new Notification('Hora de beber água 💧', {
+        body: `Levas ${water[today] ?? 0} ml de ${target} ml hoje. Um copo agora?`,
+        icon: 'icon-192.png',
+      })
+    }
+    check()
+    const timer = setInterval(check, 10 * 60 * 1000)
+    return () => clearInterval(timer)
+  }, [waterReminders, water, rawProfile])
 
   if (!rawProfile) {
     return <Onboarding onDone={setProfile} />
@@ -29,6 +52,12 @@ export default function App() {
   const quickAddEntry = (entry: Entry) => {
     const date = todayISO()
     setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), entry] }))
+    setQuickAdd(false)
+    setTab('diario')
+  }
+  const quickAddEntries = (newEntries: Entry[]) => {
+    const date = todayISO()
+    setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), ...newEntries] }))
     setQuickAdd(false)
     setTab('diario')
   }
@@ -51,17 +80,21 @@ export default function App() {
           />
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}
-        {tab === 'progresso' && <Progresso profile={profile} diary={diary} />}
+        {tab === 'progresso' && <Progresso profile={profile} diary={diary} weightLog={weightLog} />}
         {tab === 'perfil' && (
           <Perfil
             profile={profile}
             setProfile={setProfile}
+            weightLog={weightLog}
+            setWeightLog={setWeightLog}
+            allData={{ diary, water, exercise, customFoods, weightLog }}
             onReset={() => {
               setProfile(null)
               setDiary({})
               setWater({})
               setExercise({})
               setCustomFoods([])
+              setWeightLog({})
               setTab('diario')
             }}
           />
@@ -97,6 +130,7 @@ export default function App() {
           customFoods={customFoods}
           setCustomFoods={setCustomFoods}
           onAdd={quickAddEntry}
+          onAddMany={quickAddEntries}
           onClose={() => setQuickAdd(false)}
         />
       )}

@@ -5,6 +5,7 @@ import { FOOD_DB, searchFoods } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
 import { uid, usePersistedState } from '../lib/store'
 import BarcodeScanner from './BarcodeScanner'
+import PlateAnalyzer from './PlateAnalyzer'
 
 interface Props {
   /** null = escolher a refeição dentro da folha (botão + central) */
@@ -12,6 +13,8 @@ interface Props {
   customFoods: Food[]
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
   onAdd: (entry: Entry) => void
+  /** registo em lote (análise de prato por IA) */
+  onAddMany: (entries: Entry[]) => void
   onClose: () => void
 }
 
@@ -31,13 +34,14 @@ const dedupe = (foods: Food[]) => {
   return foods.filter((f) => (seen.has(f.id) ? false : (seen.add(f.id), true)))
 }
 
-export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd, onClose }: Props) {
+export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd, onAddMany, onClose }: Props) {
   const [selMeal, setSelMeal] = useState<MealId>(meal ?? guessMeal())
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
   const [grams, setGrams] = useState('100')
   const [creating, setCreating] = useState(false)
   const [scanning, setScanning] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [off, setOff] = useState<OffState>({ status: 'idle', results: [] })
 
   const [favs, setFavs] = usePersistedState<Food[]>('macros.favFoods', [])
@@ -146,6 +150,14 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 className="w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
                 autoFocus
               />
+              <button
+                onClick={() => setAiOpen(true)}
+                className="flex w-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-lg"
+                aria-label="Analisar prato com IA"
+                title="Analisar prato com IA"
+              >
+                📸
+              </button>
               <button
                 onClick={() => setScanning(true)}
                 className="flex w-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent"
@@ -314,6 +326,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
         )}
       </div>
 
+      {aiOpen && <PlateAnalyzer meal={selMeal} onAdd={onAddMany} onClose={() => setAiOpen(false)} />}
       {scanning && (
         <BarcodeScanner
           onDetect={(code) => {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Diary, Profile } from '../types'
+import type { Diary, Profile, WeightLog } from '../types'
 import { sumEntries } from '../lib/calc'
 import { shiftDate, todayISO } from '../lib/store'
 import { Card, LargeTitle } from './ui'
@@ -7,6 +7,7 @@ import { Card, LargeTitle } from './ui'
 interface Props {
   profile: Profile
   diary: Diary
+  weightLog: WeightLog
 }
 
 interface DayPoint {
@@ -19,7 +20,7 @@ interface DayPoint {
   logged: boolean
 }
 
-export default function Progresso({ profile, diary }: Props) {
+export default function Progresso({ profile, diary, weightLog }: Props) {
   const [showTable, setShowTable] = useState(false)
   const { targets } = profile
 
@@ -88,6 +89,15 @@ export default function Progresso({ profile, diary }: Props) {
             </table>
           </div>
         )}
+      </Card>
+
+      {/* peso ao longo do tempo */}
+      <Card className="mx-4 mt-3.5 p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-[17px] font-semibold">Peso</h2>
+          <span className="text-xs text-muted">atualiza no Perfil</span>
+        </div>
+        <WeightChart weightLog={weightLog} currentKg={profile.weightKg} />
       </Card>
 
       <p className="mt-4 text-center text-xs text-muted">
@@ -192,6 +202,86 @@ function WeekChart({ days, targetKcal }: { days: DayPoint[]; targetKcal: number 
             {Math.round(days[hover].kcal).toLocaleString('pt-PT')} kcal · P {Math.round(days[hover].protein)} · H{' '}
             {Math.round(days[hover].carbs)} · G {Math.round(days[hover].fat)}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Linha do peso ao longo do tempo (série única, pontos + tooltip por toque).
+ */
+function WeightChart({ weightLog, currentKg }: { weightLog: WeightLog; currentKg: number }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const points = Object.entries(weightLog)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .slice(-30)
+    .map(([iso, kg]) => ({ iso, kg }))
+
+  if (points.length < 2) {
+    return (
+      <p className="mt-3 text-sm text-muted">
+        Peso atual: <strong className="text-ink">{currentKg} kg</strong>. Atualiza o peso no Perfil ao longo das semanas para veres aqui a tendência.
+      </p>
+    )
+  }
+
+  const W = 320
+  const H = 130
+  const padX = 6
+  const padTop = 16
+  const padBottom = 20
+  const min = Math.min(...points.map((p) => p.kg))
+  const max = Math.max(...points.map((p) => p.kg))
+  const span = Math.max(max - min, 1)
+  const x = (i: number) => padX + (i / (points.length - 1)) * (W - padX * 2)
+  const y = (kg: number) => padTop + (1 - (kg - min) / span) * (H - padTop - padBottom)
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.kg).toFixed(1)}`).join(' ')
+  const delta = points[points.length - 1].kg - points[0].kg
+  const label = (iso: string) => {
+    const [yy, m, d] = iso.split('-').map(Number)
+    return new Date(yy, m - 1, d).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })
+  }
+
+  return (
+    <div className="relative">
+      <p className="mt-1 text-[13px] text-ink-2">
+        <strong className="text-[15px] text-ink">{points[points.length - 1].kg} kg</strong>{' '}
+        <span className={delta <= 0 ? 'text-good' : 'text-critical'}>
+          ({delta > 0 ? '+' : ''}
+          {delta.toFixed(1)} kg no período)
+        </span>
+      </p>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 w-full" role="img" aria-label="Evolução do peso">
+        <line x1={0} x2={W} y1={H - padBottom} y2={H - padBottom} stroke="var(--line)" strokeWidth={1} />
+        <path d={path} fill="none" stroke="var(--protein)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <g key={p.iso}>
+            <circle
+              cx={x(i)}
+              cy={y(p.kg)}
+              r={10}
+              fill="transparent"
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+              onClick={() => setHover(hover === i ? null : i)}
+            />
+            <circle cx={x(i)} cy={y(p.kg)} r={hover === i ? 4.5 : 3} fill="var(--protein)" stroke="var(--surface)" strokeWidth={2} pointerEvents="none" />
+          </g>
+        ))}
+        <text x={padX} y={H - 6} fontSize={9} fill="var(--muted)">
+          {label(points[0].iso)}
+        </text>
+        <text x={W - padX} y={H - 6} fontSize={9} textAnchor="end" fill="var(--muted)">
+          {label(points[points.length - 1].iso)}
+        </text>
+      </svg>
+      {hover !== null && (
+        <div
+          className="pointer-events-none absolute top-4 rounded-lg border border-line bg-surface px-3 py-1.5 text-xs shadow-md"
+          style={{ left: `${Math.min(Math.max((hover / (points.length - 1)) * 100 - 12, 0), 70)}%` }}
+        >
+          <span className="font-bold tabular-nums">{points[hover].kg} kg</span> · {label(points[hover].iso)}
         </div>
       )}
     </div>

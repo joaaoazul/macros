@@ -57,6 +57,7 @@ export interface Exercise {
 /** Diário: chave é a data em ISO (YYYY-MM-DD). */
 export type Diary = Record<string, Entry[]>
 export type WaterLog = Record<string, number>
+export type WeightLog = Record<string, number>
 export type ExerciseLog = Record<string, Exercise[]>
 
 export const MEALS: { id: MealId; label: string; emoji: string }[] = [

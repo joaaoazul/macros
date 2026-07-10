@@ -1,18 +1,27 @@
 import { useState } from 'react'
-import type { Profile } from '../types'
+import { getApiKey, setApiKey } from '../lib/ai'
+import { todayISO, usePersistedState } from '../lib/store'
+import type { Diary, ExerciseLog, Food, Profile, WaterLog, WeightLog } from '../types'
+import { MEALS } from '../types'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
   setProfile: (p: Profile) => void
+  weightLog: WeightLog
+  setWeightLog: React.Dispatch<React.SetStateAction<WeightLog>>
+  allData: { diary: Diary; water: WaterLog; exercise: ExerciseLog; customFoods: Food[]; weightLog: WeightLog }
   onReset: () => void
 }
 
-export default function Perfil({ profile, setProfile, onReset }: Props) {
+export default function Perfil({ profile, setProfile, weightLog, setWeightLog, allData, onReset }: Props) {
   const [weight, setWeight] = useState(String(profile.weightKg))
   const [waterMl, setWaterMl] = useState(String(profile.targets.waterMl))
   const [confirmReset, setConfirmReset] = useState(false)
+  const [apiKey, setApiKeyState] = useState(getApiKey())
+  const [keySaved, setKeySaved] = useState(false)
+  const [reminders, setReminders] = usePersistedState<boolean>('macros.waterReminders', false)
 
   const goalInfo = GOALS.find((g) => g.value === profile.goal)
   const activityInfo = ACTIVITY_LEVELS.find((a) => a.value === profile.activity)
@@ -30,6 +39,7 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
     const w = Number(weight)
     if (!(w >= 35 && w <= 250) || w === profile.weightKg) return
     recompute({ weightKg: w })
+    setWeightLog((log) => ({ ...log, [todayISO()]: w }))
   }
 
   const updateWater = () => {
@@ -37,6 +47,44 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
     if (!(ml >= 500 && ml <= 8000) || ml === profile.targets.waterMl) return
     setProfile({ ...profile, targets: { ...profile.targets, waterMl: ml } })
   }
+
+  const download = (filename: string, content: string, type: string) => {
+    const blob = new Blob([content], { type })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportJSON = () => {
+    download(`macros-${todayISO()}.json`, JSON.stringify({ profile, ...allData }, null, 2), 'application/json')
+  }
+
+  const exportCSV = () => {
+    const mealLabel = (id: string) => MEALS.find((m) => m.id === id)?.label ?? id
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+    const rows = [['data', 'refeicao', 'alimento', 'quantidade', 'unidade', 'kcal', 'proteina_g', 'hidratos_g', 'gordura_g'].join(';')]
+    for (const [date, entries] of Object.entries(allData.diary).sort()) {
+      for (const e of entries) {
+        rows.push([date, esc(mealLabel(e.meal)), esc(e.foodName), e.grams, e.unit, Math.round(e.kcal), Math.round(e.protein), Math.round(e.carbs), Math.round(e.fat)].join(';'))
+      }
+    }
+    download(`macros-diario-${todayISO()}.csv`, '\uFEFF' + rows.join('\n'), 'text/csv;charset=utf-8')
+  }
+
+  const toggleReminders = async () => {
+    if (reminders) {
+      setReminders(false)
+      return
+    }
+    if (typeof Notification === 'undefined') return
+    const perm = await Notification.requestPermission()
+    if (perm === 'granted') setReminders(true)
+  }
+
+  const weightCount = Object.keys(weightLog).length
 
   return (
     <div>
@@ -166,6 +214,75 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
           </div>
         </Card>
 
+
+        {/* lembretes de água */}
+        <Card className="flex items-center gap-4 p-4">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>
+            🔔
+          </span>
+          <div className="flex-1">
+            <div className="text-[15px] font-bold">Lembretes de água</div>
+            <div className="text-xs text-muted">A cada 2 h (9h–21h), com a app aberta e abaixo da meta.</div>
+          </div>
+          <button
+            onClick={toggleReminders}
+            role="switch"
+            aria-checked={reminders}
+            aria-label="Lembretes de água"
+            className={`h-8 w-14 shrink-0 rounded-full p-1 transition-colors ${reminders ? 'bg-accent' : 'bg-line'}`}
+          >
+            <span className={`block h-6 w-6 rounded-full bg-white shadow transition-transform ${reminders ? 'translate-x-6' : ''}`} />
+          </button>
+        </Card>
+
+        {/* inteligência artificial */}
+        <Card className="p-5">
+          <h2 className="text-[17px] font-semibold">🤖 Inteligência artificial</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Para a análise de pratos por foto (botão 📸 na pesquisa) precisas de uma chave da API da Anthropic
+            (console.anthropic.com). Fica guardada apenas neste dispositivo; cada análise custa cêntimos, pagos diretamente à Anthropic.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKeyState(e.target.value)
+                setKeySaved(false)
+              }}
+              placeholder="sk-ant-…"
+              autoComplete="off"
+              className="w-full rounded-xl bg-bg px-4 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              aria-label="Chave API da Anthropic"
+            />
+            <button
+              onClick={() => {
+                setApiKey(apiKey)
+                setKeySaved(true)
+              }}
+              disabled={keySaved}
+              className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-on-accent disabled:opacity-40"
+            >
+              {keySaved ? 'Guardada ✓' : 'Guardar'}
+            </button>
+          </div>
+        </Card>
+
+        {/* exportar dados */}
+        <Card className="p-5">
+          <h2 className="text-[17px] font-semibold">📤 Exportar dados</h2>
+          <p className="mt-1 text-xs text-muted">
+            Faz uma cópia de segurança ou leva o diário para uma folha de cálculo. {weightCount > 0 && `Inclui ${weightCount} registos de peso.`}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button onClick={exportCSV} className="flex-1 rounded-full bg-accent-soft px-4 py-2.5 text-sm font-bold text-accent">
+              CSV (diário)
+            </button>
+            <button onClick={exportJSON} className="flex-1 rounded-full bg-accent-soft px-4 py-2.5 text-sm font-bold text-accent">
+              JSON (tudo)
+            </button>
+          </div>
+        </Card>
 
         {/* guia de nutrição */}
         <Card className="p-5">
