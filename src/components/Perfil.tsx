@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { getApiKey, setApiKey } from '../lib/ai'
 import { todayISO, usePersistedState } from '../lib/store'
-import { deleteAccount, followUser, getAuth, listFriends, login, logout, pendingCount, searchUsers, setShareStats, setUsername, socialMe, syncNow, unfollowUser, type Friend } from '../lib/sync'
+import { deleteAccount, forgotPassword, getAuth, getFeed, listRequests, login, logout, pendingCount, requestFriend, resetPassword, respondRequest, searchUsers, setShareStats, setUsername, socialMe, syncNow, unfriendUser, type FeedEntry } from '../lib/sync'
 import type { Diary, ExerciseLog, Food, Profile, WaterLog, WeightLog } from '../types'
 import { MEALS } from '../types'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
@@ -452,6 +452,7 @@ function AccountCard() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [synced, setSynced] = useState(false)
+  const [forgot, setForgot] = useState(false)
 
   const submit = async () => {
     setBusy(true)
@@ -538,6 +539,11 @@ function AccountCard() {
             />
           </div>
           {error && <p className="mt-2 text-xs text-critical">{error}</p>}
+          {mode === 'login' && (
+            <button onClick={() => setForgot(true)} className="mt-2 text-xs font-bold text-accent">
+              Esqueci-me da password
+            </button>
+          )}
           <button
             onClick={submit}
             disabled={busy || !email.includes('@') || password.length < (mode === 'register' ? 8 : 1)}
@@ -547,22 +553,26 @@ function AccountCard() {
           </button>
         </div>
       )}
+      {forgot && <ForgotSheet onClose={() => setForgot(false)} />}
     </Card>
   )
 }
 
 function FriendsCard() {
   const [me, setMe] = useState<{ username: string | null; shareStats: boolean; followers: number } | null>(null)
-  const [friends, setFriends] = useState<Friend[]>([])
+  const [feed, setFeed] = useState<FeedEntry[]>([])
+  const [requests, setRequests] = useState<string[]>([])
   const [nameInput, setNameInput] = useState('')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<string[]>([])
+  const [sent, setSent] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [offline, setOffline] = useState(false)
 
   const refresh = () => {
     socialMe().then(setMe).catch(() => setOffline(true))
-    listFriends().then((r) => setFriends(r.friends)).catch(() => {})
+    getFeed().then((r) => setFeed(r.feed)).catch(() => {})
+    listRequests().then((r) => setRequests(r.requests)).catch(() => {})
   }
   useState(() => {
     refresh()
@@ -577,11 +587,12 @@ function FriendsCard() {
     }
     try {
       const r = await searchUsers(q.trim())
-      setResults(r.users.filter((u) => !friends.some((f) => f.username === u)))
+      setResults(r.users.filter((u) => !feed.some((f) => f.username === u)))
     } catch {}
   }
 
   const inputCls = 'w-full rounded-xl bg-bg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent'
+  const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}º`)
 
   if (offline) return null
 
@@ -617,7 +628,7 @@ function FriendsCard() {
       {me?.username && (
         <div className="mt-2">
           <p className="text-[13px] text-ink-2">
-            És <strong className="text-ink">@{me.username}</strong> · {me.followers} {me.followers === 1 ? 'seguidor' : 'seguidores'}
+            És <strong className="text-ink">@{me.username}</strong>
           </p>
 
           <div className="mt-3 flex items-center gap-3">
@@ -640,60 +651,178 @@ function FriendsCard() {
             </button>
           </div>
 
+          {requests.length > 0 && (
+            <div className="mt-4">
+              <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-muted">Pedidos de amizade</div>
+              <ul className="mt-1.5 space-y-1.5">
+                {requests.map((u) => (
+                  <li key={u} className="flex items-center justify-between rounded-xl bg-accent-soft px-3 py-2">
+                    <span className="text-sm font-bold">@{u}</span>
+                    <span className="flex gap-1.5">
+                      <button
+                        onClick={async () => {
+                          await respondRequest(u, true).catch(() => {})
+                          refresh()
+                        }}
+                        className="rounded-full bg-accent px-3 py-1 text-[12.5px] font-bold text-on-accent"
+                      >
+                        Aceitar ✓
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await respondRequest(u, false).catch(() => {})
+                          refresh()
+                        }}
+                        className="rounded-full px-2 py-1 text-[12.5px] font-bold text-muted"
+                        aria-label={`Recusar ${u}`}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="mt-4">
+            <div className="text-[12px] font-bold uppercase tracking-[0.08em] text-muted">🏆 Ranking da semana</div>
+            <ul className="mt-1 divide-y divide-line">
+              {feed.map((f, i) => (
+                <li key={f.username} className={`flex items-center gap-3 py-2.5 ${f.isMe ? 'rounded-xl bg-accent-soft px-2' : ''}`}>
+                  <span className="w-8 text-center text-lg" aria-hidden>
+                    {medal(i)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] font-bold">
+                      @{f.username} {f.isMe && <span className="text-[11px] font-semibold text-accent">(tu)</span>}
+                    </div>
+                    <div className="text-[12px] text-muted">
+                      {f.stats
+                        ? `${f.stats.last7}/7 dias esta semana · 🔥 ${f.stats.streak} · ${f.stats.loggedToday ? 'registou hoje ✓' : 'ainda não registou hoje'}`
+                        : 'estatísticas privadas'}
+                    </div>
+                  </div>
+                  {!f.isMe && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Remover @${f.username} dos amigos?`)) return
+                        await unfriendUser(f.username).catch(() => {})
+                        refresh()
+                      }}
+                      className="rounded-full px-2 py-1 text-xs font-bold text-muted"
+                      aria-label={`Remover ${f.username}`}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {feed.length <= 1 && <p className="mt-1 text-[12.5px] text-muted">Convida amigos para veres o ranking a compor-se!</p>}
+          </div>
+
           <input value={query} onChange={(e) => search(e.target.value)} placeholder="Procurar amigos por username…" className={`${inputCls} mt-4`} />
           {results.length > 0 && (
             <ul className="mt-2 space-y-1">
               {results.map((u) => (
                 <li key={u} className="flex items-center justify-between rounded-xl bg-bg px-3 py-2">
                   <span className="text-sm font-semibold">@{u}</span>
-                  <button
-                    onClick={async () => {
-                      await followUser(u).catch(() => {})
-                      setQuery('')
-                      setResults([])
-                      refresh()
-                    }}
-                    className="rounded-full bg-accent-soft px-3 py-1 text-[12.5px] font-bold text-accent"
-                  >
-                    Seguir
-                  </button>
+                  {sent[u] ? (
+                    <span className="text-[12.5px] font-bold text-good">{sent[u] === 'accepted' ? 'Amigos! 🎉' : 'Pedido enviado ✓'}</span>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const r = await requestFriend(u)
+                          setSent((m) => ({ ...m, [u]: r.status }))
+                          if (r.status === 'accepted') refresh()
+                        } catch {}
+                      }}
+                      className="rounded-full bg-accent-soft px-3 py-1 text-[12.5px] font-bold text-accent"
+                    >
+                      Pedir amizade
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
-
-          {friends.length > 0 && (
-            <ul className="mt-3 divide-y divide-line">
-              {friends.map((f) => (
-                <li key={f.username} className="flex items-center gap-3 py-2.5">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-soft text-sm font-extrabold text-accent" aria-hidden>
-                    {f.username[0].toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[14px] font-bold">@{f.username}</div>
-                    <div className="text-[12px] text-muted">
-                      {f.stats
-                        ? `🔥 ${f.stats.streak} dias seguidos · ${f.stats.loggedToday ? 'registou hoje ✓' : 'ainda não registou hoje'} · ${f.stats.last7}/7 esta semana`
-                        : 'estatísticas privadas'}
-                    </div>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      await unfollowUser(f.username).catch(() => {})
-                      refresh()
-                    }}
-                    className="rounded-full px-2 py-1 text-xs font-bold text-muted"
-                    aria-label={`Deixar de seguir ${f.username}`}
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {friends.length === 0 && <p className="mt-3 text-[12.5px] text-muted">Ainda não segues ninguém — procura um username acima.</p>}
         </div>
       )}
     </Card>
+  )
+}
+
+/** Recuperar password: email → código enviado por email → nova password. */
+export function ForgotSheet({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<'email' | 'code'>('email')
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const inputCls = 'w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent'
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Recuperar password">
+        <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden />
+        <h2 className="mt-4 text-xl font-extrabold">Recuperar password</h2>
+
+        {step === 'email' ? (
+          <div className="mt-3">
+            <p className="text-sm text-muted">Enviamos um código de 6 dígitos para o teu email (válido 15 minutos).</p>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email da conta" className={`${inputCls} mt-3`} autoFocus />
+            {error && <p className="mt-2 text-xs text-critical">{error}</p>}
+            <button
+              onClick={async () => {
+                setBusy(true)
+                setError('')
+                try {
+                  await forgotPassword(email.trim())
+                  setStep('code')
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Erro de ligação.')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+              disabled={busy || !email.includes('@')}
+              className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-bold text-on-accent disabled:opacity-40"
+            >
+              {busy ? 'A enviar…' : 'Enviar código'}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <p className="text-sm text-muted">Verifica o email <strong className="text-ink">{email}</strong> e escreve o código.</p>
+            <div className="mt-3 space-y-2">
+              <input inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Código de 6 dígitos" className={inputCls} autoFocus />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Nova password (mín. 8)" autoComplete="new-password" className={inputCls} />
+            </div>
+            {error && <p className="mt-2 text-xs text-critical">{error}</p>}
+            <button
+              onClick={async () => {
+                setBusy(true)
+                setError('')
+                try {
+                  await resetPassword(email.trim(), code.trim(), password)
+                  window.location.reload()
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Código inválido.')
+                  setBusy(false)
+                }
+              }}
+              disabled={busy || code.trim().length !== 6 || password.length < 8}
+              className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-bold text-on-accent disabled:opacity-40"
+            >
+              {busy ? 'Aguarda…' : 'Definir nova password'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

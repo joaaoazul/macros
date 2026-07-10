@@ -20,6 +20,8 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
 const PORT = Number(process.env.PORT ?? 8787)
+const RESEND_API_KEY = process.env.RESEND_API_KEY ?? ''
+const RESEND_FROM = process.env.RESEND_FROM ?? 'Macros <onboarding@resend.dev>'
 const DB_PATH = process.env.DB_PATH ?? new URL('./data.db', import.meta.url).pathname
 
 const secretFile = new URL('./jwt-secret', import.meta.url).pathname
@@ -57,7 +59,24 @@ db.exec(`
     created_at INTEGER NOT NULL,
     PRIMARY KEY (follower_id, followee_id)
   );
+  CREATE TABLE IF NOT EXISTS friend_requests (
+    from_id INTEGER NOT NULL,
+    to_id INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (from_id, to_id)
+  );
+  CREATE TABLE IF NOT EXISTS reset_codes (
+    user_id INTEGER PRIMARY KEY,
+    code_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
 `)
+// migração: follows antigos passam a amizades aceites
+try {
+  db.exec(`INSERT OR IGNORE INTO friend_requests (from_id, to_id, status, created_at)
+           SELECT follower_id, followee_id, 'accepted', created_at FROM follows`)
+} catch {}
 // migração leve: colunas sociais em bases já existentes
 for (const col of ['username TEXT', 'share_stats INTEGER DEFAULT 0']) {
   try {
@@ -135,6 +154,51 @@ app.post('/api/auth/login', async (c) => {
     attempts.get(normalized)?.push(Date.now()) ?? attempts.set(normalized, [Date.now()])
     return c.json({ error: 'Email ou password incorretos.' }, 401)
   }
+  const token = await makeToken(user.id, user.email)
+  return c.json({ token, email: user.email })
+})
+
+/**
+ * Recuperação de password por email (via Resend). Só funciona com
+ * RESEND_API_KEY definida no ambiente; sem ela devolve 503.
+ */
+app.post('/api/auth/forgot', async (c) => {
+  if (!RESEND_API_KEY) return c.json({ error: 'Recuperação de password não configurada neste servidor.' }, 503)
+  const { email } = await c.req.json().catch(() => ({}))
+  const normalized = String(email ?? '').trim().toLowerCase()
+  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(normalized)
+  // resposta idêntica com ou sem conta (não revelar que emails existem)
+  if (user) {
+    const code = String(Math.floor(100000 + Math.random() * 900000))
+    db.prepare('INSERT OR REPLACE INTO reset_codes (user_id, code_hash, expires_at) VALUES (?, ?, ?)').run(
+      user.id,
+      bcrypt.hashSync(code, 10),
+      Date.now() + 15 * 60 * 1000,
+    )
+    fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: [user.email],
+        subject: 'Macros — código de recuperação',
+        text: `O teu código de recuperação é: ${code}\n\nVálido durante 15 minutos. Se não pediste isto, ignora este email.`,
+      }),
+    }).catch((e) => console.error('resend:', e.message))
+  }
+  return c.json({ ok: true })
+})
+
+app.post('/api/auth/reset', async (c) => {
+  const { email, code, password } = await c.req.json().catch(() => ({}))
+  if (typeof password !== 'string' || password.length < 8) return c.json({ error: 'A password precisa de pelo menos 8 caracteres.' }, 400)
+  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(String(email ?? '').trim().toLowerCase())
+  const row = user ? db.prepare('SELECT * FROM reset_codes WHERE user_id = ?').get(user.id) : null
+  if (!row || row.expires_at < Date.now() || !bcrypt.compareSync(String(code ?? ''), row.code_hash)) {
+    return c.json({ error: 'Código inválido ou expirado.' }, 400)
+  }
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), user.id)
+  db.prepare('DELETE FROM reset_codes WHERE user_id = ?').run(user.id)
   const token = await makeToken(user.id, user.email)
   return c.json({ token, email: user.email })
 })
@@ -257,28 +321,62 @@ app.get('/api/social/search', (c) => {
   return c.json({ users: rows.map((r) => r.username) })
 })
 
-app.post('/api/social/follow', async (c) => {
+const findUser = (username) => db.prepare('SELECT id, username, share_stats FROM users WHERE username = ?').get(String(username ?? '').toLowerCase())
+
+/** Pedir amizade; se a outra pessoa já tinha pedido, aceita logo (match). */
+app.post('/api/social/request', async (c) => {
   const { username } = await c.req.json().catch(() => ({}))
-  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(String(username ?? '').toLowerCase())
+  const me = c.get('userId')
+  const target = findUser(username)
   if (!target) return c.json({ error: 'Utilizador não encontrado.' }, 404)
-  if (target.id === c.get('userId')) return c.json({ error: 'Não te podes seguir a ti próprio 🙂' }, 400)
-  db.prepare('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)').run(c.get('userId'), target.id, Date.now())
+  if (target.id === me) return c.json({ error: 'Não podes pedir amizade a ti próprio 🙂' }, 400)
+  const reverse = db.prepare('SELECT status FROM friend_requests WHERE from_id = ? AND to_id = ?').get(target.id, me)
+  if (reverse) {
+    db.prepare(`UPDATE friend_requests SET status = 'accepted' WHERE from_id = ? AND to_id = ?`).run(target.id, me)
+    return c.json({ status: 'accepted' })
+  }
+  db.prepare(`INSERT OR IGNORE INTO friend_requests (from_id, to_id, status, created_at) VALUES (?, ?, 'pending', ?)`).run(me, target.id, Date.now())
+  return c.json({ status: 'pending' })
+})
+
+app.get('/api/social/requests', (c) => {
+  const rows = db
+    .prepare(`SELECT u.username FROM friend_requests r JOIN users u ON u.id = r.from_id WHERE r.to_id = ? AND r.status = 'pending' ORDER BY r.created_at DESC`)
+    .all(c.get('userId'))
+  return c.json({ requests: rows.map((r) => r.username) })
+})
+
+app.post('/api/social/respond', async (c) => {
+  const { username, accept } = await c.req.json().catch(() => ({}))
+  const target = findUser(username)
+  if (!target) return c.json({ error: 'Utilizador não encontrado.' }, 404)
+  if (accept) db.prepare(`UPDATE friend_requests SET status = 'accepted' WHERE from_id = ? AND to_id = ? AND status = 'pending'`).run(target.id, c.get('userId'))
+  else db.prepare('DELETE FROM friend_requests WHERE from_id = ? AND to_id = ?').run(target.id, c.get('userId'))
   return c.json({ ok: true })
 })
 
-app.post('/api/social/unfollow', async (c) => {
+app.post('/api/social/unfriend', async (c) => {
   const { username } = await c.req.json().catch(() => ({}))
-  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(String(username ?? '').toLowerCase())
-  if (target) db.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').run(c.get('userId'), target.id)
+  const target = findUser(username)
+  if (target) {
+    db.prepare('DELETE FROM friend_requests WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)').run(
+      c.get('userId'), target.id, target.id, c.get('userId'),
+    )
+  }
   return c.json({ ok: true })
 })
+
+const acceptedFriends = (me) =>
+  db
+    .prepare(
+      `SELECT u.id, u.username, u.share_stats FROM friend_requests r
+       JOIN users u ON u.id = CASE WHEN r.from_id = ? THEN r.to_id ELSE r.from_id END
+       WHERE (r.from_id = ? OR r.to_id = ?) AND r.status = 'accepted' LIMIT 100`,
+    )
+    .all(me, me, me)
 
 app.get('/api/social/friends', (c) => {
-  const rows = db
-    .prepare(
-      `SELECT u.id, u.username, u.share_stats FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ? ORDER BY f.created_at DESC LIMIT 100`,
-    )
-    .all(c.get('userId'))
+  const rows = acceptedFriends(c.get('userId'))
   return c.json({
     friends: rows.map((r) => ({
       username: r.username,
@@ -286,6 +384,22 @@ app.get('/api/social/friends', (c) => {
       stats: r.share_stats ? publicStats(r.id) : null,
     })),
   })
+})
+
+/**
+ * Feed/ranking semanal: tu + amigos, ordenados por dias registados na semana
+ * e depois por streak. Pontuação simples e transparente.
+ */
+app.get('/api/social/feed', (c) => {
+  const me = c.get('userId')
+  const meRow = db.prepare('SELECT username FROM users WHERE id = ?').get(me)
+  const entries = [{ username: meRow?.username ?? 'tu', isMe: true, stats: publicStats(me) }]
+  for (const f of acceptedFriends(me)) {
+    entries.push({ username: f.username, isMe: false, stats: f.share_stats ? publicStats(f.id) : null })
+  }
+  const score = (s) => (s ? s.last7 * 10 + Math.min(s.streak, 30) : -1)
+  entries.sort((a, b) => score(b.stats) - score(a.stats))
+  return c.json({ feed: entries })
 })
 
 /* ---------- conta (RGPD: portabilidade e apagamento) ---------- */

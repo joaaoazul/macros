@@ -39,11 +39,17 @@ npm run preview   # servir a build
 
 ## Social 👥
 
-Com conta, podes definir um **username público**, procurar e **seguir amigos**.
-Por privacidade (dados de nutrição são dados de saúde), só se partilham
-estatísticas de consistência — streak 🔥, "registou hoje" e dias registados na
-semana — **nunca calorias, peso ou refeições**, e a partilha está **desligada
-por omissão**.
+Com conta, podes definir um **username público** e enviar **pedidos de
+amizade** (aprovação mútua; se ambos pedirem, é match automático). O cartão
+Amigos mostra o **🏆 ranking da semana** — medalhas por dias registados e
+streak, contigo destacado. Por privacidade (dados de nutrição são dados de
+saúde), só se partilham estatísticas de consistência — streak 🔥, "registou
+hoje" e dias registados — **nunca calorias, peso ou refeições**, e a partilha
+está **desligada por omissão**.
+
+**Recuperar password:** define `RESEND_API_KEY` (e opcionalmente
+`RESEND_FROM`) no serviço `macros-api` e o fluxo "Esqueci-me da password"
+(código de 6 dígitos por email, 15 min) fica ativo automaticamente.
 
 ## Segurança e RGPD
 

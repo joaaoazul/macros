@@ -250,15 +250,31 @@ const authed = () => {
   return a.token
 }
 
+export interface FeedEntry {
+  username: string
+  isMe: boolean
+  stats: FriendStats | null
+}
+
 export const socialMe = () =>
   api('/social/me', undefined, authed()) as Promise<{ username: string | null; shareStats: boolean; followers: number }>
 export const setUsername = (username: string) => api('/social/username', { username }, authed())
 export const setShareStats = (enabled: boolean) => api('/social/share', { enabled }, authed())
 export const searchUsers = (q: string) =>
   api(`/social/search?q=${encodeURIComponent(q)}`, undefined, authed()) as Promise<{ users: string[] }>
-export const followUser = (username: string) => api('/social/follow', { username }, authed())
-export const unfollowUser = (username: string) => api('/social/unfollow', { username }, authed())
+export const requestFriend = (username: string) => api('/social/request', { username }, authed()) as Promise<{ status: string }>
+export const listRequests = () => api('/social/requests', undefined, authed()) as Promise<{ requests: string[] }>
+export const respondRequest = (username: string, accept: boolean) => api('/social/respond', { username, accept }, authed())
+export const unfriendUser = (username: string) => api('/social/unfriend', { username }, authed())
 export const listFriends = () => api('/social/friends', undefined, authed()) as Promise<{ friends: Friend[] }>
+export const getFeed = () => api('/social/feed', undefined, authed()) as Promise<{ feed: FeedEntry[] }>
+
+/* recuperação de password (requer RESEND_API_KEY no servidor) */
+export const forgotPassword = (email: string) => api('/auth/forgot', { email })
+export async function resetPassword(email: string, code: string, password: string): Promise<void> {
+  const data = (await api('/auth/reset', { email, code, password })) as unknown as Auth
+  setAuth({ token: data.token, email: data.email })
+}
 
 export async function deleteAccount(): Promise<void> {
   const res = await fetch(apiBase() + '/account', { method: 'DELETE', headers: { Authorization: `Bearer ${authed()}` } })
