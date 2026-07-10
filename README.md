@@ -37,6 +37,31 @@ npm run build     # typecheck + build de produção
 npm run preview   # servir a build
 ```
 
+## Contas e sincronização (opcional)
+
+O backend em `server/` (Node 22+, SQLite embutido, sem dependências nativas) dá
+contas por email/password e sincronização entre dispositivos. A app continua
+offline-first — sem conta funciona igual; com conta, o diário sincroniza
+dia-a-dia com last-write-wins.
+
+No VPS:
+
+```bash
+cd /opt/macros/server && npm ci
+sudo cp ../deploy/macros-api.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now macros-api
+```
+
+E no Caddyfile, dentro do bloco do site, antes do `file_server`:
+
+```
+handle /api/* {
+    reverse_proxy 127.0.0.1:8787
+}
+```
+
+(nginx: `location /api/ { proxy_pass http://127.0.0.1:8787; }`)
+
 ## Deploy
 
 ### VPS (nginx, um comando)

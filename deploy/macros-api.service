@@ -1,0 +1,21 @@
+# Serviço systemd da API de contas/sincronização.
+#   sudo cp deploy/macros-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now macros-api
+[Unit]
+Description=Macros sync API
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/macros/server
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=3
+Environment=PORT=8787
+Environment=DB_PATH=/opt/macros/server/data.db
+# Endurecimento básico
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/opt/macros/server
+
+[Install]
+WantedBy=multi-user.target

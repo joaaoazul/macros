@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Goal, Profile, Sex } from '../types'
 import { ACTIVITY_LEVELS, GOALS, computeTargets } from '../lib/calc'
+import { login } from '../lib/sync'
 
 interface Props {
   onDone: (p: Profile) => void
@@ -8,6 +9,7 @@ interface Props {
 
 export default function Onboarding({ onDone }: Props) {
   const [step, setStep] = useState(0)
+  const [showLogin, setShowLogin] = useState(false)
   const [name, setName] = useState('')
   const [sex, setSex] = useState<Sex>('M')
   const [age, setAge] = useState('')
@@ -79,8 +81,13 @@ export default function Onboarding({ onDone }: Props) {
           <PrimaryButton className="mt-auto" disabled={!dataOk} onClick={() => setStep(1)}>
             Continuar
           </PrimaryButton>
+          <button onClick={() => setShowLogin(true)} className="mt-3 py-1 text-center text-sm font-bold text-accent">
+            Já tens conta? Entrar e sincronizar
+          </button>
         </section>
       )}
+
+      {showLogin && <LoginSheet onClose={() => setShowLogin(false)} />}
 
       {step === 1 && (
         <section className="flex flex-1 flex-col">
@@ -232,6 +239,56 @@ function MacroCard({ color, label, grams }: { color: string; label: string; gram
       <span className={`mx-auto block h-2 w-2 rounded-full ${color}`} aria-hidden />
       <div className="mt-2 text-xl font-bold">{grams} g</div>
       <div className="text-xs text-muted">{label}</div>
+    </div>
+  )
+}
+
+function LoginSheet({ onClose }: { onClose: () => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await login(email.trim(), password, false)
+      // recarrega para a app ler o perfil e diário vindos do servidor
+      window.location.reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha na ligação ao servidor.')
+      setBusy(false)
+    }
+  }
+
+  const inputCls = 'w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Entrar na conta"
+      >
+        <div className="mx-auto h-1 w-9 rounded-full bg-line" aria-hidden />
+        <h2 className="mt-4 text-xl font-extrabold">Entrar</h2>
+        <p className="mt-1 text-sm text-muted">Os teus dados sincronizados vêm do servidor para este dispositivo.</p>
+        <div className="mt-4 space-y-3">
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" autoComplete="email" className={inputCls} autoFocus />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" autoComplete="current-password" className={inputCls} />
+        </div>
+        {error && <p className="mt-2 text-xs text-critical">{error}</p>}
+        <button
+          onClick={submit}
+          disabled={busy || !email.includes('@') || password.length === 0}
+          className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-bold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
+        >
+          {busy ? 'A entrar…' : 'Entrar'}
+        </button>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { getApiKey, setApiKey } from '../lib/ai'
 import { todayISO, usePersistedState } from '../lib/store'
+import { getAuth, login, logout, pendingCount, syncNow } from '../lib/sync'
 import type { Diary, ExerciseLog, Food, Profile, WaterLog, WeightLog } from '../types'
 import { MEALS } from '../types'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
@@ -215,6 +216,9 @@ export default function Perfil({ profile, setProfile, weightLog, setWeightLog, a
         </Card>
 
 
+        {/* conta e sincronização */}
+        <AccountCard />
+
         {/* lembretes de água */}
         <Card className="flex items-center gap-4 p-4">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>
@@ -409,5 +413,112 @@ function GuideItem({ q, a }: { q: string; a: string }) {
       </button>
       {open && <p className="pb-3 text-[13.5px] leading-relaxed text-ink-2">{a}</p>}
     </div>
+  )
+}
+
+function AccountCard() {
+  const [auth, setAuthState] = useState(getAuth())
+  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [synced, setSynced] = useState(false)
+
+  const submit = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await login(email.trim(), password, mode === 'register')
+      setAuthState(getAuth())
+      // remonta a app para refletir dados vindos do servidor
+      window.location.reload()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha na ligação ao servidor.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const inputCls = 'w-full rounded-xl bg-bg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent'
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-[17px] font-semibold">☁️ Conta e sincronização</h2>
+      {auth ? (
+        <div className="mt-2">
+          <p className="text-[13.5px] text-ink-2">
+            Sessão iniciada como <strong className="text-ink">{auth.email}</strong>. Os teus dados sincronizam entre dispositivos.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  const touched = await syncNow()
+                  setSynced(true)
+                  setTimeout(() => setSynced(false), 2500)
+                  if (touched) window.location.reload()
+                } catch {
+                  setError('Sem ligação ao servidor.')
+                } finally {
+                  setBusy(false)
+                }
+              }}
+              disabled={busy}
+              className="rounded-full bg-accent-soft px-4 py-2 text-sm font-bold text-accent disabled:opacity-40"
+            >
+              {synced ? 'Sincronizado ✓' : busy ? 'A sincronizar…' : `Sincronizar agora${pendingCount() > 0 ? ` (${pendingCount()})` : ''}`}
+            </button>
+            <button
+              onClick={() => {
+                logout()
+                setAuthState(null)
+              }}
+              className="rounded-full px-4 py-2 text-sm font-bold text-critical"
+            >
+              Sair
+            </button>
+          </div>
+          {error && <p className="mt-2 text-xs text-critical">{error}</p>}
+        </div>
+      ) : (
+        <div className="mt-2">
+          <p className="text-[13px] text-muted">
+            Opcional — cria conta para sincronizares o diário entre o telemóvel e o computador. Sem conta, tudo continua a funcionar só neste dispositivo.
+          </p>
+          <div className="mt-3 flex gap-1.5">
+            {(['login', 'register'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`rounded-full px-3.5 py-1.5 text-[13px] font-bold ${mode === m ? 'bg-accent text-on-accent' : 'bg-bg text-ink-2'}`}
+              >
+                {m === 'login' ? 'Entrar' : 'Criar conta'}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 space-y-2">
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" autoComplete="email" className={inputCls} />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={mode === 'register' ? 'Password (mín. 8 caracteres)' : 'Password'}
+              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+              className={inputCls}
+            />
+          </div>
+          {error && <p className="mt-2 text-xs text-critical">{error}</p>}
+          <button
+            onClick={submit}
+            disabled={busy || !email.includes('@') || password.length < (mode === 'register' ? 8 : 1)}
+            className="mt-3 w-full rounded-full bg-accent px-6 py-3 font-bold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
+          >
+            {busy ? 'Aguarda…' : mode === 'login' ? 'Entrar' : 'Criar conta e sincronizar'}
+          </button>
+        </div>
+      )}
+    </Card>
   )
 }

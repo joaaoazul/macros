@@ -45,6 +45,13 @@ echo "==> Publicar em $WEB_ROOT"
 mkdir -p "$WEB_ROOT"
 rsync -a --delete dist/ "$WEB_ROOT/"
 
+echo "==> API de contas/sincronização (systemd)"
+(cd "$APP_DIR/server" && npm ci --no-audit --no-fund)
+cp "$APP_DIR/deploy/macros-api.service" /etc/systemd/system/macros-api.service
+systemctl daemon-reload
+systemctl enable --now macros-api
+systemctl restart macros-api
+
 echo "==> nginx"
 cp "$APP_DIR/deploy/nginx-site.conf" /etc/nginx/sites-available/macros
 ln -sf /etc/nginx/sites-available/macros /etc/nginx/sites-enabled/macros

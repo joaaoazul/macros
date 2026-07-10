@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** Estado persistido em localStorage (leitura preguiçosa + escrita a cada alteração). */
 export function usePersistedState<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -11,9 +11,19 @@ export function usePersistedState<T>(key: string, initial: T): [T, React.Dispatc
     }
   })
 
+  // não escrever no primeiro render: o valor veio do localStorage (ou é o
+  // default) e reescrevê-lo marcaria alterações falsas na sincronização —
+  // num dispositivo novo isso empurraria defaults vazios por cima dos dados
+  // reais no servidor.
+  const first = useRef(true)
   useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
     try {
       localStorage.setItem(key, JSON.stringify(value))
+      window.dispatchEvent(new CustomEvent('macros-state', { detail: key }))
     } catch {
       // quota cheia ou modo privado — a app continua a funcionar em memória
     }
