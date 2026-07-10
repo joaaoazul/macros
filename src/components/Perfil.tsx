@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getApiKey, setApiKey } from '../lib/ai'
 import { todayISO, usePersistedState } from '../lib/store'
 import { deleteAccount, forgotPassword, getAuth, getFeed, listRequests, login, logout, pendingCount, requestFriend, resetPassword, respondRequest, searchUsers, setShareStats, setUsername, socialMe, syncNow, unfriendUser, type FeedEntry } from '../lib/sync'
@@ -574,21 +574,24 @@ function FriendsCard() {
     getFeed().then((r) => setFeed(r.feed)).catch(() => {})
     listRequests().then((r) => setRequests(r.requests)).catch(() => {})
   }
-  useState(() => {
+  useEffect(() => {
     refresh()
-    return undefined
-  })
+  }, [])
 
-  const search = async (q: string) => {
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const search = (q: string) => {
     setQuery(q)
+    clearTimeout(searchTimer.current)
     if (q.trim().length < 2) {
       setResults([])
       return
     }
-    try {
-      const r = await searchUsers(q.trim())
-      setResults(r.users.filter((u) => !feed.some((f) => f.username === u)))
-    } catch {}
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const r = await searchUsers(q.trim())
+        setResults(r.users.filter((u) => !feed.some((f) => f.username === u)))
+      } catch {}
+    }, 300)
   }
 
   const inputCls = 'w-full rounded-xl bg-bg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent'

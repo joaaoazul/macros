@@ -177,9 +177,10 @@ function EditSheet({
   const [protein, setProtein] = useState(String(split.proteinPct))
   const [fat, setFat] = useState(String(split.fatPct))
 
-  const total = Number(carbs) + Number(protein) + Number(fat)
+  const pcts = [Number(carbs), Number(protein), Number(fat)]
+  const total = pcts[0] + pcts[1] + pcts[2]
   const kcalN = Number(kcal)
-  const valid = total === 100 && kcalN >= 800 && kcalN <= 8000
+  const valid = total === 100 && pcts.every((p) => p >= 0 && p <= 100) && kcalN >= 800 && kcalN <= 8000
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>

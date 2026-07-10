@@ -14,7 +14,9 @@ type Phase = 'pick' | 'loading' | 'review' | 'error' | 'nokey'
 /** Fluxo: foto → estimativa da IA → revisão/edição → registar no diário. */
 export default function PlateAnalyzer({ meal, onAdd, onClose }: Props) {
   const [phase, setPhase] = useState<Phase>(getApiKey() ? 'pick' : 'nokey')
-  const [items, setItems] = useState<(PlateItem & { checked: boolean })[]>([])
+  // `base` guarda a estimativa original da IA: as edições de gramas escalam
+  // sempre a partir dela (evita degradação e divisões por zero em re-edições)
+  const [items, setItems] = useState<(PlateItem & { checked: boolean; base: PlateItem })[]>([])
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
@@ -31,7 +33,7 @@ export default function PlateAnalyzer({ meal, onAdd, onClose }: Props) {
         setPhase('error')
         return
       }
-      setItems(result.items.map((i) => ({ ...i, checked: true })))
+      setItems(result.items.map((i) => ({ ...i, checked: true, base: i })))
       setNotes(result.notes)
       setPhase('review')
     } catch (e) {
@@ -42,7 +44,7 @@ export default function PlateAnalyzer({ meal, onAdd, onClose }: Props) {
 
   const confirm = () => {
     const entries: Entry[] = items
-      .filter((i) => i.checked)
+      .filter((i) => i.checked && i.grams > 0)
       .map((i) => ({
         id: uid(),
         meal,
@@ -151,9 +153,10 @@ export default function PlateAnalyzer({ meal, onAdd, onClose }: Props) {
                           const g = Number(e.target.value)
                           setItems((arr) =>
                             arr.map((x, i) => {
-                              if (i !== idx || !(g > 0)) return i === idx ? { ...x, grams: g } : x
-                              const f = g / x.grams
-                              return { ...x, grams: g, kcal: x.kcal * f, protein: x.protein * f, carbs: x.carbs * f, fat: x.fat * f }
+                              if (i !== idx) return x
+                              if (!(g > 0) || !(x.base.grams > 0)) return { ...x, grams: g, kcal: 0, protein: 0, carbs: 0, fat: 0 }
+                              const f = g / x.base.grams
+                              return { ...x, grams: g, kcal: x.base.kcal * f, protein: x.base.protein * f, carbs: x.base.carbs * f, fat: x.base.fat * f }
                             }),
                           )
                         }}

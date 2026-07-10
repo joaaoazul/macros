@@ -104,25 +104,42 @@ app.use(
 )
 
 // rate-limit por IP nos endpoints de autenticação: 30 pedidos / 15 min
+const WINDOW = 15 * 60 * 1000
 const ipHits = new Map()
 app.use('/api/auth/*', async (c, next) => {
   const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local'
   const now = Date.now()
-  const list = (ipHits.get(ip) ?? []).filter((t) => now - t < 15 * 60 * 1000)
+  const list = (ipHits.get(ip) ?? []).filter((t) => now - t < WINDOW)
   if (list.length >= 30) return c.json({ error: 'Demasiados pedidos — tenta mais tarde.' }, 429)
   list.push(now)
   ipHits.set(ip, list)
   return next()
 })
 
-// trava simples de força-bruta no login: 10 tentativas / 15 min por email
+// trava simples de força-bruta: 10 tentativas / 15 min por email (login e reset)
 const attempts = new Map()
 function tooManyAttempts(email) {
   const now = Date.now()
-  const list = (attempts.get(email) ?? []).filter((t) => now - t < 15 * 60 * 1000)
+  const list = (attempts.get(email) ?? []).filter((t) => now - t < WINDOW)
   attempts.set(email, list)
   return list.length >= 10
 }
+const recordAttempt = (email) => {
+  attempts.get(email)?.push(Date.now()) ?? attempts.set(email, [Date.now()])
+}
+
+// limpeza periódica dos mapas de rate-limit (evita crescimento sem limite)
+setInterval(() => {
+  const cutoff = Date.now() - WINDOW
+  for (const [k, list] of ipHits) {
+    const live = list.filter((t) => t > cutoff)
+    live.length ? ipHits.set(k, live) : ipHits.delete(k)
+  }
+  for (const [k, list] of attempts) {
+    const live = list.filter((t) => t > cutoff)
+    live.length ? attempts.set(k, live) : attempts.delete(k)
+  }
+}, WINDOW).unref()
 
 const makeToken = (userId, email) =>
   sign(
@@ -151,7 +168,7 @@ app.post('/api/auth/login', async (c) => {
   if (tooManyAttempts(normalized)) return c.json({ error: 'Demasiadas tentativas — espera 15 minutos.' }, 429)
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalized)
   if (!user || !bcrypt.compareSync(String(password ?? ''), user.password_hash)) {
-    attempts.get(normalized)?.push(Date.now()) ?? attempts.set(normalized, [Date.now()])
+    recordAttempt(normalized)
     return c.json({ error: 'Email ou password incorretos.' }, 401)
   }
   const token = await makeToken(user.id, user.email)
@@ -192,9 +209,13 @@ app.post('/api/auth/forgot', async (c) => {
 app.post('/api/auth/reset', async (c) => {
   const { email, code, password } = await c.req.json().catch(() => ({}))
   if (typeof password !== 'string' || password.length < 8) return c.json({ error: 'A password precisa de pelo menos 8 caracteres.' }, 400)
-  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(String(email ?? '').trim().toLowerCase())
+  const normalized = String(email ?? '').trim().toLowerCase()
+  // um código de 6 dígitos aguenta pouca força-bruta — mesma trava do login
+  if (tooManyAttempts(normalized)) return c.json({ error: 'Demasiadas tentativas — espera 15 minutos.' }, 429)
+  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(normalized)
   const row = user ? db.prepare('SELECT * FROM reset_codes WHERE user_id = ?').get(user.id) : null
   if (!row || row.expires_at < Date.now() || !bcrypt.compareSync(String(code ?? ''), row.code_hash)) {
+    recordAttempt(normalized)
     return c.json({ error: 'Código inválido ou expirado.' }, 400)
   }
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), user.id)
@@ -227,6 +248,8 @@ app.get('/api/me', (c) => {
  * sincronização; o servidor aplica last-write-wins por chave (updated_at do
  * cliente) e devolve tudo o que mudou no servidor desde o cursor.
  */
+const SYNC_KEY_RE = /^(profile|customFoods|favFoods|recentFoods)$|^(diary|water|exercise|weightLog):\d{4}-\d{2}-\d{2}$/
+
 app.post('/api/sync', async (c) => {
   const userId = c.get('userId')
   const body = await c.req.json().catch(() => ({}))
@@ -240,7 +263,7 @@ app.post('/api/sync', async (c) => {
      ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, server_at = excluded.server_at`,
   )
   for (const ch of changes.slice(0, 2000)) {
-    if (typeof ch?.key !== 'string' || ch.key.length > 128) continue
+    if (typeof ch?.key !== 'string' || !SYNC_KEY_RE.test(ch.key)) continue
     const value = JSON.stringify(ch.value ?? null)
     if (value.length > 512 * 1024) continue
     const updatedAt = Number(ch.updatedAt ?? now)
@@ -260,10 +283,13 @@ app.post('/api/sync', async (c) => {
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
-/** Estatísticas públicas (não sensíveis) calculadas do diário: streak e adesão. */
-function publicStats(userId) {
+/**
+ * Estatísticas públicas (não sensíveis) calculadas do diário: streak e adesão.
+ * `todayISO` vem do cliente (data local do utilizador); sem ele usa UTC.
+ */
+function publicStats(userId, todayISO) {
   const rows = db
-    .prepare(`SELECT key, value FROM kv WHERE user_id = ? AND key LIKE 'diary:%'`)
+    .prepare(`SELECT key, value FROM kv WHERE user_id = ? AND key LIKE 'diary:%' ORDER BY key DESC LIMIT 400`)
     .all(userId)
   const logged = new Set()
   for (const r of rows) {
@@ -273,22 +299,25 @@ function publicStats(userId) {
     } catch {}
   }
   const iso = (d) => d.toISOString().slice(0, 10)
-  const day = new Date()
-  const today = iso(day)
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(todayISO ?? '') ? todayISO : iso(new Date())
+  const day = new Date(today + 'T00:00:00Z')
   let streak = 0
-  if (!logged.has(today)) day.setDate(day.getDate() - 1)
+  if (!logged.has(today)) day.setUTCDate(day.getUTCDate() - 1)
   while (logged.has(iso(day))) {
     streak++
-    day.setDate(day.getDate() - 1)
+    day.setUTCDate(day.getUTCDate() - 1)
   }
   let last7 = 0
-  const d7 = new Date()
+  const d7 = new Date(today + 'T00:00:00Z')
   for (let i = 0; i < 7; i++) {
     if (logged.has(iso(d7))) last7++
-    d7.setDate(d7.getDate() - 1)
+    d7.setUTCDate(d7.getUTCDate() - 1)
   }
   return { streak, loggedToday: logged.has(today), last7 }
 }
+
+/** Data "hoje" indicada pelo cliente (fuso local do utilizador). */
+const clientToday = (c) => c.req.query('today')
 
 app.get('/api/social/me', (c) => {
   const u = db.prepare('SELECT username, share_stats FROM users WHERE id = ?').get(c.get('userId'))
@@ -314,10 +343,11 @@ app.post('/api/social/share', async (c) => {
 
 app.get('/api/social/search', (c) => {
   const q = String(c.req.query('q') ?? '').trim().toLowerCase()
-  if (q.length < 2) return c.json({ users: [] })
+  if (q.length < 2 || q.length > 20) return c.json({ users: [] })
+  const escaped = q.replace(/[\\%_]/g, (ch) => '\\' + ch)
   const rows = db
-    .prepare(`SELECT username FROM users WHERE username LIKE ? AND username IS NOT NULL AND id != ? LIMIT 10`)
-    .all(q + '%', c.get('userId'))
+    .prepare(`SELECT username FROM users WHERE username LIKE ? ESCAPE '\\' AND username IS NOT NULL AND id != ? LIMIT 10`)
+    .all(escaped + '%', c.get('userId'))
   return c.json({ users: rows.map((r) => r.username) })
 })
 
@@ -377,11 +407,12 @@ const acceptedFriends = (me) =>
 
 app.get('/api/social/friends', (c) => {
   const rows = acceptedFriends(c.get('userId'))
+  const today = clientToday(c)
   return c.json({
     friends: rows.map((r) => ({
       username: r.username,
       // só partilha estatísticas quem ativou a partilha (privacy by default)
-      stats: r.share_stats ? publicStats(r.id) : null,
+      stats: r.share_stats ? publicStats(r.id, today) : null,
     })),
   })
 })
@@ -392,10 +423,11 @@ app.get('/api/social/friends', (c) => {
  */
 app.get('/api/social/feed', (c) => {
   const me = c.get('userId')
+  const today = clientToday(c)
   const meRow = db.prepare('SELECT username FROM users WHERE id = ?').get(me)
-  const entries = [{ username: meRow?.username ?? 'tu', isMe: true, stats: publicStats(me) }]
+  const entries = [{ username: meRow?.username ?? 'tu', isMe: true, stats: publicStats(me, today) }]
   for (const f of acceptedFriends(me)) {
-    entries.push({ username: f.username, isMe: false, stats: f.share_stats ? publicStats(f.id) : null })
+    entries.push({ username: f.username, isMe: false, stats: f.share_stats ? publicStats(f.id, today) : null })
   }
   const score = (s) => (s ? s.last7 * 10 + Math.min(s.streak, 30) : -1)
   entries.sort((a, b) => score(b.stats) - score(a.stats))
@@ -417,6 +449,8 @@ app.delete('/api/account', (c) => {
   const userId = c.get('userId')
   db.prepare('DELETE FROM kv WHERE user_id = ?').run(userId)
   db.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').run(userId, userId)
+  db.prepare('DELETE FROM friend_requests WHERE from_id = ? OR to_id = ?').run(userId, userId)
+  db.prepare('DELETE FROM reset_codes WHERE user_id = ?').run(userId)
   db.prepare('DELETE FROM users WHERE id = ?').run(userId)
   return c.json({ deleted: true })
 })

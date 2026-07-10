@@ -37,6 +37,16 @@ npm run build     # typecheck + build de produção
 npm run preview   # servir a build
 ```
 
+### Testes
+
+```bash
+# API (precisa do servidor com base limpa: cd server && rm -f data.db* && node index.js)
+npm run test:api
+
+# UI (precisa de `npm run preview` + servidor da API; usa Chromium via playwright-core)
+npm run test:ui   # opcional: CHROME=/caminho/para/chrome
+```
+
 ## Social 👥
 
 Com conta, podes definir um **username público** e enviar **pedidos de

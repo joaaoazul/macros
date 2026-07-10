@@ -8,6 +8,7 @@
  * - A app funciona igual sem conta; com conta, empurra alterações (debounce)
  *   e puxa novidades no arranque e quando volta ao primeiro plano.
  */
+import { todayISO } from './store'
 
 const SIMPLE_KEYS = ['macros.profile', 'macros.customFoods', 'macros.favFoods', 'macros.recentFoods'] as const
 const DATED_KEYS = ['macros.diary', 'macros.water', 'macros.exercise', 'macros.weightLog'] as const
@@ -239,10 +240,6 @@ export interface FriendStats {
   loggedToday: boolean
   last7: number
 }
-export interface Friend {
-  username: string
-  stats: FriendStats | null
-}
 
 const authed = () => {
   const a = getAuth()
@@ -266,8 +263,8 @@ export const requestFriend = (username: string) => api('/social/request', { user
 export const listRequests = () => api('/social/requests', undefined, authed()) as Promise<{ requests: string[] }>
 export const respondRequest = (username: string, accept: boolean) => api('/social/respond', { username, accept }, authed())
 export const unfriendUser = (username: string) => api('/social/unfriend', { username }, authed())
-export const listFriends = () => api('/social/friends', undefined, authed()) as Promise<{ friends: Friend[] }>
-export const getFeed = () => api('/social/feed', undefined, authed()) as Promise<{ feed: FeedEntry[] }>
+// envia a data local: o streak/"registou hoje" respeita o fuso do utilizador
+export const getFeed = () => api(`/social/feed?today=${todayISO()}`, undefined, authed()) as Promise<{ feed: FeedEntry[] }>
 
 /* recuperação de password (requer RESEND_API_KEY no servidor) */
 export const forgotPassword = (email: string) => api('/auth/forgot', { email })

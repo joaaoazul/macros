@@ -33,7 +33,7 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
   const { targets } = profile
   const eaten = Math.round(totals.kcal)
   const net = eaten - burned
-  const kcalPct = targets.kcal > 0 ? Math.round((net / targets.kcal) * 100) : 0
+  const kcalPct = targets.kcal > 0 ? Math.max(0, Math.round((net / targets.kcal) * 100)) : 0
 
   const isToday = date === todayISO()
   const dateLabel = useMemo(() => {
@@ -164,7 +164,7 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
             <h2 className="flex-1 text-[17px] font-extrabold">Refeições de {isToday ? 'Hoje' : 'Dia'}</h2>
             {canCopyYesterday && (
               <button onClick={copyYesterday} className="rounded-full bg-accent-soft px-3 py-1.5 text-[12.5px] font-bold text-accent">
-                ⧉ Copiar ontem
+                ⧉ Copiar dia anterior
               </button>
             )}
           </div>

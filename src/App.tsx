@@ -31,7 +31,7 @@ export default function App() {
       const last = Number(localStorage.getItem('macros.lastWaterNotif') ?? 0)
       if (Date.now() - last < 2 * 60 * 60 * 1000) return
       const today = todayISO()
-      const target = rawProfile?.targets.waterMl ?? 2500
+      const target = rawProfile ? withWaterTarget(rawProfile).targets.waterMl : 2500
       if ((water[today] ?? 0) >= target) return
       localStorage.setItem('macros.lastWaterNotif', String(Date.now()))
       new Notification('Hora de beber água 💧', {
