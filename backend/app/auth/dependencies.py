@@ -1,0 +1,63 @@
+"""Auth FastAPI dependencies: current user extraction from cookie (or Bearer for tests)."""
+
+from datetime import datetime, timezone
+
+import jwt
+from fastapi import Depends, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.cookies import ACCESS_COOKIE
+from app.auth.models import User
+from app.auth.security import decode_token
+from app.auth.token_blocklist import is_token_revoked
+from app.database import get_db
+from app.exceptions import UnauthorizedError
+
+
+def _extract_token(request: Request) -> str | None:
+    token = request.cookies.get(ACCESS_COOKIE)
+    if token:
+        return token
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:]
+    return None
+
+
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    token = _extract_token(request)
+    if not token:
+        raise UnauthorizedError("Not authenticated")
+
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            raise UnauthorizedError("Invalid token type")
+        user_id = int(str(payload["sub"]))
+        jti: str = payload["jti"]
+        iat: int = payload["iat"]
+    except (jwt.InvalidTokenError, KeyError, ValueError):
+        raise UnauthorizedError("Invalid or expired token")
+
+    if await is_token_revoked(jti, db):
+        raise UnauthorizedError("Token has been revoked")
+
+    result = await db.execute(select(User).where(User.id == user_id, User.is_active.is_(True)))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise UnauthorizedError("User not found or deactivated")
+
+    token_iat = datetime.fromtimestamp(iat, tz=timezone.utc)
+    invalidated_at = (
+        user.sessions_invalidated_at
+        if user.sessions_invalidated_at.tzinfo is not None
+        else user.sessions_invalidated_at.replace(tzinfo=timezone.utc)
+    )
+    if token_iat < invalidated_at:
+        raise UnauthorizedError("Session has been invalidated. Please log in again.")
+
+    return user

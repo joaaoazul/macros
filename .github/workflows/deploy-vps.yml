@@ -1,13 +1,13 @@
 name: Deploy to VPS
 
-# Faz build e envia o dist/ para o VPS por SSH.
-# Requer 3 secrets no repositório (Settings → Secrets and variables → Actions):
+# Faz deploy por SSH: git pull + docker compose build no VPS.
+# Requer secrets no repositório (Settings → Secrets and variables → Actions):
 #   VPS_HOST — IP ou hostname do VPS
-#   VPS_USER — utilizador SSH (ex.: root ou deploy)
-#   VPS_SSH_KEY — chave privada SSH (o par público em ~/.ssh/authorized_keys do VPS)
+#   VPS_USER — utilizador SSH
+#   VPS_SSH_KEY — chave privada SSH (par público em ~/.ssh/authorized_keys do VPS)
 # Opcional:
 #   VPS_PORT — porta SSH se não for a 22
-#   VPS_PATH — pasta de destino (por omissão /var/www/macros)
+#   VPS_PATH — pasta do projeto no VPS (por omissão ~/macros)
 
 on:
   push:
@@ -24,16 +24,7 @@ jobs:
     env:
       HAS_SECRETS: ${{ secrets.VPS_HOST != '' && secrets.VPS_SSH_KEY != '' }}
     steps:
-      - uses: actions/checkout@v4
-        if: env.HAS_SECRETS == 'true'
-      - uses: actions/setup-node@v4
-        if: env.HAS_SECRETS == 'true'
-        with:
-          node-version: 22
-          cache: npm
-      - if: env.HAS_SECRETS == 'true'
-        run: npm ci && npm run build
-      - name: Enviar para o VPS
+      - name: Deploy via SSH
         if: env.HAS_SECRETS == 'true'
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -43,13 +34,14 @@ jobs:
           VPS_PATH: ${{ secrets.VPS_PATH }}
         run: |
           PORT="${VPS_PORT:-22}"
-          DEST="${VPS_PATH:-/var/www/macros}"
+          DEST="${VPS_PATH:-macros}"
           mkdir -p ~/.ssh
           echo "$VPS_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "$PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p $PORT" dist/ "$VPS_USER@$VPS_HOST:$DEST/"
-          echo "✅ Publicado em $DEST no $VPS_HOST"
+          ssh -i ~/.ssh/deploy_key -p "$PORT" "$VPS_USER@$VPS_HOST" \
+            "cd $DEST && git pull --ff-only && docker compose up -d --build"
+          echo "✅ Deploy concluído em $VPS_HOST"
       - name: Secrets em falta
         if: env.HAS_SECRETS != 'true'
-        run: echo "Secrets VPS_HOST/VPS_SSH_KEY não configurados — deploy ignorado (ver comentários no topo do workflow)."
+        run: echo "Secrets VPS_HOST/VPS_SSH_KEY não configurados — deploy ignorado."

@@ -1,18 +1,20 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Profile } from '../types'
+import { api, ApiError } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
+import { clearLocalCache } from '../lib/sync'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
   setProfile: (p: Profile) => void
-  onReset: () => void
 }
 
-export default function Perfil({ profile, setProfile, onReset }: Props) {
+export default function Perfil({ profile, setProfile }: Props) {
   const [weight, setWeight] = useState(String(profile.weightKg))
   const [waterMl, setWaterMl] = useState(String(profile.targets.waterMl))
-  const [confirmReset, setConfirmReset] = useState(false)
 
   const goalInfo = GOALS.find((g) => g.value === profile.goal)
   const activityInfo = ACTIVITY_LEVELS.find((a) => a.value === profile.activity)
@@ -166,28 +168,120 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
           </div>
         </Card>
 
-        {/* zona de perigo */}
-        <Card className="mb-2 p-5">
-          {!confirmReset ? (
-            <button onClick={() => setConfirmReset(true)} className="text-sm font-medium text-critical">
-              Apagar todos os dados…
-            </button>
-          ) : (
-            <div>
-              <p className="text-sm text-ink-2">Isto apaga o perfil e todo o diário. Não há volta a dar.</p>
-              <div className="mt-3 flex gap-2">
-                <button onClick={onReset} className="rounded-full bg-critical px-4 py-2 text-sm font-semibold text-white">
-                  Sim, apagar tudo
-                </button>
-                <button onClick={() => setConfirmReset(false)} className="rounded-full bg-bg px-4 py-2 text-sm font-medium">
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-        </Card>
+        {/* conta */}
+        <ContaCard />
       </div>
     </div>
+  )
+}
+
+/** Sessão, exportação GDPR e eliminação de conta. */
+function ContaCard() {
+  const { user, logout, clearSession } = useAuth()
+  const navigate = useNavigate()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const doLogout = async () => {
+    await logout()
+    clearLocalCache()
+    navigate('/login', { replace: true })
+  }
+
+  const doExport = async () => {
+    try {
+      const resp = await fetch('/api/v1/gdpr/export', {
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'fetch' },
+      })
+      if (!resp.ok) throw new Error()
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'macros-dados.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setError('Não foi possível exportar os dados.')
+    }
+  }
+
+  const doDelete = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api('/gdpr/account', { method: 'DELETE', body: { password } })
+      clearLocalCache()
+      clearSession()
+      navigate('/', { replace: true })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível eliminar a conta.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card className="mb-2 divide-y divide-line">
+      <div className="p-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Conta</div>
+        <div className="mt-0.5 font-medium">{user?.email}</div>
+      </div>
+      <button onClick={doExport} className="block w-full p-4 text-left text-sm font-medium text-accent">
+        Exportar os meus dados (JSON)
+      </button>
+      <button onClick={doLogout} className="block w-full p-4 text-left text-sm font-medium text-accent">
+        Terminar sessão
+      </button>
+      <div className="p-4">
+        {!confirmDelete ? (
+          <button onClick={() => setConfirmDelete(true)} className="text-sm font-medium text-critical">
+            Eliminar conta…
+          </button>
+        ) : (
+          <div>
+            <p className="text-sm text-ink-2">
+              Isto elimina a tua conta e todos os dados dos nossos servidores, permanentemente. Confirma com a
+              tua password.
+            </p>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="A tua password"
+              className="mt-3 w-full rounded-xl bg-bg px-4 py-2.5 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-critical"
+              aria-label="Password para confirmar eliminação"
+            />
+            {error && (
+              <p role="alert" className="mt-2 text-sm font-medium text-critical">{error}</p>
+            )}
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={doDelete}
+                disabled={busy || password.length === 0}
+                className="rounded-full bg-critical px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {busy ? 'A eliminar…' : 'Sim, eliminar tudo'}
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmDelete(false)
+                  setPassword('')
+                  setError('')
+                }}
+                className="rounded-full bg-bg px-4 py-2 text-sm font-medium"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
   )
 }
 

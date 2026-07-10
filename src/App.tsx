@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import type { Diary, ExerciseLog, Food, Profile, WaterLog } from './types'
-import { usePersistedState } from './lib/store'
 import { withWaterTarget } from './lib/calc'
+import { useAuth } from './lib/auth'
+import { useSyncedData } from './lib/sync'
 import Onboarding from './components/Onboarding'
 import Diario from './components/Diario'
 import Metas from './components/Metas'
@@ -19,12 +19,27 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export default function App() {
-  const [rawProfile, setProfile] = usePersistedState<Profile | null>('macros.profile', null)
-  const [diary, setDiary] = usePersistedState<Diary>('macros.diary', {})
-  const [water, setWater] = usePersistedState<WaterLog>('macros.water', {})
-  const [exercise, setExercise] = usePersistedState<ExerciseLog>('macros.exercise', {})
-  const [customFoods, setCustomFoods] = usePersistedState<Food[]>('macros.customFoods', [])
+  const { user } = useAuth()
+  const data = useSyncedData(user!.id)
   const [tab, setTab] = useState<Tab>('diario')
+
+  const {
+    loading, migrationAvailable, importLocalData, dismissMigration,
+    profile: rawProfile, setProfile, diary, setDiary,
+    water, setWater, exercise, setExercise, customFoods, setCustomFoods,
+  } = data
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-bg text-muted">
+        <span aria-hidden className="animate-pulse text-3xl">🥗</span>
+      </div>
+    )
+  }
+
+  if (migrationAvailable) {
+    return <MigrationPrompt onImport={importLocalData} onDismiss={dismissMigration} />
+  }
 
   if (!rawProfile) {
     return <Onboarding onDone={setProfile} />
@@ -49,20 +64,7 @@ export default function App() {
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}
         {tab === 'progresso' && <Progresso profile={profile} diary={diary} />}
-        {tab === 'perfil' && (
-          <Perfil
-            profile={profile}
-            setProfile={setProfile}
-            onReset={() => {
-              setProfile(null)
-              setDiary({})
-              setWater({})
-              setExercise({})
-              setCustomFoods([])
-              setTab('diario')
-            }}
-          />
-        )}
+        {tab === 'perfil' && <Perfil profile={profile} setProfile={setProfile} />}
       </div>
 
       {/* tab bar translúcida ao estilo iOS */}
@@ -83,6 +85,53 @@ export default function App() {
           ))}
         </div>
       </nav>
+    </div>
+  )
+}
+
+/** Dados locais de antes da conta detetados — importar ou começar do zero. */
+function MigrationPrompt({ onImport, onDismiss }: { onImport: () => Promise<void>; onDismiss: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(false)
+
+  const doImport = async () => {
+    setBusy(true)
+    setError(false)
+    try {
+      await onImport()
+    } catch {
+      setError(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center bg-bg px-6">
+      <div className="rounded-card bg-surface p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <h1 className="text-2xl font-bold tracking-tight">Dados encontrados 📦</h1>
+        <p className="mt-2 text-ink-2">
+          Encontrámos registos guardados neste dispositivo de antes de teres conta. Queres importá-los para a
+          tua conta?
+        </p>
+        {error && (
+          <p role="alert" className="mt-3 text-sm font-medium text-critical">
+            Não foi possível importar. Verifica a ligação e tenta novamente.
+          </p>
+        )}
+        <div className="mt-6 flex flex-col gap-3">
+          <button
+            onClick={doImport}
+            disabled={busy}
+            className="rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+          >
+            {busy ? 'A importar…' : 'Importar para a minha conta'}
+          </button>
+          <button onClick={onDismiss} disabled={busy} className="rounded-full bg-bg px-6 py-3.5 font-semibold text-ink-2">
+            Começar do zero
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

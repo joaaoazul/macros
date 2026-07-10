@@ -1,7 +1,55 @@
 services:
-  macros:
+  db:
+    image: postgres:16-alpine
+    container_name: macros-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: macros
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?define DB_PASSWORD no .env}
+      POSTGRES_DB: macros
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U macros"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  backend:
+    build: ./backend
+    container_name: macros-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://macros:${DB_PASSWORD}@db:5432/macros
+      DATABASE_URL_SYNC: postgresql+psycopg2://macros:${DB_PASSWORD}@db:5432/macros
+      JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET no .env}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Macros <macros@joaoazul.dev>}
+      APP_URL: ${APP_URL:-https://macros.joaoazul.dev}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  frontend:
     build: .
     container_name: macros
     restart: unless-stopped
     ports:
-      - "8080:80" # muda para "80:80" se o VPS não tiver mais nada na porta 80
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+networks:
+  internal:
+
+volumes:
+  pgdata:
