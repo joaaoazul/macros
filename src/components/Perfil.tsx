@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { getApiKey, setApiKey } from '../lib/ai'
 import { todayISO, usePersistedState } from '../lib/store'
-import { getAuth, login, logout, pendingCount, syncNow } from '../lib/sync'
+import { deleteAccount, followUser, getAuth, listFriends, login, logout, pendingCount, searchUsers, setShareStats, setUsername, socialMe, syncNow, unfollowUser, type Friend } from '../lib/sync'
 import type { Diary, ExerciseLog, Food, Profile, WaterLog, WeightLog } from '../types'
 import { MEALS } from '../types'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
@@ -219,6 +219,9 @@ export default function Perfil({ profile, setProfile, weightLog, setWeightLog, a
         {/* conta e sincronização */}
         <AccountCard />
 
+        {/* amigos */}
+        {getAuth() && <FriendsCard />}
+
         {/* lembretes de água */}
         <Card className="flex items-center gap-4 p-4">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>
@@ -315,6 +318,13 @@ export default function Perfil({ profile, setProfile, weightLog, setWeightLog, a
             <p>
               🧮 Alvos calculados com a equação de <strong className="text-ink">Mifflin-St Jeor</strong>; proteína por kg de peso conforme o objetivo, gordura a 25% das kcal, hidratos com o restante.
             </p>
+            <p>
+              🛡️ <strong className="text-ink">Privacidade (RGPD):</strong> sem conta, nada sai do dispositivo. Com conta, guardamos apenas o email
+              (com password encriptada) e os teus registos, exclusivamente para sincronização — nunca para publicidade ou análise. Tens direito de
+              acesso e portabilidade (Exportar dados), retificação (edita na app) e apagamento ("Eliminar conta no servidor" apaga tudo,
+              de imediato e sem cópias). A partilha de estatísticas com amigos está desligada por omissão e limita-se a streak e dias registados —
+              nunca calorias, peso ou refeições.
+            </p>
             <p className="text-muted">
               ⚠️ Esta app é uma ferramenta de registo e não substitui aconselhamento médico ou de um nutricionista. Se tens condições de saúde ou historial de distúrbios alimentares, fala primeiro com um profissional.
             </p>
@@ -324,9 +334,27 @@ export default function Perfil({ profile, setProfile, weightLog, setWeightLog, a
         {/* zona de perigo */}
         <Card className="mb-2 p-5">
           {!confirmReset ? (
-            <button onClick={() => setConfirmReset(true)} className="text-sm font-medium text-critical">
-              Apagar todos os dados…
-            </button>
+            <div className="space-y-2">
+              <button onClick={() => setConfirmReset(true)} className="block text-sm font-medium text-critical">
+                Apagar todos os dados…
+              </button>
+              {getAuth() && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('Eliminar a conta apaga TODOS os teus dados no servidor (RGPD — direito ao apagamento). Os dados locais mantêm-se. Continuar?')) return
+                    try {
+                      await deleteAccount()
+                      window.location.reload()
+                    } catch {
+                      alert('Sem ligação ao servidor — tenta mais tarde.')
+                    }
+                  }}
+                  className="block text-sm font-medium text-critical"
+                >
+                  Eliminar conta no servidor…
+                </button>
+              )}
+            </div>
           ) : (
             <div>
               <p className="text-sm text-ink-2">Isto apaga o perfil e todo o diário. Não há volta a dar.</p>
@@ -517,6 +545,153 @@ function AccountCard() {
           >
             {busy ? 'Aguarda…' : mode === 'login' ? 'Entrar' : 'Criar conta e sincronizar'}
           </button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function FriendsCard() {
+  const [me, setMe] = useState<{ username: string | null; shareStats: boolean; followers: number } | null>(null)
+  const [friends, setFriends] = useState<Friend[]>([])
+  const [nameInput, setNameInput] = useState('')
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<string[]>([])
+  const [error, setError] = useState('')
+  const [offline, setOffline] = useState(false)
+
+  const refresh = () => {
+    socialMe().then(setMe).catch(() => setOffline(true))
+    listFriends().then((r) => setFriends(r.friends)).catch(() => {})
+  }
+  useState(() => {
+    refresh()
+    return undefined
+  })
+
+  const search = async (q: string) => {
+    setQuery(q)
+    if (q.trim().length < 2) {
+      setResults([])
+      return
+    }
+    try {
+      const r = await searchUsers(q.trim())
+      setResults(r.users.filter((u) => !friends.some((f) => f.username === u)))
+    } catch {}
+  }
+
+  const inputCls = 'w-full rounded-xl bg-bg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent'
+
+  if (offline) return null
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-[17px] font-semibold">👥 Amigos</h2>
+
+      {me && !me.username && (
+        <div className="mt-2">
+          <p className="text-[13px] text-muted">Escolhe um username público para os teus amigos te encontrarem (3–20 caracteres: a–z, 0–9, _).</p>
+          <div className="mt-3 flex gap-2">
+            <input value={nameInput} onChange={(e) => setNameInput(e.target.value.toLowerCase())} placeholder="o_teu_username" className={inputCls} />
+            <button
+              onClick={async () => {
+                setError('')
+                try {
+                  await setUsername(nameInput.trim())
+                  refresh()
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : 'Erro.')
+                }
+              }}
+              disabled={nameInput.trim().length < 3}
+              className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-on-accent disabled:opacity-40"
+            >
+              Guardar
+            </button>
+          </div>
+          {error && <p className="mt-2 text-xs text-critical">{error}</p>}
+        </div>
+      )}
+
+      {me?.username && (
+        <div className="mt-2">
+          <p className="text-[13px] text-ink-2">
+            És <strong className="text-ink">@{me.username}</strong> · {me.followers} {me.followers === 1 ? 'seguidor' : 'seguidores'}
+          </p>
+
+          <div className="mt-3 flex items-center gap-3">
+            <div className="flex-1">
+              <div className="text-[13.5px] font-bold">Partilhar as minhas estatísticas</div>
+              <div className="text-[11.5px] text-muted">Só streak e dias registados — nunca calorias, peso ou refeições.</div>
+            </div>
+            <button
+              onClick={async () => {
+                const next = !me.shareStats
+                await setShareStats(next).catch(() => {})
+                setMe({ ...me, shareStats: next })
+              }}
+              role="switch"
+              aria-checked={me.shareStats}
+              aria-label="Partilhar estatísticas"
+              className={`h-8 w-14 shrink-0 rounded-full p-1 transition-colors ${me.shareStats ? 'bg-accent' : 'bg-line'}`}
+            >
+              <span className={`block h-6 w-6 rounded-full bg-white shadow transition-transform ${me.shareStats ? 'translate-x-6' : ''}`} />
+            </button>
+          </div>
+
+          <input value={query} onChange={(e) => search(e.target.value)} placeholder="Procurar amigos por username…" className={`${inputCls} mt-4`} />
+          {results.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {results.map((u) => (
+                <li key={u} className="flex items-center justify-between rounded-xl bg-bg px-3 py-2">
+                  <span className="text-sm font-semibold">@{u}</span>
+                  <button
+                    onClick={async () => {
+                      await followUser(u).catch(() => {})
+                      setQuery('')
+                      setResults([])
+                      refresh()
+                    }}
+                    className="rounded-full bg-accent-soft px-3 py-1 text-[12.5px] font-bold text-accent"
+                  >
+                    Seguir
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {friends.length > 0 && (
+            <ul className="mt-3 divide-y divide-line">
+              {friends.map((f) => (
+                <li key={f.username} className="flex items-center gap-3 py-2.5">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-soft text-sm font-extrabold text-accent" aria-hidden>
+                    {f.username[0].toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] font-bold">@{f.username}</div>
+                    <div className="text-[12px] text-muted">
+                      {f.stats
+                        ? `🔥 ${f.stats.streak} dias seguidos · ${f.stats.loggedToday ? 'registou hoje ✓' : 'ainda não registou hoje'} · ${f.stats.last7}/7 esta semana`
+                        : 'estatísticas privadas'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await unfollowUser(f.username).catch(() => {})
+                      refresh()
+                    }}
+                    className="rounded-full px-2 py-1 text-xs font-bold text-muted"
+                    aria-label={`Deixar de seguir ${f.username}`}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {friends.length === 0 && <p className="mt-3 text-[12.5px] text-muted">Ainda não segues ninguém — procura um username acima.</p>}
         </div>
       )}
     </Card>

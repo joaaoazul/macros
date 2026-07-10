@@ -11,6 +11,7 @@
  */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
 import { sign, verify } from 'hono/jwt'
 import { serve } from '@hono/node-server'
 import bcrypt from 'bcryptjs'
@@ -50,10 +51,50 @@ db.exec(`
     PRIMARY KEY (user_id, key)
   );
   CREATE INDEX IF NOT EXISTS kv_user_server ON kv (user_id, server_at);
+  CREATE TABLE IF NOT EXISTS follows (
+    follower_id INTEGER NOT NULL,
+    followee_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (follower_id, followee_id)
+  );
 `)
+// migração leve: colunas sociais em bases já existentes
+for (const col of ['username TEXT', 'share_stats INTEGER DEFAULT 0']) {
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN ${col}`)
+  } catch {
+    /* já existe */
+  }
+}
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_username ON users (username)')
+} catch {}
 
 const app = new Hono()
-app.use('*', cors({ origin: (o) => o, allowHeaders: ['Content-Type', 'Authorization'], allowMethods: ['GET', 'POST', 'OPTIONS'] }))
+app.use('*', secureHeaders())
+// CORS: por omissão qualquer origem (a API não usa cookies — auth por header);
+// define ALLOWED_ORIGINS="https://macros.dominio.pt" para restringir.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean)
+app.use(
+  '*',
+  cors({
+    origin: (o) => (allowedOrigins.length === 0 || allowedOrigins.includes(o) ? o : null),
+    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  }),
+)
+
+// rate-limit por IP nos endpoints de autenticação: 30 pedidos / 15 min
+const ipHits = new Map()
+app.use('/api/auth/*', async (c, next) => {
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local'
+  const now = Date.now()
+  const list = (ipHits.get(ip) ?? []).filter((t) => now - t < 15 * 60 * 1000)
+  if (list.length >= 30) return c.json({ error: 'Demasiados pedidos — tenta mais tarde.' }, 429)
+  list.push(now)
+  ipHits.set(ip, list)
+  return next()
+})
 
 // trava simples de força-bruta no login: 10 tentativas / 15 min por email
 const attempts = new Map()
@@ -64,7 +105,11 @@ function tooManyAttempts(email) {
   return list.length >= 10
 }
 
-const makeToken = (userId, email) => sign({ sub: userId, email, iat: Math.floor(Date.now() / 1000) }, JWT_SECRET)
+const makeToken = (userId, email) =>
+  sign(
+    { sub: userId, email, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 * 24 * 60 * 60 },
+    JWT_SECRET,
+  )
 
 const validEmail = (e) => typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 254
 
@@ -145,6 +190,121 @@ app.post('/api/sync', async (c) => {
     now,
     changes: rows.map((r) => ({ key: r.key, value: JSON.parse(r.value), updatedAt: r.updated_at })),
   })
+})
+
+/* ---------- social ---------- */
+
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+
+/** Estatísticas públicas (não sensíveis) calculadas do diário: streak e adesão. */
+function publicStats(userId) {
+  const rows = db
+    .prepare(`SELECT key, value FROM kv WHERE user_id = ? AND key LIKE 'diary:%'`)
+    .all(userId)
+  const logged = new Set()
+  for (const r of rows) {
+    try {
+      const v = JSON.parse(r.value)
+      if (Array.isArray(v) && v.length > 0) logged.add(r.key.slice(6))
+    } catch {}
+  }
+  const iso = (d) => d.toISOString().slice(0, 10)
+  const day = new Date()
+  const today = iso(day)
+  let streak = 0
+  if (!logged.has(today)) day.setDate(day.getDate() - 1)
+  while (logged.has(iso(day))) {
+    streak++
+    day.setDate(day.getDate() - 1)
+  }
+  let last7 = 0
+  const d7 = new Date()
+  for (let i = 0; i < 7; i++) {
+    if (logged.has(iso(d7))) last7++
+    d7.setDate(d7.getDate() - 1)
+  }
+  return { streak, loggedToday: logged.has(today), last7 }
+}
+
+app.get('/api/social/me', (c) => {
+  const u = db.prepare('SELECT username, share_stats FROM users WHERE id = ?').get(c.get('userId'))
+  const followers = db.prepare('SELECT COUNT(*) AS n FROM follows WHERE followee_id = ?').get(c.get('userId'))
+  return c.json({ username: u?.username ?? null, shareStats: !!u?.share_stats, followers: followers?.n ?? 0 })
+})
+
+app.post('/api/social/username', async (c) => {
+  const { username } = await c.req.json().catch(() => ({}))
+  const name = String(username ?? '').trim().toLowerCase()
+  if (!USERNAME_RE.test(name)) return c.json({ error: 'Username inválido: 3–20 caracteres, a–z, 0–9 e _.' }, 400)
+  const taken = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(name, c.get('userId'))
+  if (taken) return c.json({ error: 'Esse username já está ocupado.' }, 409)
+  db.prepare('UPDATE users SET username = ? WHERE id = ?').run(name, c.get('userId'))
+  return c.json({ username: name })
+})
+
+app.post('/api/social/share', async (c) => {
+  const { enabled } = await c.req.json().catch(() => ({}))
+  db.prepare('UPDATE users SET share_stats = ? WHERE id = ?').run(enabled ? 1 : 0, c.get('userId'))
+  return c.json({ shareStats: !!enabled })
+})
+
+app.get('/api/social/search', (c) => {
+  const q = String(c.req.query('q') ?? '').trim().toLowerCase()
+  if (q.length < 2) return c.json({ users: [] })
+  const rows = db
+    .prepare(`SELECT username FROM users WHERE username LIKE ? AND username IS NOT NULL AND id != ? LIMIT 10`)
+    .all(q + '%', c.get('userId'))
+  return c.json({ users: rows.map((r) => r.username) })
+})
+
+app.post('/api/social/follow', async (c) => {
+  const { username } = await c.req.json().catch(() => ({}))
+  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(String(username ?? '').toLowerCase())
+  if (!target) return c.json({ error: 'Utilizador não encontrado.' }, 404)
+  if (target.id === c.get('userId')) return c.json({ error: 'Não te podes seguir a ti próprio 🙂' }, 400)
+  db.prepare('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)').run(c.get('userId'), target.id, Date.now())
+  return c.json({ ok: true })
+})
+
+app.post('/api/social/unfollow', async (c) => {
+  const { username } = await c.req.json().catch(() => ({}))
+  const target = db.prepare('SELECT id FROM users WHERE username = ?').get(String(username ?? '').toLowerCase())
+  if (target) db.prepare('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?').run(c.get('userId'), target.id)
+  return c.json({ ok: true })
+})
+
+app.get('/api/social/friends', (c) => {
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.username, u.share_stats FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ? ORDER BY f.created_at DESC LIMIT 100`,
+    )
+    .all(c.get('userId'))
+  return c.json({
+    friends: rows.map((r) => ({
+      username: r.username,
+      // só partilha estatísticas quem ativou a partilha (privacy by default)
+      stats: r.share_stats ? publicStats(r.id) : null,
+    })),
+  })
+})
+
+/* ---------- conta (RGPD: portabilidade e apagamento) ---------- */
+
+app.get('/api/account/export', (c) => {
+  const userId = c.get('userId')
+  const user = db.prepare('SELECT email, username, created_at FROM users WHERE id = ?').get(userId)
+  const rows = db.prepare('SELECT key, value, updated_at FROM kv WHERE user_id = ?').all(userId)
+  const data = {}
+  for (const r of rows) data[r.key] = JSON.parse(r.value)
+  return c.json({ user, data, exportedAt: new Date().toISOString() })
+})
+
+app.delete('/api/account', (c) => {
+  const userId = c.get('userId')
+  db.prepare('DELETE FROM kv WHERE user_id = ?').run(userId)
+  db.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').run(userId, userId)
+  db.prepare('DELETE FROM users WHERE id = ?').run(userId)
+  return c.json({ deleted: true })
 })
 
 app.get('/api/health', (c) => c.json({ ok: true }))

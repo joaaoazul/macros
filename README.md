@@ -37,6 +37,28 @@ npm run build     # typecheck + build de produção
 npm run preview   # servir a build
 ```
 
+## Social 👥
+
+Com conta, podes definir um **username público**, procurar e **seguir amigos**.
+Por privacidade (dados de nutrição são dados de saúde), só se partilham
+estatísticas de consistência — streak 🔥, "registou hoje" e dias registados na
+semana — **nunca calorias, peso ou refeições**, e a partilha está **desligada
+por omissão**.
+
+## Segurança e RGPD
+
+- Passwords com bcrypt; tokens JWT assinados com expiração de 60 dias.
+- Rate-limit por IP e por email nos endpoints de autenticação.
+- Cabeçalhos de segurança (HSTS, nosniff, X-Frame-Options, Referrer-Policy);
+  CORS restringível com `ALLOWED_ORIGINS=https://macros.dominio.pt`.
+- A API escuta só em 127.0.0.1 — exposta apenas via reverse proxy com TLS.
+- **Direito ao apagamento:** "Eliminar conta no servidor" apaga utilizador,
+  dados e relações de imediato. **Portabilidade:** exportação em JSON/CSV.
+- Minimização: o servidor guarda apenas email + registos; sem trackers.
+- Nota: para um serviço público a sério, acrescenta uma política de
+  privacidade formal (és o responsável pelo tratamento), backups cifrados de
+  `server/data.db` e recuperação de password.
+
 ## Contas e sincronização (opcional)
 
 O backend em `server/` (Node 22+, SQLite embutido, sem dependências nativas) dá

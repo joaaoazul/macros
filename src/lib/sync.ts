@@ -231,3 +231,37 @@ export function startSync(onRemoteData: () => void) {
 export function pendingCount(): number {
   return Object.keys(getMeta().dirty).length
 }
+
+/* ---------- social e conta ---------- */
+
+export interface FriendStats {
+  streak: number
+  loggedToday: boolean
+  last7: number
+}
+export interface Friend {
+  username: string
+  stats: FriendStats | null
+}
+
+const authed = () => {
+  const a = getAuth()
+  if (!a) throw new Error('Sem sessão iniciada.')
+  return a.token
+}
+
+export const socialMe = () =>
+  api('/social/me', undefined, authed()) as Promise<{ username: string | null; shareStats: boolean; followers: number }>
+export const setUsername = (username: string) => api('/social/username', { username }, authed())
+export const setShareStats = (enabled: boolean) => api('/social/share', { enabled }, authed())
+export const searchUsers = (q: string) =>
+  api(`/social/search?q=${encodeURIComponent(q)}`, undefined, authed()) as Promise<{ users: string[] }>
+export const followUser = (username: string) => api('/social/follow', { username }, authed())
+export const unfollowUser = (username: string) => api('/social/unfollow', { username }, authed())
+export const listFriends = () => api('/social/friends', undefined, authed()) as Promise<{ friends: Friend[] }>
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch(apiBase() + '/account', { method: 'DELETE', headers: { Authorization: `Bearer ${authed()}` } })
+  if (!res.ok) throw new Error('Não foi possível eliminar a conta.')
+  logout()
+}
