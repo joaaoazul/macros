@@ -6,7 +6,10 @@ Tracker de macros e nutrição — rápido, bonito e 100% local (os dados nunca 
 
 - **Onboarding inteligente** — calcula BMR/TDEE com a equação de Mifflin-St Jeor e define alvos de calorias, proteína, hidratos e gordura conforme o objetivo (perder gordura, manter ou ganhar músculo).
 - **Diário alimentar** — regista alimentos por refeição (pequeno-almoço, almoço, lanche, jantar, ceia) com navegação entre dias e totais de macros por refeição.
-- **Open Food Facts 🇵🇹** — pesquisa em milhares de produtos à venda nos supermercados portugueses (Continente, Pingo Doce, Auchan, Lidl…), incluindo pesquisa por código de barras; a base local (~60 alimentos básicos) funciona offline.
+- **Open Food Facts 🇵🇹** — pesquisa em milhares de produtos à venda nos supermercados portugueses (Continente, Pingo Doce, Auchan, Lidl…); a base local (~60 alimentos básicos) funciona offline.
+- **Leitor de códigos de barras** — lê o código com a câmara (ZXing, carregado sob demanda) e vai buscar o produto ao Open Food Facts; também aceita códigos escritos à mão.
+- **Favoritos e recentes** — marca alimentos com ⭐ e reutiliza os últimos registados sem pesquisar.
+- **Guia de nutrição e Sobre** — mini-artigos (macros, proteína, défice/superavit, rótulos, hidratação) e informação da app no Perfil.
 - **Exercício** — regista calorias queimadas, que entram na fórmula do dia (consumido − exercício = líquido / meta).
 - **Água** — meta diária (~35 ml/kg, ajustável) com registo rápido de +250/+500 ml.
 - **Metas** — meta de calorias, repartição de macros com gráfico donut e edição da percentagem de cada macro.

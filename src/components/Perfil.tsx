@@ -166,6 +166,40 @@ export default function Perfil({ profile, setProfile, onReset }: Props) {
           </div>
         </Card>
 
+
+        {/* guia de nutrição */}
+        <Card className="p-5">
+          <h2 className="text-[17px] font-semibold">📚 Guia de nutrição</h2>
+          <p className="mt-1 text-xs text-muted">Mini-artigos para tirares mais partido do tracking.</p>
+          <div className="mt-3 divide-y divide-line">
+            {GUIDE.map((g) => (
+              <GuideItem key={g.q} q={g.q} a={g.a} />
+            ))}
+          </div>
+        </Card>
+
+        {/* sobre */}
+        <Card className="p-5">
+          <h2 className="text-[17px] font-semibold">Sobre a app</h2>
+          <div className="mt-3 space-y-2.5 text-[13.5px] leading-relaxed text-ink-2">
+            <p>
+              <strong className="text-ink">Macros</strong> · versão 1.0 — tracker de nutrição pessoal, feito à medida.
+            </p>
+            <p>
+              🔒 <strong className="text-ink">Privacidade total:</strong> todos os dados ficam guardados apenas neste dispositivo. Não há contas, servidores nem análise de dados.
+            </p>
+            <p>
+              🛒 Dados de produtos por <strong className="text-ink">Open Food Facts</strong> (base de dados aberta, licença ODbL) — obrigado à comunidade que a mantém.
+            </p>
+            <p>
+              🧮 Alvos calculados com a equação de <strong className="text-ink">Mifflin-St Jeor</strong>; proteína por kg de peso conforme o objetivo, gordura a 25% das kcal, hidratos com o restante.
+            </p>
+            <p className="text-muted">
+              ⚠️ Esta app é uma ferramenta de registo e não substitui aconselhamento médico ou de um nutricionista. Se tens condições de saúde ou historial de distúrbios alimentares, fala primeiro com um profissional.
+            </p>
+          </div>
+        </Card>
+
         {/* zona de perigo */}
         <Card className="mb-2 p-5">
           {!confirmReset ? (
@@ -213,4 +247,50 @@ function imcClass(v: number): string {
   if (v < 25) return 'peso normal'
   if (v < 30) return 'excesso de peso'
   return 'obesidade'
+}
+
+const GUIDE: { q: string; a: string }[] = [
+  {
+    q: 'O que são macros?',
+    a: 'Macronutrientes são os três grandes grupos de onde vêm as calorias: proteína (4 kcal/g), hidratos de carbono (4 kcal/g) e gordura (9 kcal/g). Contar macros em vez de só calorias garante que perdes gordura (e não músculo) e que tens energia para treinar.',
+  },
+  {
+    q: 'Quanta proteína preciso?',
+    a: 'Para quem treina, a ciência aponta para 1,6–2,2 g por kg de peso corporal por dia. Em défice calórico convém ficar no topo do intervalo (≈2,2 g/kg) para proteger a massa muscular. Distribui por 3–5 refeições com 25–40 g cada.',
+  },
+  {
+    q: 'Défice, manutenção e superavit',
+    a: 'Perder gordura exige comer menos do que gastas (défice, tipicamente 10–25%); ganhar músculo é mais eficiente com um pequeno excedente (5–15%). Mudanças de peso sustentáveis rondam 0,25–0,75 kg por semana — mais rápido do que isso costuma custar músculo ou aderência.',
+  },
+  {
+    q: 'A gordura não é o inimigo',
+    a: 'Gordura alimentar é essencial para hormonas e absorção de vitaminas (A, D, E, K). Não desças de ~0,6 g/kg/dia por longos períodos. Prefere fontes como azeite, peixe gordo, ovos, frutos secos e abacate.',
+  },
+  {
+    q: 'Como ler um rótulo',
+    a: 'Compara sempre por 100 g e não por porção (as porções variam para parecer menos calórico). Olha primeiro para calorias, proteína e açúcares. Listas de ingredientes curtas e reconhecíveis são geralmente melhor sinal do que alegações na frente da embalagem.',
+  },
+  {
+    q: 'Água e desempenho',
+    a: 'Mesmo 2% de desidratação reduz o desempenho físico e mental. A referência de ~35 ml/kg/dia sobe com calor e treino. Urina amarelo-claro é o indicador prático mais fiável.',
+  },
+  {
+    q: 'Consistência > perfeição',
+    a: 'O tracking funciona pela média semanal, não pelo dia perfeito. Um dia acima do alvo não estraga nada — volta ao plano na refeição seguinte. Registar todos os dias (mesmo os maus) é o que gera resultados; é para isso que serve a chama 🔥 no ecrã inicial.',
+  },
+]
+
+function GuideItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 py-3 text-left" aria-expanded={open}>
+        <span className="text-[14.5px] font-bold">{q}</span>
+        <span className={`text-muted transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>
+          ›
+        </span>
+      </button>
+      {open && <p className="pb-3 text-[13.5px] leading-relaxed text-ink-2">{a}</p>}
+    </div>
+  )
 }

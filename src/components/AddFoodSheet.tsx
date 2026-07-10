@@ -3,7 +3,8 @@ import type { Entry, Food, MealId } from '../types'
 import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
-import { uid } from '../lib/store'
+import { uid, usePersistedState } from '../lib/store'
+import BarcodeScanner from './BarcodeScanner'
 
 interface Props {
   /** null = escolher a refeição dentro da folha (botão + central) */
@@ -25,16 +26,30 @@ function guessMeal(): MealId {
   return 'supper'
 }
 
+const dedupe = (foods: Food[]) => {
+  const seen = new Set<string>()
+  return foods.filter((f) => (seen.has(f.id) ? false : (seen.add(f.id), true)))
+}
+
 export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd, onClose }: Props) {
   const [selMeal, setSelMeal] = useState<MealId>(meal ?? guessMeal())
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
   const [grams, setGrams] = useState('100')
   const [creating, setCreating] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [off, setOff] = useState<OffState>({ status: 'idle', results: [] })
 
-  const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
-  const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
+  const [favs, setFavs] = usePersistedState<Food[]>('macros.favFoods', [])
+  const [recents, setRecents] = usePersistedState<Food[]>('macros.recentFoods', [])
+
+  const allLocal = useMemo(() => dedupe([...customFoods, ...favs, ...recents, ...FOOD_DB]), [customFoods, favs, recents])
+  const localResults = useMemo(() => searchFoods(allLocal, query), [allLocal, query])
+  const favIds = useMemo(() => new Set(favs.map((f) => f.id)), [favs])
+
+  const toggleFav = (food: Food) => {
+    setFavs((f) => (f.some((x) => x.id === food.id) ? f.filter((x) => x.id !== food.id) : [food, ...f].slice(0, 30)))
+  }
 
   // pesquisa no Open Food Facts com debounce; aborta a anterior
   useEffect(() => {
@@ -49,7 +64,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
       try {
         const results = await searchOpenFoodFacts(q, controller.signal)
         setOff({ status: 'done', results })
-      } catch (err) {
+      } catch {
         if (!controller.signal.aborted) setOff({ status: 'error', results: [] })
       }
     }, 450)
@@ -64,6 +79,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
 
   const confirm = () => {
     if (!selected || factor <= 0) return
+    setRecents((r) => dedupe([selected, ...r]).slice(0, 12))
     onAdd({
       id: uid(),
       meal: selMeal,
@@ -84,6 +100,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
   }
 
   const mealLabel = MEALS.find((m) => m.id === selMeal)?.label ?? ''
+  const showBrowse = query.trim().length === 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
@@ -97,7 +114,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
 
         <header className="flex items-center justify-between px-5 pt-3">
-          <h2 className="text-lg font-bold">Adicionar ao {mealLabel}</h2>
+          <h2 className="text-lg font-extrabold">Adicionar ao {mealLabel}</h2>
           <button onClick={onClose} className="rounded-full px-2 py-1 text-muted" aria-label="Fechar">
             ✕
           </button>
@@ -120,7 +137,8 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 ))}
               </div>
             )}
-            <div className="px-5 pt-3">
+
+            <div className="flex gap-2 px-5 pt-3">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -128,45 +146,85 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 className="w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
                 autoFocus
               />
+              <button
+                onClick={() => setScanning(true)}
+                className="flex w-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent"
+                aria-label="Ler código de barras com a câmara"
+                title="Ler código de barras"
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden>
+                  <path d="M3 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M21 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2" />
+                  <path d="M7 8v8M10.5 8v8M13.5 8v8M17 8v8" />
+                </svg>
+              </button>
             </div>
 
             <div className="mt-3 flex-1 overflow-y-auto px-5 pb-5">
-              {localResults.length > 0 && (
+              {showBrowse ? (
                 <>
+                  {favs.length > 0 && (
+                    <>
+                      <SectionLabel>⭐ Favoritos</SectionLabel>
+                      <ul>
+                        {favs.map((f) => (
+                          <FoodRow key={f.id} food={f} onPick={pick} fav onToggleFav={toggleFav} />
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {recents.length > 0 && (
+                    <>
+                      <SectionLabel>🕐 Recentes</SectionLabel>
+                      <ul>
+                        {recents.map((f) => (
+                          <FoodRow key={f.id} food={f} onPick={pick} fav={favIds.has(f.id)} onToggleFav={toggleFav} />
+                        ))}
+                      </ul>
+                    </>
+                  )}
                   <SectionLabel>Básicos e meus alimentos</SectionLabel>
                   <ul>
-                    {localResults.map((f) => (
-                      <FoodRow key={f.id} food={f} onPick={pick} />
+                    {dedupe([...customFoods, ...FOOD_DB]).map((f) => (
+                      <FoodRow key={f.id} food={f} onPick={pick} fav={favIds.has(f.id)} onToggleFav={toggleFav} />
                     ))}
                   </ul>
                 </>
-              )}
-
-              {query.trim().length >= 3 && (
+              ) : (
                 <>
-                  <SectionLabel>Open Food Facts 🇵🇹 · produtos de supermercado</SectionLabel>
-                  {off.status === 'loading' && <p className="py-3 text-center text-sm text-muted">A pesquisar…</p>}
-                  {off.status === 'error' && (
-                    <p className="py-3 text-center text-sm text-muted">Sem ligação ao Open Food Facts — usa a lista local ou tenta mais tarde.</p>
+                  {localResults.length > 0 && (
+                    <>
+                      <SectionLabel>Os meus alimentos e básicos</SectionLabel>
+                      <ul>
+                        {localResults.map((f) => (
+                          <FoodRow key={f.id} food={f} onPick={pick} fav={favIds.has(f.id)} onToggleFav={toggleFav} />
+                        ))}
+                      </ul>
+                    </>
                   )}
-                  {off.status === 'done' && off.results.length === 0 && (
-                    <p className="py-3 text-center text-sm text-muted">Nenhum produto encontrado para “{query}”.</p>
-                  )}
-                  <ul>
-                    {off.results.map((f) => (
-                      <FoodRow key={f.id} food={f} onPick={pick} />
-                    ))}
-                  </ul>
-                </>
-              )}
 
-              {localResults.length === 0 && query.trim().length < 3 && (
-                <p className="py-6 text-center text-sm text-muted">Escreve pelo menos 3 letras para pesquisar também no Open Food Facts.</p>
+                  {query.trim().length >= 3 && (
+                    <>
+                      <SectionLabel>Open Food Facts 🇵🇹 · produtos de supermercado</SectionLabel>
+                      {off.status === 'loading' && <p className="py-3 text-center text-sm text-muted">A pesquisar…</p>}
+                      {off.status === 'error' && (
+                        <p className="py-3 text-center text-sm text-muted">Sem ligação ao Open Food Facts — usa a lista local ou tenta mais tarde.</p>
+                      )}
+                      {off.status === 'done' && off.results.length === 0 && (
+                        <p className="py-3 text-center text-sm text-muted">Nenhum produto encontrado para "{query}".</p>
+                      )}
+                      <ul>
+                        {off.results.map((f) => (
+                          <FoodRow key={f.id} food={f} onPick={pick} fav={favIds.has(f.id)} onToggleFav={toggleFav} />
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </>
               )}
 
               <button
                 onClick={() => setCreating(true)}
-                className="mt-3 w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-accent"
+                className="mt-3 w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-bold text-accent"
               >
                 + Criar alimento personalizado
               </button>
@@ -176,16 +234,25 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
 
         {selected && (
           <div className="flex flex-1 flex-col overflow-y-auto px-5 pt-4">
-            <button onClick={() => setSelected(null)} className="self-start text-sm font-medium text-accent">
-              ‹ Voltar à pesquisa
-            </button>
+            <div className="flex items-center justify-between">
+              <button onClick={() => setSelected(null)} className="text-sm font-bold text-accent">
+                ‹ Voltar à pesquisa
+              </button>
+              <button
+                onClick={() => toggleFav(selected)}
+                className="rounded-full px-2 py-1 text-xl"
+                aria-label={favIds.has(selected.id) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+              >
+                {favIds.has(selected.id) ? '⭐' : '☆'}
+              </button>
+            </div>
 
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-3 flex items-center gap-3">
               <span className="text-3xl" aria-hidden>
                 {selected.emoji}
               </span>
               <div>
-                <div className="font-semibold">{selected.name}</div>
+                <div className="font-bold">{selected.name}</div>
                 <div className="text-xs text-muted">
                   {selected.brand ? `${selected.brand} · ` : ''}valores por 100 {selected.unit}
                 </div>
@@ -193,13 +260,13 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
             </div>
 
             <label className="mt-6 block">
-              <span className="mb-1.5 block text-sm font-medium text-ink-2">Quantidade ({selected.unit})</span>
+              <span className="mb-1.5 block text-sm font-semibold text-ink-2">Quantidade ({selected.unit})</span>
               <input
                 type="number"
                 inputMode="decimal"
                 value={grams}
                 onChange={(e) => setGrams(e.target.value)}
-                className="w-full rounded-xl bg-surface px-4 py-3 text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full rounded-xl bg-surface px-4 py-3 text-2xl font-extrabold focus:outline-none focus:ring-2 focus:ring-accent"
                 autoFocus
               />
             </label>
@@ -209,7 +276,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 <button
                   key={g}
                   onClick={() => setGrams(String(g))}
-                  className={`flex-1 rounded-lg border px-2 py-1.5 text-sm font-medium ${
+                  className={`flex-1 rounded-lg border px-2 py-1.5 text-sm font-bold ${
                     grams === String(g) ? 'border-accent bg-accent-soft text-accent' : 'border-transparent bg-surface text-ink-2'
                   }`}
                 >
@@ -219,8 +286,8 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
             </div>
 
             <div className="mt-5 grid grid-cols-4 gap-2 rounded-2xl bg-surface p-4 text-center">
-              <Preview label="Hidratos" value={selected.carbs * factor} suffix="g" dotVar="--carbs" />
               <Preview label="Proteína" value={selected.protein * factor} suffix="g" dotVar="--protein" />
+              <Preview label="Hidratos" value={selected.carbs * factor} suffix="g" dotVar="--carbs" />
               <Preview label="Gordura" value={selected.fat * factor} suffix="g" dotVar="--fat" />
               <Preview label="kcal" value={selected.kcal * factor} />
             </div>
@@ -228,7 +295,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
             <button
               onClick={confirm}
               disabled={factor <= 0}
-              className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
+              className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-bold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
             >
               Adicionar
             </button>
@@ -246,32 +313,51 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
           />
         )}
       </div>
+
+      {scanning && (
+        <BarcodeScanner
+          onDetect={(code) => {
+            setScanning(false)
+            setQuery(code)
+          }}
+          onClose={() => setScanning(false)}
+        />
+      )}
     </div>
   )
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-muted first:mt-0">{children}</div>
+  return <div className="mt-3 mb-1 text-xs font-bold uppercase tracking-[0.08em] text-muted first:mt-0">{children}</div>
 }
 
-function FoodRow({ food, onPick }: { food: Food; onPick: (f: Food) => void }) {
+function FoodRow({ food, onPick, fav, onToggleFav }: { food: Food; onPick: (f: Food) => void; fav?: boolean; onToggleFav?: (f: Food) => void }) {
   return (
-    <li>
-      <button onClick={() => onPick(food)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
+    <li className="flex items-center">
+      <button onClick={() => onPick(food)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
         <span className="text-xl" aria-hidden>
           {food.emoji}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">
+          <div className="truncate text-sm font-semibold">
             {food.name}
-            {food.brand && <span className="ml-1.5 text-xs text-muted">{food.brand}</span>}
-            {food.custom && <span className="ml-1.5 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent">meu</span>}
+            {food.brand && <span className="ml-1.5 text-xs font-normal text-muted">{food.brand}</span>}
+            {food.custom && <span className="ml-1.5 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">meu</span>}
           </div>
           <div className="text-xs text-muted">
-            {food.kcal} kcal · H {food.carbs} · P {food.protein} · G {food.fat} (100 {food.unit})
+            {food.kcal} kcal · P {food.protein} · H {food.carbs} · G {food.fat} (100 {food.unit})
           </div>
         </div>
       </button>
+      {onToggleFav && (
+        <button
+          onClick={() => onToggleFav(food)}
+          className="shrink-0 px-2 py-2 text-lg"
+          aria-label={fav ? `Remover ${food.name} dos favoritos` : `Adicionar ${food.name} aos favoritos`}
+        >
+          {fav ? '⭐' : <span className="text-muted">☆</span>}
+        </button>
+      )}
     </li>
   )
 }
@@ -284,7 +370,7 @@ function Preview({ label, value, suffix = '', dotVar }: { label: string; value: 
       ) : (
         <span className="mx-auto mb-1 block h-1.5 w-1.5" aria-hidden />
       )}
-      <div className="text-lg font-bold tabular-nums">
+      <div className="text-lg font-extrabold tabular-nums">
         {Math.round(value)}
         {suffix && <span className="text-xs font-normal text-muted"> {suffix}</span>}
       </div>
@@ -307,17 +393,17 @@ function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate
 
   return (
     <div className="flex flex-1 flex-col px-5 pt-4">
-      <button onClick={onCancel} className="self-start text-sm font-medium text-accent">
+      <button onClick={onCancel} className="self-start text-sm font-bold text-accent">
         ‹ Voltar
       </button>
-      <h3 className="mt-3 font-semibold">Novo alimento (valores por 100 g)</h3>
+      <h3 className="mt-3 font-bold">Novo alimento (valores por 100 g)</h3>
 
       <div className="mt-4 space-y-3">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do alimento" className={numCls} autoFocus />
         <input type="number" inputMode="decimal" value={kcal} onChange={(e) => setKcal(e.target.value)} placeholder="Calorias (kcal)" className={numCls} />
         <div className="grid grid-cols-3 gap-2">
-          <input type="number" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} placeholder="Hidratos g" className={numCls} />
           <input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="Proteína g" className={numCls} />
+          <input type="number" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} placeholder="Hidratos g" className={numCls} />
           <input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} placeholder="Gordura g" className={numCls} />
         </div>
       </div>
@@ -337,7 +423,7 @@ function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate
           })
         }
         disabled={!valid}
-        className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
+        className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-bold text-on-accent transition-opacity active:opacity-80 disabled:opacity-40"
       >
         Guardar alimento
       </button>
