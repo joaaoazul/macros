@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { Entry, Food, MealId } from '../types'
 import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
 import { uid } from '../lib/store'
+
+const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
+const AiMealAnalysis = lazy(() => import('./AiMealAnalysis'))
 
 interface Props {
   meal: MealId
@@ -21,6 +24,8 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
   const [grams, setGrams] = useState('100')
   const [creating, setCreating] = useState(false)
   const [off, setOff] = useState<OffState>({ status: 'idle', results: [] })
+  const [scanning, setScanning] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
 
   const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
   const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
@@ -92,16 +97,23 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
           </button>
         </header>
 
-        {!selected && !creating && (
+        {!selected && !creating && !analyzing && (
           <>
-            <div className="px-5 pt-3">
+            <div className="flex gap-2 px-5 pt-3">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Pesquisar alimento ou código de barras…"
-                className="w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full flex-1 rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
                 autoFocus
               />
+              <button
+                onClick={() => setScanning(true)}
+                className="shrink-0 rounded-xl bg-surface px-3.5 text-xl"
+                aria-label="Ler código de barras com a câmara"
+              >
+                📷
+              </button>
             </div>
 
             <div className="mt-3 flex-1 overflow-y-auto px-5 pb-5">
@@ -143,6 +155,13 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 className="mt-3 w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-accent"
               >
                 + Criar alimento personalizado
+              </button>
+
+              <button
+                onClick={() => setAnalyzing(true)}
+                className="mt-2 w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-accent"
+              >
+                ✨ Analisar refeição com IA
               </button>
             </div>
           </>
@@ -207,6 +226,24 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
               Adicionar
             </button>
           </div>
+        )}
+
+        {scanning && (
+          <Suspense fallback={null}>
+            <BarcodeScanner
+              onDetected={(code) => {
+                setScanning(false)
+                setQuery(code)
+              }}
+              onClose={() => setScanning(false)}
+            />
+          </Suspense>
+        )}
+
+        {analyzing && (
+          <Suspense fallback={null}>
+            <AiMealAnalysis meal={meal} onAdd={onAdd} onDone={onClose} onCancel={() => setAnalyzing(false)} />
+          </Suspense>
         )}
 
         {creating && (

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { withWaterTarget } from './lib/calc'
+import { api, ApiError } from './lib/api'
 import { useAuth } from './lib/auth'
 import { useSyncedData } from './lib/sync'
 import { useSocialSocket } from './lib/ws'
@@ -53,9 +54,11 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-bg">
       <div className="mx-auto max-w-md pb-28">
+        {user?.email_verified === false && <EmailBanner />}
         {tab === 'diario' && (
           <Diario
             profile={profile}
+            setProfile={setProfile}
             diary={diary}
             setDiary={setDiary}
             water={water}
@@ -67,7 +70,7 @@ export default function App() {
           />
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}
-        {tab === 'progresso' && <Progresso profile={profile} diary={diary} />}
+        {tab === 'progresso' && <Progresso profile={profile} diary={diary} water={water} exercise={exercise} />}
         {tab === 'social' && <Social socket={socket} />}
         {tab === 'perfil' && <Perfil profile={profile} setProfile={setProfile} />}
       </div>
@@ -98,6 +101,59 @@ export default function App() {
           ))}
         </div>
       </nav>
+    </div>
+  )
+}
+
+/** Aviso de email não confirmado, com reenvio; dispensável por sessão. */
+function EmailBanner() {
+  const [dismissed, setDismissed] = useState(() => sessionStorage.getItem('macros.emailBannerDismissed') === '1')
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  if (dismissed) return null
+
+  const resend = async () => {
+    setState('sending')
+    try {
+      await api('/auth/resend-verification', { method: 'POST' })
+      setState('sent')
+    } catch (err) {
+      setMessage(
+        err instanceof ApiError && err.status === 429
+          ? 'Já pedimos há pouco — verifica a caixa de entrada e o spam.'
+          : 'Não foi possível reenviar. Tenta mais tarde.',
+      )
+      setState('error')
+    }
+  }
+
+  return (
+    <div className="mx-4 mt-4 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
+      <div className="flex items-start gap-2">
+        <span aria-hidden>✉️</span>
+        <div className="flex-1">
+          <p className="font-medium">O teu email ainda não foi confirmado.</p>
+          {state === 'sent' ? (
+            <p className="mt-0.5">Enviado ✓ — verifica a caixa de entrada.</p>
+          ) : (
+            <button onClick={resend} disabled={state === 'sending'} className="mt-0.5 font-semibold underline disabled:opacity-50">
+              {state === 'sending' ? 'A enviar…' : 'Reenviar email de confirmação'}
+            </button>
+          )}
+          {state === 'error' && <p className="mt-0.5">{message}</p>}
+        </div>
+        <button
+          onClick={() => {
+            sessionStorage.setItem('macros.emailBannerDismissed', '1')
+            setDismissed(true)
+          }}
+          className="px-1 text-amber-900/60 dark:text-amber-200/60"
+          aria-label="Dispensar aviso"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   )
 }

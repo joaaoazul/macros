@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Profile } from '../types'
 import { api, ApiError } from '../lib/api'
+import { clearAnthropicKey, getAnthropicKey, setAnthropicKey } from '../lib/ai'
 import { useAuth } from '../lib/auth'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
 import { clearLocalCache } from '../lib/sync'
+import PesoDetail from './details/PesoDetail'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
@@ -15,6 +17,7 @@ interface Props {
 export default function Perfil({ profile, setProfile }: Props) {
   const [weight, setWeight] = useState(String(profile.weightKg))
   const [waterMl, setWaterMl] = useState(String(profile.targets.waterMl))
+  const [showPeso, setShowPeso] = useState(false)
 
   const goalInfo = GOALS.find((g) => g.value === profile.goal)
   const activityInfo = ACTIVITY_LEVELS.find((a) => a.value === profile.activity)
@@ -98,6 +101,12 @@ export default function Perfil({ profile, setProfile }: Props) {
               </div>
             </div>
           </div>
+          <button
+            onClick={() => setShowPeso(true)}
+            className="mt-3 flex w-full items-center justify-between border-t border-line pt-3 text-left text-sm font-semibold text-accent"
+          >
+            Ver histórico <span className="text-muted">›</span>
+          </button>
         </Card>
 
         {/* métricas */}
@@ -168,10 +177,90 @@ export default function Perfil({ profile, setProfile }: Props) {
           </div>
         </Card>
 
+        {/* chave IA */}
+        <ApiKeyCard />
+
         {/* conta */}
         <ContaCard />
       </div>
+
+      {showPeso && (
+        <PesoDetail
+          profile={profile}
+          onWeightToday={(kg) => {
+            setWeight(String(kg))
+            if (kg !== profile.weightKg) recompute({ weightKg: kg })
+          }}
+          onClose={() => setShowPeso(false)}
+        />
+      )}
     </div>
+  )
+}
+
+/** Chave Anthropic (BYOK) para a análise de refeições por IA — só em localStorage. */
+function ApiKeyCard() {
+  const [saved, setSaved] = useState(() => getAnthropicKey())
+  const [input, setInput] = useState('')
+  const [show, setShow] = useState(false)
+
+  const masked = saved ? `${saved.slice(0, 10)}…${saved.slice(-4)}` : ''
+  const looksValid = input.trim().startsWith('sk-ant-') && input.trim().length >= 20
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-4">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>
+          ✨
+        </span>
+        <div className="flex-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Análise de refeições por IA</div>
+          {saved ? (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="font-mono text-sm">{masked}</span>
+              <button
+                onClick={() => {
+                  clearAnthropicKey()
+                  setSaved(null)
+                }}
+                className="ml-auto rounded-full bg-bg px-3 py-1.5 text-sm font-medium text-critical"
+              >
+                Remover
+              </button>
+            </div>
+          ) : (
+            <div className="mt-1 flex gap-2">
+              <input
+                type={show ? 'text' : 'password'}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="sk-ant-…"
+                autoComplete="off"
+                className="min-w-0 flex-1 rounded-lg bg-bg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                aria-label="Chave da API Anthropic"
+              />
+              <button onClick={() => setShow((s) => !s)} className="text-sm text-muted" aria-label={show ? 'Ocultar chave' : 'Mostrar chave'}>
+                {show ? '🙈' : '👁️'}
+              </button>
+              <button
+                onClick={() => {
+                  setAnthropicKey(input.trim())
+                  setSaved(input.trim())
+                  setInput('')
+                }}
+                disabled={!looksValid}
+                className="rounded-full bg-accent px-3.5 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                Guardar
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-muted">
+        A chave fica guardada só neste dispositivo e nunca é armazenada no servidor. Cria uma em console.anthropic.com.
+      </p>
+    </Card>
   )
 }
 

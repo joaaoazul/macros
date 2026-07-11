@@ -28,10 +28,17 @@ async def export_data(
     """Download all personal data as JSON (GDPR Art. 20 — data portability)."""
     from sqlalchemy import or_, select
 
+    from app.data.models import DbWeight
     from app.messages.models import Message
     from app.social.models import FeedEvent, Friendship
 
     data = await _load_all(db, user.id)
+
+    weights = (
+        await db.execute(
+            select(DbWeight).where(DbWeight.user_id == user.id).order_by(DbWeight.date)
+        )
+    ).scalars()
 
     friendships = (
         await db.execute(
@@ -61,6 +68,7 @@ async def export_data(
             "exportedAt": datetime.now(timezone.utc).isoformat(),
         },
         **data.model_dump(),
+        "weights": [{"date": w.date.isoformat(), "kg": w.kg} for w in weights],
         "social": {
             "friendships": [
                 {

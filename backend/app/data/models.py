@@ -66,6 +66,16 @@ class DbExercise(Base):
     kcal: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class DbWeight(Base):
+    __tablename__ = "weights"
+    __table_args__ = (UniqueConstraint("user_id", "date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(_user_fk(), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    kg: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 class DbCustomFood(Base):
     __tablename__ = "custom_foods"
     __table_args__ = (UniqueConstraint("user_id", "food_id"),)

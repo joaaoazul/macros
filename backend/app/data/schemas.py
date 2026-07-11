@@ -83,5 +83,14 @@ class ImportPayload(BaseModel):
     customFoods: list[Food] = []
 
 
+class Weight(BaseModel):
+    date: str
+    kg: float = Field(ge=25, le=400)
+
+
+class WeightIn(BaseModel):
+    kg: float = Field(ge=25, le=400)
+
+
 class DeleteAccountRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)

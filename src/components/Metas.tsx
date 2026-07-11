@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Profile } from '../types'
 import { splitFromTargets, targetsFromSplit } from '../lib/calc'
+import MacrosDetail from './details/MacrosDetail'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 
 export default function Metas({ profile, setProfile }: Props) {
   const [editing, setEditing] = useState(false)
+  const [detail, setDetail] = useState(false)
   const { targets } = profile
   const split = splitFromTargets(targets)
 
@@ -54,6 +56,13 @@ export default function Metas({ profile, setProfile }: Props) {
           >
             Editar macronutrientes <span className="text-muted">›</span>
           </button>
+
+          <button
+            onClick={() => setDetail(true)}
+            className="mt-3 flex w-full items-center justify-between border-t border-line pt-4 text-left text-[15px] font-semibold text-accent"
+          >
+            Ver detalhe (editar por gramas) <span className="text-muted">›</span>
+          </button>
         </Card>
 
         <Card className="p-5">
@@ -64,6 +73,8 @@ export default function Metas({ profile, setProfile }: Props) {
           <p className="mt-1 text-xs text-muted">Ajustável no Perfil — por omissão ~35 ml por kg de peso.</p>
         </Card>
       </div>
+
+      {detail && <MacrosDetail profile={profile} setProfile={setProfile} onClose={() => setDetail(false)} />}
 
       {editing && (
         <EditSheet

@@ -19,6 +19,7 @@ from app.data.models import (  # noqa: F401
     DbExercise,
     DbProfile,
     DbWater,
+    DbWeight,
 )
 from app.messages.models import Message  # noqa: F401
 from app.social.models import FeedEvent, Friendship, LeaderboardRank  # noqa: F401

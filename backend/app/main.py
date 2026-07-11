@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.ai.router import router as ai_router
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.data.router import router as data_router
@@ -51,6 +52,7 @@ async def csrf_header_guard(request: Request, call_next):
 
 
 app.include_router(auth_router)
+app.include_router(ai_router)
 app.include_router(data_router)
 app.include_router(gdpr_router)
 app.include_router(social_router)

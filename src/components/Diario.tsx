@@ -4,11 +4,13 @@ import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
 import { formatDatePT, shiftDate, todayISO, uid } from '../lib/store'
 import AddFoodSheet from './AddFoodSheet'
+import AguaDetail from './details/AguaDetail'
 import Rings from './Rings'
 import { Card, Chevron, CircleButton, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
+  setProfile: (p: Profile) => void
   diary: Diary
   setDiary: React.Dispatch<React.SetStateAction<Diary>>
   water: WaterLog
@@ -19,10 +21,11 @@ interface Props {
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
 }
 
-export default function Diario({ profile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods }: Props) {
+export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods }: Props) {
   const [date, setDate] = useState(todayISO)
   const [addingTo, setAddingTo] = useState<MealId | null>(null)
   const [addingExercise, setAddingExercise] = useState(false)
+  const [showAgua, setShowAgua] = useState(false)
 
   const entries = useMemo(() => diary[date] ?? [], [diary, date])
   const totals = useMemo(() => sumEntries(entries), [entries])
@@ -222,6 +225,12 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
               −250
             </button>
           </div>
+          <button
+            onClick={() => setShowAgua(true)}
+            className="mt-4 flex w-full items-center justify-between border-t border-line pt-3 text-left text-sm font-semibold text-accent"
+          >
+            Ver histórico <span className="text-muted">›</span>
+          </button>
         </Card>
       </div>
 
@@ -235,6 +244,7 @@ export default function Diario({ profile, diary, setDiary, water, setWater, exer
         />
       )}
       {addingExercise && <AddExerciseSheet onAdd={addExercise} onClose={() => setAddingExercise(false)} />}
+      {showAgua && <AguaDetail profile={profile} setProfile={setProfile} water={water} onClose={() => setShowAgua(false)} />}
     </div>
   )
 }

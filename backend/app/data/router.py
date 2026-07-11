@@ -9,8 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.data.models import DbCustomFood, DbDiaryEntry, DbExercise, DbProfile, DbWater
-from app.data.schemas import AllData, DayUpsert, Entry, Exercise, Food, ImportPayload, Profile
+from app.data.models import DbCustomFood, DbDiaryEntry, DbExercise, DbProfile, DbWater, DbWeight
+from app.data.schemas import (
+    AllData,
+    DayUpsert,
+    Entry,
+    Exercise,
+    Food,
+    ImportPayload,
+    Profile,
+    Weight,
+    WeightIn,
+)
 from app.database import get_db
 from app.exceptions import ValidationError
 
@@ -183,6 +193,40 @@ async def put_custom_foods(
     for f in body:
         db.add(_food_row(user.id, f))
     return body
+
+
+@router.get("/weights", response_model=list[Weight])
+async def list_weights(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[Weight]:
+    result = await db.execute(
+        select(DbWeight).where(DbWeight.user_id == user.id).order_by(DbWeight.date)
+    )
+    return [Weight(date=w.date.isoformat(), kg=w.kg) for w in result.scalars()]
+
+
+@router.put("/weights/{iso_date}", response_model=Weight)
+async def put_weight(
+    iso_date: str,
+    body: WeightIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Weight:
+    day = _parse_date(iso_date)
+    await db.execute(delete(DbWeight).where(DbWeight.user_id == user.id, DbWeight.date == day))
+    db.add(DbWeight(user_id=user.id, date=day, kg=body.kg))
+    return Weight(date=iso_date, kg=body.kg)
+
+
+@router.delete("/weights/{iso_date}", status_code=204)
+async def delete_weight(
+    iso_date: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    day = _parse_date(iso_date)
+    await db.execute(delete(DbWeight).where(DbWeight.user_id == user.id, DbWeight.date == day))
 
 
 @router.post("/data/import", response_model=AllData)
