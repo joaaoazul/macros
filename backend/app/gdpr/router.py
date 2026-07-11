@@ -26,15 +26,64 @@ async def export_data(
     user: User = Depends(get_current_user),
 ) -> JSONResponse:
     """Download all personal data as JSON (GDPR Art. 20 — data portability)."""
+    from sqlalchemy import or_, select
+
+    from app.messages.models import Message
+    from app.social.models import FeedEvent, Friendship
+
     data = await _load_all(db, user.id)
+
+    friendships = (
+        await db.execute(
+            select(Friendship).where(
+                or_(Friendship.requester_id == user.id, Friendship.addressee_id == user.id)
+            )
+        )
+    ).scalars()
+    events = (
+        await db.execute(select(FeedEvent).where(FeedEvent.user_id == user.id))
+    ).scalars()
+    messages = (
+        await db.execute(
+            select(Message).where(
+                or_(Message.sender_id == user.id, Message.recipient_id == user.id)
+            )
+        )
+    ).scalars()
+
     payload = {
         "account": {
             "email": user.email,
             "name": user.name,
+            "username": user.username,
+            "avatar": user.avatar,
             "createdAt": user.created_at.isoformat(),
             "exportedAt": datetime.now(timezone.utc).isoformat(),
         },
         **data.model_dump(),
+        "social": {
+            "friendships": [
+                {
+                    "withUserId": f.addressee_id if f.requester_id == user.id else f.requester_id,
+                    "status": f.status,
+                    "since": f.accepted_at.isoformat() if f.accepted_at else None,
+                }
+                for f in friendships
+            ],
+            "feedEvents": [
+                {"kind": e.kind, "date": e.ref_date.isoformat(), "payload": e.payload}
+                for e in events
+            ],
+            "messages": [
+                {
+                    "direction": "sent" if m.sender_id == user.id else "received",
+                    "withUserId": m.recipient_id if m.sender_id == user.id else m.sender_id,
+                    "body": m.body,
+                    "at": m.created_at.isoformat(),
+                }
+                for m in messages
+            ],
+        },
     }
     await write_audit_log(db, "gdpr_export", user_id=user.id)
     return JSONResponse(

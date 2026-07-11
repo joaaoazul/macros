@@ -10,6 +10,9 @@ from app.auth.router import router as auth_router
 from app.config import settings
 from app.data.router import router as data_router
 from app.gdpr.router import router as gdpr_router
+from app.messages.router import router as messages_router
+from app.messages.ws import router as ws_router
+from app.social.router import router as social_router
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 
@@ -50,6 +53,9 @@ async def csrf_header_guard(request: Request, call_next):
 app.include_router(auth_router)
 app.include_router(data_router)
 app.include_router(gdpr_router)
+app.include_router(social_router)
+app.include_router(messages_router)
+app.include_router(ws_router)
 
 
 @app.get("/api/health")

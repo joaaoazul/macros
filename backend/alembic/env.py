@@ -20,6 +20,8 @@ from app.data.models import (  # noqa: F401
     DbProfile,
     DbWater,
 )
+from app.messages.models import Message  # noqa: F401
+from app.social.models import FeedEvent, Friendship, LeaderboardRank  # noqa: F401
 
 config = context.config
 

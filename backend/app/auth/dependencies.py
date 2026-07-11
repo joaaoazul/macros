@@ -25,14 +25,8 @@ def _extract_token(request: Request) -> str | None:
     return None
 
 
-async def get_current_user(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    token = _extract_token(request)
-    if not token:
-        raise UnauthorizedError("Not authenticated")
-
+async def resolve_user_from_token(token: str, db: AsyncSession) -> User:
+    """Valida um access token e devolve o utilizador. Partilhado por HTTP e WebSocket."""
     try:
         payload = decode_token(token)
         if payload.get("type") != "access":
@@ -61,3 +55,13 @@ async def get_current_user(
         raise UnauthorizedError("Session has been invalidated. Please log in again.")
 
     return user
+
+
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    token = _extract_token(request)
+    if not token:
+        raise UnauthorizedError("Not authenticated")
+    return await resolve_user_from_token(token, db)

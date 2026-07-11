@@ -2,19 +2,22 @@ import { useState } from 'react'
 import { withWaterTarget } from './lib/calc'
 import { useAuth } from './lib/auth'
 import { useSyncedData } from './lib/sync'
+import { useSocialSocket } from './lib/ws'
 import Onboarding from './components/Onboarding'
 import Diario from './components/Diario'
 import Metas from './components/Metas'
 import Progresso from './components/Progresso'
 import Perfil from './components/Perfil'
-import { IconBook, IconChart, IconPerson, IconTarget } from './components/ui'
+import Social from './components/social/Social'
+import { IconBook, IconChart, IconPeople, IconPerson, IconTarget } from './components/ui'
 
-type Tab = 'diario' | 'metas' | 'progresso' | 'perfil'
+type Tab = 'diario' | 'metas' | 'progresso' | 'social' | 'perfil'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'diario', label: 'Diário', icon: <IconBook /> },
   { id: 'metas', label: 'Metas', icon: <IconTarget /> },
   { id: 'progresso', label: 'Progresso', icon: <IconChart /> },
+  { id: 'social', label: 'Social', icon: <IconPeople /> },
   { id: 'perfil', label: 'Perfil', icon: <IconPerson /> },
 ]
 
@@ -22,6 +25,7 @@ export default function App() {
   const { user } = useAuth()
   const data = useSyncedData(user!.id)
   const [tab, setTab] = useState<Tab>('diario')
+  const socket = useSocialSocket(true)
 
   const {
     loading, migrationAvailable, importLocalData, dismissMigration,
@@ -64,6 +68,7 @@ export default function App() {
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}
         {tab === 'progresso' && <Progresso profile={profile} diary={diary} />}
+        {tab === 'social' && <Social socket={socket} />}
         {tab === 'perfil' && <Perfil profile={profile} setProfile={setProfile} />}
       </div>
 
@@ -75,12 +80,20 @@ export default function App() {
               key={t.id}
               onClick={() => setTab(t.id)}
               aria-current={tab === t.id ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center gap-0.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[11px] font-medium transition-colors ${
+              className={`relative flex flex-1 flex-col items-center gap-0.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[11px] font-medium transition-colors ${
                 tab === t.id ? 'text-accent' : 'text-muted'
               }`}
             >
               {t.icon}
               {t.label}
+              {t.id === 'social' && socket.unread > 0 && (
+                <span
+                  className="absolute right-[calc(50%-1.5rem)] top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-critical px-1 text-[9px] font-bold text-white"
+                  aria-label={`${socket.unread} mensagens por ler`}
+                >
+                  {socket.unread > 99 ? '99+' : socket.unread}
+                </span>
+              )}
             </button>
           ))}
         </div>

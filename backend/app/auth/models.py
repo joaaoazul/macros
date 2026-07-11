@@ -15,6 +15,8 @@ class User(Base, TimestampMixin):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(512), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False, default="", server_default="")
+    username: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True, index=True)
+    avatar: Mapped[str] = mapped_column(String(16), nullable=False, default="🙂", server_default="🙂")
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true", nullable=False)
     email_verified: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     failed_login_attempts: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)

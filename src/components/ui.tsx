@@ -72,6 +72,15 @@ export const IconChart = () => (
   </svg>
 )
 
+export const IconPeople = () => (
+  <svg {...iconProps} aria-hidden>
+    <circle cx="9" cy="9" r="3" />
+    <path d="M3.5 19c.9-2.5 3-3.8 5.5-3.8s4.6 1.3 5.5 3.8" />
+    <circle cx="16.5" cy="8" r="2.4" />
+    <path d="M16.5 12.7c2.1.1 3.6 1.2 4.4 3.1" />
+  </svg>
+)
+
 export const IconPerson = () => (
   <svg {...iconProps} aria-hidden>
     <circle cx="12" cy="12" r="9" />

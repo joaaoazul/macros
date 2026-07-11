@@ -30,6 +30,11 @@ async function rawRequest(path: string, method: string, body?: unknown): Promise
 
 let refreshing: Promise<boolean> | null = null
 
+/** Renova a sessão explicitamente (ex.: reconexão do WebSocket após 4401). */
+export async function refreshSession(): Promise<boolean> {
+  return tryRefresh()
+}
+
 /** Tenta renovar a sessão (deduplicado entre chamadas concorrentes). */
 async function tryRefresh(): Promise<boolean> {
   refreshing ??= rawRequest('/auth/refresh', 'POST')

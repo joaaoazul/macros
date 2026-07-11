@@ -7,7 +7,10 @@ export default defineConfig({
   server: {
     // dev: encaminha /api para o backend local (uvicorn)
     proxy: {
-      '/api': 'http://localhost:8000',
+      '/api': {
+        target: 'http://localhost:8000',
+        ws: true, // /api/v1/ws (mensagens em tempo real)
+      },
     },
   },
 })

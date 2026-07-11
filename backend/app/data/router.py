@@ -162,6 +162,12 @@ async def put_day(
         for x in body.exercises:
             db.add(_exercise_row(user.id, day, x))
 
+    await db.flush()
+    # avaliar conquistas do feed — nunca pode partir a gravação (protegido internamente)
+    from app.social.service import evaluate_day_events
+
+    await evaluate_day_events(db, user.id, day)
+
     return body
 
 
