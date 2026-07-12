@@ -111,6 +111,58 @@ async def test_reverse_pending_auto_accepts(client):
     assert resp.json()["status"] == "accepted"
 
 
+async def test_update_profile_photo_and_bio(client):
+    await register_user(client)
+    resp = await client.put(
+        "/api/v1/social/me",
+        json={
+            "username": "ana_fit",
+            "avatar": "🦁",
+            "avatarPhoto": "data:image/jpeg;base64,aGVsbG8=",
+            "bio": "  Amo treinar 💪  ",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["avatarPhoto"] == "aGVsbG8="  # prefixo data: removido
+    assert body["bio"] == "Amo treinar 💪"  # strip
+
+
+async def test_bio_too_long_rejected(client):
+    await register_user(client)
+    resp = await client.put(
+        "/api/v1/social/me",
+        json={"username": "ana_fit", "avatar": "🙂", "bio": "x" * 301},
+    )
+    assert resp.status_code == 422
+
+
+async def test_photo_too_large_rejected(client):
+    await register_user(client)
+    resp = await client.put(
+        "/api/v1/social/me",
+        json={"username": "ana_fit", "avatar": "🙂", "avatarPhoto": "a" * 400_001},
+    )
+    assert resp.status_code == 422
+
+
+async def test_friend_sees_photo_and_bio(client):
+    # ana define foto+bio; bruno adiciona-a e vê o perfil dela
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    await client.put(
+        "/api/v1/social/me",
+        json={"username": "ana_fit", "avatar": "🦁", "avatarPhoto": "aGVsbG8=", "bio": "olá"},
+    )
+    await client.post("/api/v1/auth/logout")
+
+    await make_social_user(client, "bruno@example.com", "bruno_fit")
+    resp = await client.get("/api/v1/social/users/ana_fit")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["avatarPhoto"] == "aGVsbG8="
+    assert body["bio"] == "olá"
+
+
 async def test_public_profile_hides_raw_nutrition_data(client):
     await make_social_user(client, "ana@example.com", "ana_fit")
     resp = await client.get("/api/v1/social/users/ana_fit")

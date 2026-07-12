@@ -6,12 +6,14 @@ import type { Food } from '../types'
  * https://openfoodfacts.github.io/openfoodfacts-server/api/
  */
 const OFF_BASE = 'https://pt.openfoodfacts.org'
-const FIELDS = 'code,product_name,product_name_pt,brands,nutriments'
+const FIELDS = 'code,product_name,product_name_pt,generic_name,generic_name_pt,brands,nutriments'
 
 interface OffProduct {
   code: string
   product_name?: string
   product_name_pt?: string
+  generic_name?: string
+  generic_name_pt?: string
   brands?: string
   nutriments?: Record<string, number | string>
 }
@@ -27,7 +29,13 @@ function toFood(p: OffProduct): Food | null {
     const kj = num('energy_100g')
     if (Number.isFinite(kj)) kcal = kj / 4.184
   }
-  const name = (p.product_name_pt || p.product_name || '').trim()
+  const name = (
+    p.product_name_pt ||
+    p.product_name ||
+    p.generic_name_pt ||
+    p.generic_name ||
+    ''
+  ).trim()
   if (!name || !Number.isFinite(kcal)) return null
 
   return {
@@ -58,10 +66,13 @@ export async function searchOpenFoodFacts(query: string, signal?: AbortSignal): 
     return food ? [food] : []
   }
 
-  const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=20&fields=${FIELDS}`
+  const url = `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=30&fields=${FIELDS}`
   const res = await fetch(url, { signal })
   if (!res.ok) throw new Error(`OFF ${res.status}`)
   const data = await res.json()
   const products: OffProduct[] = data.products ?? []
-  return products.map(toFood).filter((f): f is Food => f !== null)
+  const foods = products.map(toFood).filter((f): f is Food => f !== null)
+  // produtos com macros completos (proteína/hidratos/gordura) aparecem primeiro
+  const completeness = (f: Food) => (f.protein > 0 ? 1 : 0) + (f.carbs > 0 ? 1 : 0) + (f.fat > 0 ? 1 : 0)
+  return foods.sort((a, b) => completeness(b) - completeness(a))
 }

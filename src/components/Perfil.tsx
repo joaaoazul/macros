@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Profile } from '../types'
 import { api, ApiError } from '../lib/api'
@@ -6,7 +6,11 @@ import { clearAnthropicKey, getAnthropicKey, setAnthropicKey } from '../lib/ai'
 import { useAuth } from '../lib/auth'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
 import { clearLocalCache } from '../lib/sync'
+import { getPushState, subscribeToPush, unsubscribeFromPush, type PushState } from '../lib/push'
+import { social, type SocialMe } from '../lib/social'
 import PesoDetail from './details/PesoDetail'
+import Avatar from './social/Avatar'
+import EditProfileSheet from './social/EditProfileSheet'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
@@ -48,6 +52,9 @@ export default function Perfil({ profile, setProfile }: Props) {
       <LargeTitle title={profile.name} subtitle="Perfil" />
 
       <div className="space-y-3.5 px-4 pt-2">
+      {/* perfil social */}
+      <SocialProfileCard />
+
       {/* dados base */}
       <Card className="p-5">
         <div className="grid grid-cols-3 divide-x divide-line text-center">
@@ -177,6 +184,9 @@ export default function Perfil({ profile, setProfile }: Props) {
           </div>
         </Card>
 
+        {/* notificações push */}
+        <NotificationsCard />
+
         {/* chave IA */}
         <ApiKeyCard />
 
@@ -195,6 +205,112 @@ export default function Perfil({ profile, setProfile }: Props) {
         />
       )}
     </div>
+  )
+}
+
+/** Ativar/desativar notificações push (Web Push). */
+function NotificationsCard() {
+  const [state, setState] = useState<PushState | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    getPushState().then(setState)
+  }, [])
+
+  const toggle = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      setState(state === 'on' ? await unsubscribeFromPush() : await subscribeToPush())
+    } catch {
+      setError('Não foi possível alterar as notificações.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const canToggle = state === 'on' || state === 'off'
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-4">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>🔔</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Notificações</div>
+          <div className="text-sm text-ink-2">
+            {state === 'on' && 'Ativas — recebes avisos de mensagens e amizades.'}
+            {state === 'off' && 'Ativa para receber mensagens e pedidos de amizade.'}
+            {state === 'denied' && 'Bloqueadas — autoriza nas definições do navegador.'}
+            {state === 'ios-needs-install' && 'No iPhone, adiciona a app ao ecrã inicial primeiro.'}
+            {state === 'unsupported' && 'Este dispositivo não suporta notificações push.'}
+            {state === null && 'A verificar…'}
+          </div>
+        </div>
+        {canToggle && (
+          <button
+            onClick={toggle}
+            disabled={busy}
+            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition active:scale-95 disabled:opacity-40 ${
+              state === 'on' ? 'bg-bg text-critical' : 'bg-accent text-white'
+            }`}
+          >
+            {busy ? '…' : state === 'on' ? 'Desativar' : 'Ativar'}
+          </button>
+        )}
+      </div>
+      {error && <p role="alert" className="mt-2 text-sm font-medium text-critical">{error}</p>}
+    </Card>
+  )
+}
+
+/** Cartão do perfil social: avatar/username/bio + acesso à edição. */
+function SocialProfileCard() {
+  const [me, setMe] = useState<SocialMe | null>(null)
+  const [editing, setEditing] = useState(false)
+
+  useEffect(() => {
+    social.me().then(setMe).catch(() => setMe(null))
+  }, [])
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-4">
+        <Avatar avatar={me?.avatar ?? '🙂'} avatarPhoto={me?.avatarPhoto} size={56} />
+        <div className="min-w-0 flex-1">
+          {me?.username ? (
+            <>
+              <div className="truncate font-semibold">@{me.username}</div>
+              {me.bio ? (
+                <div className="truncate text-sm text-muted">{me.bio}</div>
+              ) : (
+                <div className="text-sm text-muted">Sem bio</div>
+              )}
+            </>
+          ) : (
+            <div className="text-sm text-muted">Ainda sem perfil social</div>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => setEditing(true)}
+        disabled={!me}
+        className="mt-3 flex w-full items-center justify-between border-t border-line pt-3 text-left text-sm font-semibold text-accent disabled:opacity-40"
+      >
+        {me?.username ? 'Editar perfil' : 'Criar perfil social'} <span className="text-muted">›</span>
+      </button>
+
+      {editing && me && (
+        <EditProfileSheet
+          me={me}
+          onSaved={(updated) => {
+            setMe(updated)
+            setEditing(false)
+          }}
+          onClose={() => setEditing(false)}
+        />
+      )}
+    </Card>
   )
 }
 

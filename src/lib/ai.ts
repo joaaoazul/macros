@@ -41,10 +41,10 @@ export async function analyzeMeal(input: { description?: string; imageBase64?: s
   })
 }
 
-/** Reduz a foto para ≤1024px JPEG 0.8 (corrige orientação EXIF via createImageBitmap). */
-export async function downscaleImage(file: File): Promise<string> {
+/** Reduz a foto para ≤maxPx JPEG 0.8 (corrige orientação EXIF via createImageBitmap). */
+export async function downscaleImage(file: File, maxPx = 1024): Promise<string> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-  const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height))
+  const scale = Math.min(1, maxPx / Math.max(bitmap.width, bitmap.height))
   const w = Math.round(bitmap.width * scale)
   const h = Math.round(bitmap.height * scale)
   const canvas = document.createElement('canvas')

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { messages as messagesApi, type Message, type PublicProfileLite } from '../../lib/social'
 import { uid } from '../../lib/store'
 import type { SocialSocket } from '../../lib/ws'
+import Avatar from './Avatar'
 
 interface Pending {
   clientId: string
@@ -103,9 +104,7 @@ export default function Chat({ me, other, socket, onBack }: Props) {
         <button onClick={onBack} aria-label="Voltar" className="text-accent">
           ‹ <span className="text-sm font-medium">Voltar</span>
         </button>
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-bg text-lg" aria-hidden>
-          {other.avatar}
-        </span>
+        <Avatar avatar={other.avatar} avatarPhoto={other.avatarPhoto} size={36} />
         <div className="min-w-0">
           <div className="truncate font-semibold leading-tight">@{other.username}</div>
           {!socket.connected && <div className="text-[11px] text-muted">a reconectar…</div>}

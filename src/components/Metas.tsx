@@ -195,7 +195,7 @@ function EditSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

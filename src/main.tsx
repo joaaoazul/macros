@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider, useAuth } from './lib/auth'
+import { registerServiceWorker } from './lib/push'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Privacidade from './pages/Privacidade'
@@ -25,6 +26,8 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!user) return <Navigate to="/login" replace />
   return <>{children}</>
 }
+
+void registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -2,13 +2,12 @@
 
 import { useState } from 'react'
 import { ApiError } from '../../lib/api'
+import { AVATARS, DEFAULT_AVATAR } from '../../lib/avatars'
 import { social, type SocialMe } from '../../lib/social'
-
-const AVATARS = ['🙂', '😎', '🦁', '🐯', '🦊', '🐼', '🐸', '🦄', '🏋️', '🏃', '🚴', '🧗', '🥑', '🍓', '⚡', '🔥', '🌊', '🌟']
 
 export default function UsernameSheet({ onDone }: { onDone: (me: SocialMe) => void }) {
   const [username, setUsername] = useState('')
-  const [avatar, setAvatar] = useState('🙂')
+  const [avatar, setAvatar] = useState<string>(DEFAULT_AVATAR)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -18,7 +17,7 @@ export default function UsernameSheet({ onDone }: { onDone: (me: SocialMe) => vo
     setBusy(true)
     setError('')
     try {
-      onDone(await social.updateMe(username, avatar))
+      onDone(await social.updateMe({ username, avatar }))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível guardar. Tenta novamente.')
     } finally {

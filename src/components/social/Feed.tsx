@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { social, type FeedEvent } from '../../lib/social'
 import { formatDatePT } from '../../lib/store'
+import Avatar from './Avatar'
 import { Card } from '../ui'
 
 function eventText(e: FeedEvent): string {
@@ -68,9 +69,7 @@ export default function Feed({ onOpenFriends }: { onOpenFriends: () => void }) {
     <div className="space-y-2 px-4">
       {events.map((e) => (
         <Card key={e.id} className="flex items-center gap-3 p-4">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-xl" aria-hidden>
-            {e.user.avatar}
-          </span>
+          <Avatar avatar={e.user.avatar} avatarPhoto={e.user.avatarPhoto} size={44} />
           <div className="min-w-0 flex-1">
             <p className="text-sm leading-snug">
               <span className="font-semibold">@{e.user.username}</span> {eventText(e)}

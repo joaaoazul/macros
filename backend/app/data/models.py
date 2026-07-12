@@ -76,6 +76,25 @@ class DbWeight(Base):
     kg: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class DbRecipe(Base, TimestampMixin):
+    """Combinação/receita guardada: vários itens (snapshots) registados de uma vez.
+
+    auto=True são combinações "usadas anteriormente" (sem nome, LRU no cliente);
+    auto=False são receitas nomeadas pelo utilizador.
+    """
+
+    __tablename__ = "recipes"
+    __table_args__ = (UniqueConstraint("user_id", "recipe_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(_user_fk(), nullable=False, index=True)
+    recipe_id: Mapped[str] = mapped_column(String(40), nullable=False)  # client uid()
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    emoji: Mapped[str] = mapped_column(String(16), nullable=False, default="🍽️", server_default="🍽️")
+    auto: Mapped[bool] = mapped_column(default=True, server_default="true", nullable=False)
+    items: Mapped[list] = mapped_column(JSON, nullable=False)  # [{foodName,emoji,grams,unit,kcal,protein,carbs,fat}]
+
+
 class DbCustomFood(Base):
     __tablename__ = "custom_foods"
     __table_args__ = (UniqueConstraint("user_id", "food_id"),)

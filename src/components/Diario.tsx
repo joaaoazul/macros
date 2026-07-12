@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, Profile, WaterLog } from '../types'
+import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, Profile, Recipe, WaterLog } from '../types'
 import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
 import { formatDatePT, shiftDate, todayISO, uid } from '../lib/store'
@@ -19,13 +19,16 @@ interface Props {
   setExercise: React.Dispatch<React.SetStateAction<ExerciseLog>>
   customFoods: Food[]
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
+  recipes: Recipe[]
+  setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
 }
 
-export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods }: Props) {
+export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes }: Props) {
   const [date, setDate] = useState(todayISO)
   const [addingTo, setAddingTo] = useState<MealId | null>(null)
   const [addingExercise, setAddingExercise] = useState(false)
   const [showAgua, setShowAgua] = useState(false)
+  const [customWater, setCustomWater] = useState('')
 
   const entries = useMemo(() => diary[date] ?? [], [diary, date])
   const totals = useMemo(() => sumEntries(entries), [entries])
@@ -225,6 +228,30 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
               −250
             </button>
           </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={customWater}
+              onChange={(e) => setCustomWater(e.target.value)}
+              placeholder="Outra quantidade (ml)"
+              className="min-w-0 flex-1 rounded-full bg-surface px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              aria-label="Adicionar quantidade personalizada de água em ml"
+            />
+            <button
+              onClick={() => {
+                const ml = Number(customWater)
+                if (ml > 0) {
+                  addWater(ml)
+                  setCustomWater('')
+                }
+              }}
+              disabled={!(Number(customWater) > 0)}
+              className="shrink-0 rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent transition active:scale-95 disabled:opacity-40"
+            >
+              Adicionar
+            </button>
+          </div>
           <button
             onClick={() => setShowAgua(true)}
             className="mt-4 flex w-full items-center justify-between border-t border-line pt-3 text-left text-sm font-semibold text-accent"
@@ -239,6 +266,8 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
           meal={addingTo}
           customFoods={customFoods}
           setCustomFoods={setCustomFoods}
+          recipes={recipes}
+          setRecipes={setRecipes}
           onAdd={addEntry}
           onClose={() => setAddingTo(null)}
         />

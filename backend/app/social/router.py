@@ -46,13 +46,42 @@ MAX_PENDING_OUTGOING = 20
 _RESERVED_USERNAMES = {"admin", "macros", "suporte", "support", "api", "sistema"}
 
 
+def _display(u: User) -> str:
+    return u.name or (f"@{u.username}" if u.username else "Alguém")
+
+
+async def _push_friend(db: AsyncSession, user_id: int, text: str) -> None:
+    """Notificação push de amizade (no-op se VAPID desativado)."""
+    from app.push.service import send_push
+
+    await send_push(db, user_id, "Macros", text, url="/")
+
+
 def _lite(u: User) -> PublicProfileLite:
-    return PublicProfileLite(userId=u.id, username=u.username or "?", avatar=u.avatar, name=u.name)
+    return PublicProfileLite(
+        userId=u.id,
+        username=u.username or "?",
+        avatar=u.avatar,
+        avatarPhoto=u.avatar_photo,
+        bio=u.bio,
+        name=u.name,
+    )
+
+
+def _me(u: User) -> SocialMe:
+    return SocialMe(
+        userId=u.id,
+        username=u.username,
+        avatar=u.avatar,
+        avatarPhoto=u.avatar_photo,
+        bio=u.bio,
+        name=u.name,
+    )
 
 
 @router.get("/me", response_model=SocialMe)
 async def social_me(user: User = Depends(get_current_user)) -> SocialMe:
-    return SocialMe(userId=user.id, username=user.username, avatar=user.avatar, name=user.name)
+    return _me(user)
 
 
 @router.put("/me", response_model=SocialMe)
@@ -69,8 +98,10 @@ async def update_social_me(
         raise ConflictError("Esse nome de utilizador já está ocupado.")
     user.username = username
     user.avatar = body.avatar
+    user.avatar_photo = body.avatarPhoto
+    user.bio = (body.bio or "").strip() or None
     db.add(user)
-    return SocialMe(userId=user.id, username=user.username, avatar=user.avatar, name=user.name)
+    return _me(user)
 
 
 async def _friendship_status(db: AsyncSession, me: int, other: int) -> tuple[str, int | None]:
@@ -130,6 +161,8 @@ async def public_profile(
         userId=target.id,
         username=target.username or "?",
         avatar=target.avatar,
+        avatarPhoto=target.avatar_photo,
+        bio=target.bio,
         name=target.name,
         stats=stats,  # type: ignore[arg-type]
         friendship=status,  # type: ignore[arg-type]
@@ -172,6 +205,7 @@ async def send_friend_request(
     friendship = Friendship(requester_id=user.id, addressee_id=target.id, status="pending")
     db.add(friendship)
     await db.flush()
+    await _push_friend(db, target.id, f"{_display(user)} enviou-te um pedido de amizade")
     return FriendshipOut(id=friendship.id, user=_lite(target), status="pending", direction="outgoing")
 
 
@@ -195,6 +229,7 @@ async def accept_friend_request(
     friendship.accepted_at = datetime.now(timezone.utc)
     await emit_friend_joined(db, friendship.requester_id, friendship.addressee_id, lisbon_today())
     other = (await db.execute(select(User).where(User.id == friendship.requester_id))).scalar_one()
+    await _push_friend(db, other.id, f"{_display(user)} aceitou o teu pedido de amizade")
     return FriendshipOut(id=friendship.id, user=_lite(other), status="accepted")
 
 

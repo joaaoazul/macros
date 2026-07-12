@@ -59,12 +59,34 @@ class Food(BaseModel):
     brand: str | None = Field(default=None, max_length=255)
 
 
+class RecipeItem(BaseModel):
+    """Snapshot de um ingrediente com a porção escolhida (macros absolutos)."""
+
+    foodName: str = Field(max_length=255)
+    emoji: str = Field(default="", max_length=16)
+    grams: float = Field(ge=0, le=100000)
+    unit: Unit
+    kcal: float = Field(ge=0, le=100000)
+    protein: float = Field(ge=0, le=10000)
+    carbs: float = Field(ge=0, le=10000)
+    fat: float = Field(ge=0, le=10000)
+
+
+class Recipe(BaseModel):
+    id: str = Field(max_length=40)
+    name: str | None = Field(default=None, max_length=120)
+    emoji: str = Field(default="🍽️", max_length=16)
+    auto: bool = True
+    items: list[RecipeItem] = Field(min_length=1, max_length=40)
+
+
 class AllData(BaseModel):
     profile: Profile | None
     diary: dict[str, list[Entry]]
     water: dict[str, int]
     exercise: dict[str, list[Exercise]]
     customFoods: list[Food]
+    recipes: list[Recipe] = []
 
 
 class DayUpsert(BaseModel):
@@ -81,6 +103,10 @@ class ImportPayload(BaseModel):
     water: dict[str, int] = {}
     exercise: dict[str, list[Exercise]] = {}
     customFoods: list[Food] = []
+    recipes: list[Recipe] = []
+
+
+# ImportPayload é a AllData mais tolerante (tudo opcional) — recipes já incluído acima.
 
 
 class Weight(BaseModel):

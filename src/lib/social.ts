@@ -11,6 +11,8 @@ export interface PublicProfileLite {
   userId: number
   username: string
   avatar: string
+  avatarPhoto?: string | null
+  bio?: string | null
   name: string
 }
 
@@ -26,7 +28,16 @@ export interface SocialMe {
   userId: number
   username: string | null
   avatar: string
+  avatarPhoto?: string | null
+  bio?: string | null
   name: string
+}
+
+export interface ProfileUpdate {
+  username: string
+  avatar: string
+  avatarPhoto?: string | null
+  bio?: string | null
 }
 
 export interface SearchResult extends PublicProfileLite {
@@ -87,8 +98,7 @@ export interface Conversation {
 
 export const social = {
   me: () => api<SocialMe>('/social/me'),
-  updateMe: (username: string, avatar: string) =>
-    api<SocialMe>('/social/me', { method: 'PUT', body: { username, avatar } }),
+  updateMe: (data: ProfileUpdate) => api<SocialMe>('/social/me', { method: 'PUT', body: data }),
   search: (q: string) => api<SearchResult[]>(`/social/search?q=${encodeURIComponent(q)}`),
   profile: (username: string) => api<PublicProfile>(`/social/users/${encodeURIComponent(username)}`),
   sendRequest: (username: string) =>

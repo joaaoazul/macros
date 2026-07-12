@@ -3,7 +3,10 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# ~300KB de foto em base64 (downscaled p/ ~256px JPEG no cliente)
+MAX_AVATAR_PHOTO_CHARS = 400_000
 
 
 class DerivedStats(BaseModel):
@@ -15,6 +18,8 @@ class PublicProfileLite(BaseModel):
     userId: int
     username: str
     avatar: str
+    avatarPhoto: str | None = None
+    bio: str | None = None
     name: str
 
 
@@ -28,12 +33,23 @@ class SocialMe(BaseModel):
     userId: int
     username: str | None
     avatar: str
+    avatarPhoto: str | None = None
+    bio: str | None = None
     name: str
 
 
 class SocialMeUpdate(BaseModel):
     username: str = Field(min_length=3, max_length=20, pattern=r"^[a-z0-9_]+$")
     avatar: str = Field(min_length=1, max_length=16)
+    avatarPhoto: str | None = Field(default=None, max_length=MAX_AVATAR_PHOTO_CHARS)
+    bio: str | None = Field(default=None, max_length=300)
+
+    @field_validator("avatarPhoto")
+    @classmethod
+    def _strip_data_prefix(cls, v: str | None) -> str | None:
+        if v and v.startswith("data:"):
+            return v.split(",", 1)[-1]
+        return v or None
 
 
 class SearchResult(BaseModel):

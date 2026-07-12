@@ -54,6 +54,27 @@ export interface Exercise {
   kcal: number
 }
 
+/** Um ingrediente de uma combinação/receita: snapshot com macros absolutos da porção. */
+export interface RecipeItem {
+  foodName: string
+  emoji: string
+  grams: number
+  unit: 'g' | 'ml'
+  kcal: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
+/** Combinação guardada. auto=true são "usadas anteriormente"; auto=false são receitas nomeadas. */
+export interface Recipe {
+  id: string
+  name: string | null
+  emoji: string
+  auto: boolean
+  items: RecipeItem[]
+}
+
 /** Diário: chave é a data em ISO (YYYY-MM-DD). */
 export type Diary = Record<string, Entry[]>
 export type WaterLog = Record<string, number>

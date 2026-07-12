@@ -1,8 +1,15 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import type { Entry, Food, MealId } from '../types'
+import type { Entry, Food, MealId, Recipe, RecipeItem } from '../types'
 import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
+import {
+  entryFromRecipeItem,
+  findByItems,
+  recipeKcal,
+  rememberCombo,
+  saveAsNamed,
+} from '../lib/recipes'
 import { uid } from '../lib/store'
 
 const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
@@ -12,13 +19,15 @@ interface Props {
   meal: MealId
   customFoods: Food[]
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
+  recipes: Recipe[]
+  setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
   onAdd: (entry: Entry) => void
   onClose: () => void
 }
 
 type OffState = { status: 'idle' | 'loading' | 'done' | 'error'; results: Food[] }
 
-export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd, onClose }: Props) {
+export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, onAdd, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
   const [grams, setGrams] = useState('100')
@@ -26,6 +35,9 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
   const [off, setOff] = useState<OffState>({ status: 'idle', results: [] })
   const [scanning, setScanning] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
+  const [cameraMenu, setCameraMenu] = useState(false)
+  const [combo, setCombo] = useState<RecipeItem[]>([])
+  const [naming, setNaming] = useState(false)
 
   const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
   const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
@@ -56,11 +68,9 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
   const gramsN = Number(grams)
   const factor = gramsN > 0 ? gramsN / 100 : 0
 
-  const confirm = () => {
-    if (!selected || factor <= 0) return
-    onAdd({
-      id: uid(),
-      meal,
+  const selectedAsItem = (): RecipeItem | null => {
+    if (!selected || factor <= 0) return null
+    return {
       foodName: selected.brand ? `${selected.name} (${selected.brand})` : selected.name,
       emoji: selected.emoji,
       grams: gramsN,
@@ -69,8 +79,34 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
       protein: selected.protein * factor,
       carbs: selected.carbs * factor,
       fat: selected.fat * factor,
-    })
+    }
   }
+
+  const confirm = () => {
+    const item = selectedAsItem()
+    if (!item) return
+    navigator.vibrate?.(30)
+    onAdd(entryFromRecipeItem(item, meal))
+  }
+
+  const addToCombo = () => {
+    const item = selectedAsItem()
+    if (!item) return
+    setCombo((c) => [...c, item])
+    setSelected(null)
+    setQuery('')
+  }
+
+  /** Regista todos os itens dados como entradas; se ≥2, lembra o combo. Fecha o sheet. */
+  const logItems = (items: RecipeItem[]) => {
+    navigator.vibrate?.(30)
+    for (const item of items) onAdd(entryFromRecipeItem(item, meal))
+    if (items.length >= 2) setRecipes((rs) => rememberCombo(rs, items))
+    onClose()
+  }
+
+  const comboKcal = combo.reduce((s, i) => s + i.kcal, 0)
+  const comboAlreadySaved = combo.length >= 2 && !!findByItems(recipes, combo)?.name
 
   const pick = (f: Food) => {
     setSelected(f)
@@ -82,7 +118,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="flex h-[88dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
+        className="sheet-panel flex h-[88dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -108,15 +144,26 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 autoFocus
               />
               <button
-                onClick={() => setScanning(true)}
-                className="shrink-0 rounded-xl bg-surface px-3.5 text-xl"
-                aria-label="Ler código de barras com a câmara"
+                onClick={() => setCameraMenu(true)}
+                className="shrink-0 rounded-xl bg-surface px-3.5 text-xl transition active:scale-95"
+                aria-label="Adicionar com a câmara"
               >
                 📷
               </button>
             </div>
 
-            <div className="mt-3 flex-1 overflow-y-auto px-5 pb-5">
+            <div className="scroll-contain mt-3 flex-1 overflow-y-auto px-5 pb-5">
+              {query.trim().length === 0 && recipes.length > 0 && (
+                <>
+                  <SectionLabel>Combinações e receitas</SectionLabel>
+                  <ul>
+                    {recipes.map((r) => (
+                      <RecipeRow key={r.id} recipe={r} onLog={() => logItems(r.items)} />
+                    ))}
+                  </ul>
+                </>
+              )}
+
               {localResults.length > 0 && (
                 <>
                   <SectionLabel>Básicos e meus alimentos</SectionLabel>
@@ -164,6 +211,48 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
                 ✨ Analisar refeição com IA
               </button>
             </div>
+
+            {combo.length > 0 && (
+              <div className="border-t border-line bg-surface px-5 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">
+                    Combinação · {combo.length} {combo.length === 1 ? 'item' : 'itens'}
+                  </span>
+                  <span className="text-sm tabular-nums text-muted">{Math.round(comboKcal)} kcal</span>
+                </div>
+                <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                  {combo.map((item, i) => (
+                    <li key={i} className="flex items-center gap-1 rounded-full bg-bg px-2.5 py-1 text-xs">
+                      <span aria-hidden>{item.emoji}</span>
+                      <span className="max-w-[8rem] truncate">{item.foodName}</span>
+                      <button
+                        onClick={() => setCombo((c) => c.filter((_, j) => j !== i))}
+                        className="text-muted"
+                        aria-label={`Remover ${item.foodName}`}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-2.5 flex gap-2">
+                  <button
+                    onClick={() => logItems(combo)}
+                    className="flex-1 rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-white transition active:scale-[0.98]"
+                  >
+                    Registar {combo.length} {combo.length === 1 ? 'item' : 'itens'}
+                  </button>
+                  {combo.length >= 2 && !comboAlreadySaved && (
+                    <button
+                      onClick={() => setNaming(true)}
+                      className="rounded-full bg-accent-soft px-4 py-2.5 text-sm font-semibold text-accent transition active:scale-95"
+                    >
+                      Guardar receita
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -218,13 +307,72 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, onAdd,
               <Preview label="kcal" value={selected.kcal * factor} />
             </div>
 
-            <button
-              onClick={confirm}
-              disabled={factor <= 0}
-              className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+            <div className="mt-auto mb-6 flex gap-2">
+              <button
+                onClick={addToCombo}
+                disabled={factor <= 0}
+                className="flex-1 rounded-full border border-accent bg-accent-soft px-4 py-3.5 font-semibold text-accent transition active:scale-[0.98] disabled:opacity-40"
+              >
+                ➕ Juntar
+              </button>
+              <button
+                onClick={confirm}
+                disabled={factor <= 0}
+                className="flex-1 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {naming && (
+          <NameRecipeSheet
+            onCancel={() => setNaming(false)}
+            onSave={(name) => {
+              setRecipes((rs) => saveAsNamed(rs, combo, name))
+              setNaming(false)
+            }}
+          />
+        )}
+
+        {cameraMenu && (
+          <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40" onClick={() => setCameraMenu(false)}>
+            <div
+              className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Adicionar com a câmara"
             >
-              Adicionar
-            </button>
+              <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" aria-hidden />
+              <button
+                onClick={() => {
+                  setCameraMenu(false)
+                  setScanning(true)
+                }}
+                className="flex w-full items-center gap-3 rounded-xl bg-surface px-4 py-4 text-left transition active:scale-[0.99]"
+              >
+                <span className="text-2xl" aria-hidden>📷</span>
+                <span>
+                  <span className="block font-semibold">Ler código de barras</span>
+                  <span className="block text-xs text-muted">Encontra o produto no Open Food Facts</span>
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setCameraMenu(false)
+                  setAnalyzing(true)
+                }}
+                className="mt-2 flex w-full items-center gap-3 rounded-xl bg-surface px-4 py-4 text-left transition active:scale-[0.99]"
+              >
+                <span className="text-2xl" aria-hidden>✨</span>
+                <span>
+                  <span className="block font-semibold">Analisar refeição</span>
+                  <span className="block text-xs text-muted">Foto (câmara ou galeria) ou descreve o que comeste</span>
+                </span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -284,6 +432,66 @@ function FoodRow({ food, onPick }: { food: Food; onPick: (f: Food) => void }) {
         </div>
       </button>
     </li>
+  )
+}
+
+function RecipeRow({ recipe, onLog }: { recipe: Recipe; onLog: () => void }) {
+  const kcal = Math.round(recipeKcal(recipe))
+  const label = recipe.name ?? recipe.items.map((i) => i.foodName).join(' + ')
+  return (
+    <li>
+      <button onClick={onLog} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
+        <span className="text-xl" aria-hidden>{recipe.emoji}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">
+            {label}
+            {recipe.auto ? (
+              <span className="ml-1.5 rounded bg-bg px-1.5 py-0.5 text-[10px] font-semibold text-muted">recente</span>
+            ) : (
+              <span className="ml-1.5 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold text-accent">receita</span>
+            )}
+          </div>
+          <div className="text-xs text-muted">
+            {recipe.items.length} itens · {kcal} kcal
+          </div>
+        </div>
+        <span className="text-lg text-accent" aria-hidden>＋</span>
+      </button>
+    </li>
+  )
+}
+
+function NameRecipeSheet({ onCancel, onSave }: { onCancel: () => void; onSave: (name: string) => void }) {
+  const [name, setName] = useState('')
+  return (
+    <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40" onClick={onCancel}>
+      <div
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Guardar receita"
+      >
+        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" aria-hidden />
+        <h2 className="text-lg font-bold">Guardar como receita</h2>
+        <p className="mt-1 text-sm text-muted">Dá um nome a esta combinação para a reutilizares.</p>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ex.: Sandes mista"
+          maxLength={120}
+          className="mt-4 w-full rounded-xl bg-surface px-4 py-3 focus:outline-none focus:ring-2 focus:ring-accent"
+          autoFocus
+        />
+        <button
+          onClick={() => name.trim() && onSave(name.trim())}
+          disabled={!name.trim()}
+          className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition active:scale-[0.98] disabled:opacity-40"
+        >
+          Guardar receita
+        </button>
+      </div>
+    </div>
   )
 }
 

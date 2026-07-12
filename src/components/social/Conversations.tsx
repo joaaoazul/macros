@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { messages as messagesApi, type Conversation, type PublicProfileLite } from '../../lib/social'
 import type { SocialSocket } from '../../lib/ws'
+import Avatar from './Avatar'
 import { Card } from '../ui'
 
 interface Props {
@@ -44,9 +45,7 @@ export default function Conversations({ socket, onOpen, onBack }: Props) {
           <Card className="divide-y divide-line">
             {convs.map((c) => (
               <button key={c.user.userId} onClick={() => onOpen(c.user)} className="flex w-full items-center gap-3 p-4 text-left">
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-bg text-xl" aria-hidden>
-                  {c.user.avatar}
-                </span>
+                <Avatar avatar={c.user.avatar} avatarPhoto={c.user.avatarPhoto} size={48} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">@{c.user.username}</div>
                   <div className="truncate text-sm text-muted">

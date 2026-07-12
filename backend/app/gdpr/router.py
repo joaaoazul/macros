@@ -64,6 +64,8 @@ async def export_data(
             "name": user.name,
             "username": user.username,
             "avatar": user.avatar,
+            "avatarPhoto": user.avatar_photo,
+            "bio": user.bio,
             "createdAt": user.created_at.isoformat(),
             "exportedAt": datetime.now(timezone.utc).isoformat(),
         },

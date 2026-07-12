@@ -6,12 +6,14 @@ import {
   social,
   type FriendsList,
   type PublicProfile,
+  type PublicProfileLite,
   type SearchResult,
 } from '../../lib/social'
+import Avatar from './Avatar'
 import { Card } from '../ui'
 
 interface Props {
-  onMessage: (userId: number, username: string, avatar: string, name: string) => void
+  onMessage: (user: PublicProfileLite) => void
 }
 
 export default function Friends({ onMessage }: Props) {
@@ -74,7 +76,7 @@ export default function Friends({ onMessage }: Props) {
           {results.map((r) => (
             <div key={r.userId} className="flex items-center gap-3 p-4">
               <button onClick={() => social.profile(r.username).then(setProfile)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-xl" aria-hidden>{r.avatar}</span>
+                <Avatar avatar={r.avatar} avatarPhoto={r.avatarPhoto} size={40} />
                 <div className="min-w-0">
                   <div className="truncate font-semibold">@{r.username}</div>
                   <div className="truncate text-xs text-muted">{r.name}</div>
@@ -99,7 +101,7 @@ export default function Friends({ onMessage }: Props) {
           <Card className="divide-y divide-line">
             {list.incoming.map((f) => (
               <div key={f.id} className="flex items-center gap-3 p-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-xl" aria-hidden>{f.user.avatar}</span>
+                <Avatar avatar={f.user.avatar} avatarPhoto={f.user.avatarPhoto} size={40} />
                 <div className="min-w-0 flex-1 truncate font-semibold">@{f.user.username}</div>
                 <button onClick={() => act(() => social.accept(f.id))} className="rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-white">
                   Aceitar
@@ -129,7 +131,7 @@ export default function Friends({ onMessage }: Props) {
               onClick={() => social.profile(f.user.username).then(setProfile)}
               className="flex w-full items-center gap-3 p-4 text-left"
             >
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-xl" aria-hidden>{f.user.avatar}</span>
+              <Avatar avatar={f.user.avatar} avatarPhoto={f.user.avatarPhoto} size={40} />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold">@{f.user.username}</div>
                 <div className="truncate text-xs text-muted">{f.user.name}</div>
@@ -146,7 +148,7 @@ export default function Friends({ onMessage }: Props) {
           <Card className="divide-y divide-line">
             {list.outgoing.map((f) => (
               <div key={f.id} className="flex items-center gap-3 p-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-xl" aria-hidden>{f.user.avatar}</span>
+                <Avatar avatar={f.user.avatar} avatarPhoto={f.user.avatarPhoto} size={40} />
                 <div className="min-w-0 flex-1 truncate font-semibold">@{f.user.username}</div>
                 <button onClick={() => act(() => social.declineOrCancel(f.id))} className="rounded-full bg-bg px-3 py-1.5 text-sm font-medium">
                   Cancelar
@@ -161,19 +163,18 @@ export default function Friends({ onMessage }: Props) {
       {profile && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={() => setProfile(null)}>
           <div
-            className="w-full rounded-t-3xl bg-bg p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+            className="sheet-panel w-full rounded-t-3xl bg-bg p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto max-w-md">
               <div className="flex items-center gap-4">
-                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-3xl" aria-hidden>
-                  {profile.avatar}
-                </span>
+                <Avatar avatar={profile.avatar} avatarPhoto={profile.avatarPhoto} size={64} />
                 <div>
                   <div className="text-xl font-bold">@{profile.username}</div>
                   <div className="text-sm text-muted">{profile.name}</div>
                 </div>
               </div>
+              {profile.bio && <p className="mt-3 text-sm text-ink-2">{profile.bio}</p>}
 
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <Card className="p-4 text-center">
@@ -191,7 +192,7 @@ export default function Friends({ onMessage }: Props) {
                   <>
                     <button
                       onClick={() => {
-                        onMessage(profile.userId, profile.username, profile.avatar, profile.name)
+                        onMessage(profile)
                         setProfile(null)
                       }}
                       className="rounded-full bg-accent px-6 py-3 font-semibold text-white"

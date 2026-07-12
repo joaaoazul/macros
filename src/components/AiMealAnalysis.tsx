@@ -26,7 +26,8 @@ export default function AiMealAnalysis({ meal, onAdd, onDone, onCancel }: Props)
   const [rows, setRows] = useState<ResultRow[]>([])
   const [notes, setNotes] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
 
   const hasKey = getAnthropicKey() !== null
 
@@ -113,10 +114,17 @@ export default function AiMealAnalysis({ meal, onAdd, onDone, onCancel }: Props)
       {step === 'input' && (
         <>
           <input
-            ref={fileRef}
+            ref={cameraRef}
             type="file"
             accept="image/*"
             capture="environment"
+            className="hidden"
+            onChange={(e) => pickPhoto(e.target.files?.[0])}
+          />
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
             className="hidden"
             onChange={(e) => pickPhoto(e.target.files?.[0])}
           />
@@ -136,13 +144,22 @@ export default function AiMealAnalysis({ meal, onAdd, onDone, onCancel }: Props)
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={!hasKey}
-              className="mt-4 rounded-xl border border-dashed border-line px-4 py-6 text-sm font-medium text-accent disabled:opacity-40"
-            >
-              📸 Tirar ou escolher foto da refeição
-            </button>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => cameraRef.current?.click()}
+                disabled={!hasKey}
+                className="rounded-xl border border-dashed border-line px-4 py-6 text-sm font-medium text-accent transition active:scale-[0.98] disabled:opacity-40"
+              >
+                📷 Câmara
+              </button>
+              <button
+                onClick={() => galleryRef.current?.click()}
+                disabled={!hasKey}
+                className="rounded-xl border border-dashed border-line px-4 py-6 text-sm font-medium text-accent transition active:scale-[0.98] disabled:opacity-40"
+              >
+                🖼️ Galeria
+              </button>
+            </div>
           )}
 
           <textarea

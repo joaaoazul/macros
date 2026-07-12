@@ -35,7 +35,7 @@ export default function MacrosDetail({ profile, setProfile, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-bg">
+    <div className="sheet-panel scroll-contain fixed inset-0 z-50 overflow-y-auto bg-bg">
       <div className="mx-auto max-w-md px-4 pb-10">
         <header className="pt-5">
           <button onClick={onClose} className="text-sm font-medium text-accent">

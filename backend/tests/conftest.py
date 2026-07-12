@@ -18,10 +18,12 @@ from app.data.models import (  # noqa: F401
     DbDiaryEntry,
     DbExercise,
     DbProfile,
+    DbRecipe,
     DbWater,
     DbWeight,
 )
 from app.messages.models import Message  # noqa: F401
+from app.push.models import DbPushSubscription  # noqa: F401
 from app.social.models import FeedEvent, Friendship, LeaderboardRank  # noqa: F401
 
 

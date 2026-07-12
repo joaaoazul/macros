@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     APP_URL: str = "https://macros.joaoazul.dev"
     EMAIL_TOKEN_EXPIRE_HOURS: int = 24
 
+    # Web Push (VAPID). Chaves vazias = push desativado (subscribe devolve 503, envio é no-op).
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = "mailto:joaoazul74@gmail.com"
+
     DEBUG: bool = False  # true enables /api/docs and /api/redoc
     LOG_LEVEL: str = "INFO"
 

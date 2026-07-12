@@ -9,7 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.data.models import DbCustomFood, DbDiaryEntry, DbExercise, DbProfile, DbWater, DbWeight
+from app.data.models import (
+    DbCustomFood,
+    DbDiaryEntry,
+    DbExercise,
+    DbProfile,
+    DbRecipe,
+    DbWater,
+    DbWeight,
+)
 from app.data.schemas import (
     AllData,
     DayUpsert,
@@ -18,6 +26,7 @@ from app.data.schemas import (
     Food,
     ImportPayload,
     Profile,
+    Recipe,
     Weight,
     WeightIn,
 )
@@ -74,6 +83,17 @@ def _food_out(f: DbCustomFood) -> Food:
     )
 
 
+def _recipe_row(user_id: int, r: Recipe) -> DbRecipe:
+    return DbRecipe(
+        user_id=user_id, recipe_id=r.id, name=r.name, emoji=r.emoji, auto=r.auto,
+        items=[i.model_dump() for i in r.items],
+    )
+
+
+def _recipe_out(r: DbRecipe) -> Recipe:
+    return Recipe(id=r.recipe_id, name=r.name, emoji=r.emoji, auto=r.auto, items=r.items)
+
+
 async def _load_all(db: AsyncSession, user_id: int) -> AllData:
     profile = (
         await db.execute(select(DbProfile).where(DbProfile.user_id == user_id))
@@ -97,12 +117,22 @@ async def _load_all(db: AsyncSession, user_id: int) -> AllData:
         for f in (await db.execute(select(DbCustomFood).where(DbCustomFood.user_id == user_id))).scalars()
     ]
 
+    recipes = [
+        _recipe_out(r)
+        for r in (
+            await db.execute(
+                select(DbRecipe).where(DbRecipe.user_id == user_id).order_by(DbRecipe.updated_at.desc())
+            )
+        ).scalars()
+    ]
+
     return AllData(
         profile=_profile_out(profile) if profile else None,
         diary=diary,
         water=water,
         exercise=exercise,
         customFoods=foods,
+        recipes=recipes,
     )
 
 
@@ -195,6 +225,20 @@ async def put_custom_foods(
     return body
 
 
+@router.put("/recipes", response_model=list[Recipe])
+async def put_recipes(
+    body: list[Recipe],
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[Recipe]:
+    if len(body) > 200:
+        raise ValidationError("Demasiadas combinações/receitas.")
+    await db.execute(delete(DbRecipe).where(DbRecipe.user_id == user.id))
+    for r in body:
+        db.add(_recipe_row(user.id, r))
+    return body
+
+
 @router.get("/weights", response_model=list[Weight])
 async def list_weights(
     db: AsyncSession = Depends(get_db),
@@ -261,6 +305,11 @@ async def import_data(
     for f in body.customFoods:
         if f.id not in existing_food_ids:
             db.add(_food_row(user.id, f))
+
+    existing_recipe_ids = {r.id for r in current.recipes}
+    for r in body.recipes:
+        if r.id not in existing_recipe_ids:
+            db.add(_recipe_row(user.id, r))
 
     await db.flush()
     return await _load_all(db, user.id)

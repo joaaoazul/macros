@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models_base import Base, TimestampMixin
@@ -17,6 +17,8 @@ class User(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(120), nullable=False, default="", server_default="")
     username: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True, index=True)
     avatar: Mapped[str] = mapped_column(String(16), nullable=False, default="🙂", server_default="🙂")
+    avatar_photo: Mapped[str | None] = mapped_column(Text, nullable=True)  # JPEG base64 ~256px
+    bio: Mapped[str | None] = mapped_column(String(300), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, server_default="true", nullable=False)
     email_verified: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     failed_login_attempts: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)

@@ -32,6 +32,7 @@ export default function App() {
     loading, migrationAvailable, importLocalData, dismissMigration,
     profile: rawProfile, setProfile, diary, setDiary,
     water, setWater, exercise, setExercise, customFoods, setCustomFoods,
+    recipes, setRecipes,
   } = data
 
   if (loading) {
@@ -67,6 +68,8 @@ export default function App() {
             setExercise={setExercise}
             customFoods={customFoods}
             setCustomFoods={setCustomFoods}
+            recipes={recipes}
+            setRecipes={setRecipes}
           />
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}

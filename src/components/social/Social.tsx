@@ -49,8 +49,8 @@ export default function Social({ socket }: { socket: SocialSocket }) {
     )
   }
 
-  const openChat = (userId: number, username: string, avatar: string, name: string) => {
-    setChatWith({ userId, username, avatar, name })
+  const openChat = (u: PublicProfileLite) => {
+    setChatWith(u)
   }
 
   return (

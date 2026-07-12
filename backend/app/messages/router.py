@@ -72,6 +72,14 @@ async def persist_and_push(
     await manager.send_to(recipient_id, payload)
     unread = await _unread_total(db, recipient_id)
     await manager.send_to(recipient_id, {"type": "unread", "total": unread})
+
+    # push só se o destinatário não estiver com um socket ativo (offline)
+    if not manager.is_online(recipient_id):
+        from app.push.service import send_push
+
+        sender_name = sender.name or (f"@{sender.username}" if sender.username else "Alguém")
+        preview = body if len(body) <= 120 else body[:117] + "…"
+        await send_push(db, recipient_id, sender_name, preview, url="/")
     return message
 
 
