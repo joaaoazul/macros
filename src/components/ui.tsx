@@ -81,6 +81,14 @@ export const IconPeople = () => (
   </svg>
 )
 
+export const IconRecipe = () => (
+  <svg {...iconProps} aria-hidden>
+    <path d="M6 3v7a3 3 0 0 0 6 0V3" />
+    <path d="M9 10v11" />
+    <path d="M17 3c-1.5 1-2.5 3-2.5 5.5S15.5 13 17 14v7" />
+  </svg>
+)
+
 export const IconPerson = () => (
   <svg {...iconProps} aria-hidden>
     <circle cx="12" cy="12" r="9" />

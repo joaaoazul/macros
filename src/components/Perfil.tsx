@@ -52,6 +52,9 @@ export default function Perfil({ profile, setProfile }: Props) {
       <LargeTitle title={profile.name} subtitle="Perfil" />
 
       <div className="space-y-3.5 px-4 pt-2">
+      {/* acesso SOC (só admins) */}
+      <AdminAccessCard />
+
       {/* perfil social */}
       <SocialProfileCard />
 
@@ -205,6 +208,26 @@ export default function Perfil({ profile, setProfile }: Props) {
         />
       )}
     </div>
+  )
+}
+
+/** Atalho para a consola SOC — visível apenas a administradores. */
+function AdminAccessCard() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  if (!user?.is_admin) return null
+  return (
+    <button
+      onClick={() => navigate('/admin')}
+      className="flex w-full items-center gap-4 rounded-card bg-[#111a23] p-4 text-left shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+    >
+      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[rgba(56,189,248,0.12)] text-xl" aria-hidden>🛡️</span>
+      <div className="flex-1">
+        <div className="text-xs font-semibold uppercase tracking-wide text-[#6a7b8b]">Segurança</div>
+        <div className="font-semibold text-[#cbd6e2]">Consola SOC</div>
+      </div>
+      <span className="text-[#6a7b8b]">›</span>
+    </button>
   )
 }
 

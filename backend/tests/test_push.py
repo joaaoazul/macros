@@ -17,6 +17,13 @@ SUB = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _allow_endpoints(monkeypatch):
+    # A validação anti-SSRF faz DNS real; nos testes unitários assumimos endpoint ok.
+    monkeypatch.setattr("app.push.router.safe_push_endpoint", lambda _e: True)
+    monkeypatch.setattr("app.push.service.safe_push_endpoint", lambda _e: True)
+
+
 @pytest.fixture()
 def _vapid(monkeypatch):
     monkeypatch.setattr(settings, "VAPID_PUBLIC_KEY", "pub-key")

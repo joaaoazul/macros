@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import get_db
 from app.push.models import DbPushSubscription
 from app.push.schemas import PushSubscriptionIn, PushUnsubscribeIn, VapidKeyOut
-from app.push.service import push_enabled
+from app.push.service import MAX_SUBSCRIPTIONS_PER_USER, push_enabled, safe_push_endpoint
 
 router = APIRouter(prefix="/api/v1/push", tags=["push"])
 
@@ -30,6 +30,8 @@ async def subscribe(
 ) -> None:
     if not push_enabled():
         raise HTTPException(status_code=503, detail="Notificações push não estão disponíveis.")
+    if not safe_push_endpoint(body.endpoint):
+        raise HTTPException(status_code=422, detail="Endpoint de push inválido.")
     existing = (
         await db.execute(
             select(DbPushSubscription).where(DbPushSubscription.endpoint == body.endpoint)
@@ -39,15 +41,26 @@ async def subscribe(
         existing.user_id = user.id
         existing.p256dh = body.keys.p256dh
         existing.auth = body.keys.auth
-    else:
-        db.add(
-            DbPushSubscription(
-                user_id=user.id,
-                endpoint=body.endpoint,
-                p256dh=body.keys.p256dh,
-                auth=body.keys.auth,
-            )
+        return
+
+    # cap por utilizador: remove as mais antigas para dar lugar à nova
+    rows = (
+        await db.execute(
+            select(DbPushSubscription)
+            .where(DbPushSubscription.user_id == user.id)
+            .order_by(DbPushSubscription.created_at.desc())
         )
+    ).scalars().all()
+    for old in rows[MAX_SUBSCRIPTIONS_PER_USER - 1 :]:
+        await db.delete(old)
+    db.add(
+        DbPushSubscription(
+            user_id=user.id,
+            endpoint=body.endpoint,
+            p256dh=body.keys.p256dh,
+            auth=body.keys.auth,
+        )
+    )
 
 
 @router.post("/unsubscribe", status_code=204)

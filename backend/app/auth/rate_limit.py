@@ -6,6 +6,8 @@ from typing import ClassVar
 
 from fastapi import HTTPException, Request
 
+from app.net import client_ip
+
 
 class _RateLimiter:
     _buckets: ClassVar[dict[str, list[float]]] = defaultdict(list)
@@ -16,7 +18,7 @@ class _RateLimiter:
         self.window = window_seconds
 
     def __call__(self, request: Request) -> None:
-        ip = request.client.host if request.client else "unknown"
+        ip = client_ip(request) or "unknown"
         key = f"{self.name}:{ip}"
         now = time.monotonic()
         cutoff = now - self.window

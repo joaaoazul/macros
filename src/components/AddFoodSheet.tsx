@@ -41,6 +41,13 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
 
   const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
   const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
+  const recipeResults = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return recipes
+    return recipes.filter((r) =>
+      ((r.name ?? '') + ' ' + r.items.map((i) => i.foodName).join(' ')).toLowerCase().includes(q),
+    )
+  }, [recipes, query])
 
   // pesquisa no Open Food Facts com debounce; aborta a anterior
   useEffect(() => {
@@ -153,11 +160,11 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
             </div>
 
             <div className="scroll-contain mt-3 flex-1 overflow-y-auto px-5 pb-5">
-              {query.trim().length === 0 && recipes.length > 0 && (
+              {recipeResults.length > 0 && (
                 <>
                   <SectionLabel>Combinações e receitas</SectionLabel>
                   <ul>
-                    {recipes.map((r) => (
+                    {recipeResults.map((r) => (
                       <RecipeRow key={r.id} recipe={r} onLog={() => logItems(r.items)} />
                     ))}
                   </ul>

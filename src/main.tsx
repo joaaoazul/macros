@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
@@ -6,6 +6,8 @@ import App from './App.tsx'
 import { AuthProvider, useAuth } from './lib/auth'
 import { registerServiceWorker } from './lib/push'
 import Landing from './pages/Landing'
+
+const AdminConsole = lazy(() => import('./pages/admin/AdminConsole'))
 import Login from './pages/Login'
 import Privacidade from './pages/Privacidade'
 import RecuperarPassword from './pages/RecuperarPassword'
@@ -24,6 +26,20 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     )
   }
   if (!user) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[#0a0e13] text-[#6a7b8b]">
+        <span className="animate-pulse" style={{ fontFamily: 'monospace' }}>carregando SOC…</span>
+      </div>
+    )
+  }
+  if (!user) return <Navigate to="/login" replace />
+  if (!user.is_admin) return <Navigate to="/app" replace />
   return <>{children}</>
 }
 
@@ -48,6 +64,16 @@ createRoot(document.getElementById('root')!).render(
               <RequireAuth>
                 <App />
               </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireAdmin>
+                <Suspense fallback={<div className="min-h-dvh bg-[#0a0e13]" />}>
+                  <AdminConsole />
+                </Suspense>
+              </RequireAdmin>
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />

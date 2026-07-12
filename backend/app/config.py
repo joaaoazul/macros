@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     VAPID_PRIVATE_KEY: str = ""
     VAPID_SUBJECT: str = "mailto:joaoazul74@gmail.com"
 
+    # Alertas SOC via ntfy. Vazio = alertas desativados.
+    ALERT_NTFY_URL: str = ""
+
     DEBUG: bool = False  # true enables /api/docs and /api/redoc
     LOG_LEVEL: str = "INFO"
 

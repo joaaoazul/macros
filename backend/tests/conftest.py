@@ -1,5 +1,12 @@
 """Test fixtures: in-memory SQLite + httpx async client with cookie support."""
 
+import os
+
+# Ambiente de teste ANTES de instanciar Settings: cookies não-secure (dev/test) e
+# JWT_SECRET próprio, para não disparar o guard de produção em app.main.
+os.environ.setdefault("COOKIE_SECURE", "false")
+os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production")
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -22,6 +29,7 @@ from app.data.models import (  # noqa: F401
     DbWater,
     DbWeight,
 )
+from app.admin.models import IpBlocklist  # noqa: F401
 from app.messages.models import Message  # noqa: F401
 from app.push.models import DbPushSubscription  # noqa: F401
 from app.social.models import FeedEvent, Friendship, LeaderboardRank  # noqa: F401

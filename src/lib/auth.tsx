@@ -8,6 +8,7 @@ export interface AuthUser {
   email: string
   name: string
   email_verified: boolean
+  is_admin?: boolean
 }
 
 interface AuthContextValue {

@@ -36,16 +36,9 @@ from app.config import settings
 from app.database import get_db
 from app.email.service import email_enabled, send_reset_email, send_verification_email
 from app.exceptions import ConflictError, UnauthorizedError, ValidationError
+from app.net import client_ip as _client_ip  # IP fiável via X-Real-IP (não spoofável)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
-
-
-def _client_ip(request: Request) -> str:
-    # Trust X-Forwarded-For only from our own nginx (single trusted hop)
-    fwd = request.headers.get("X-Forwarded-For", "")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else ""
 
 
 def _issue_session(response: Response, user: User) -> None:
@@ -131,10 +124,13 @@ async def login(
     result = await db.execute(select(User).where(User.email == email, User.is_active.is_(True)))
     user = result.scalar_one_or_none()
     ip = _client_ip(request)
+    ua = request.headers.get("User-Agent", "")
 
     invalid = UnauthorizedError("Email ou password inválidos.")
     if not user:
-        await write_audit_log(db, "login_failed", detail=f"unknown email {email}", ip=ip)
+        await write_audit_log(
+            db, "login_failed", detail=f"unknown email {email}", ip=ip, severity="warning", user_agent=ua
+        )
         await db.commit()  # persist despite the exception rollback in get_db
         raise invalid
 
@@ -144,7 +140,7 @@ async def login(
             user.locked_until if user.locked_until.tzinfo else user.locked_until.replace(tzinfo=timezone.utc)
         )
         if locked_until > now:
-            await write_audit_log(db, "login_locked", user_id=user.id, ip=ip)
+            await write_audit_log(db, "login_locked", user_id=user.id, ip=ip, severity="warning", user_agent=ua)
             await db.commit()
             raise UnauthorizedError("Conta temporariamente bloqueada. Tenta novamente mais tarde.")
 
@@ -153,15 +149,19 @@ async def login(
         if user.failed_login_attempts >= settings.MAX_LOGIN_ATTEMPTS:
             user.locked_until = now + timedelta(minutes=settings.LOCKOUT_MINUTES)
             user.failed_login_attempts = 0
-            await write_audit_log(db, "lockout", user_id=user.id, ip=ip)
+            await write_audit_log(db, "lockout", user_id=user.id, ip=ip, severity="critical", user_agent=ua)
         else:
-            await write_audit_log(db, "login_failed", user_id=user.id, ip=ip)
+            await write_audit_log(db, "login_failed", user_id=user.id, ip=ip, severity="warning", user_agent=ua)
         await db.commit()  # persist attempt counter despite the exception rollback
         raise invalid
 
     user.failed_login_attempts = 0
     user.locked_until = None
-    await write_audit_log(db, "login", user_id=user.id, ip=ip)
+    severity = "warning" if user.is_admin else "info"
+    action = "admin_login" if user.is_admin else "login"
+    await write_audit_log(db, action, user_id=user.id, ip=ip, severity=severity, user_agent=ua)
+    if user.is_admin:
+        await write_audit_log(db, "login", user_id=user.id, ip=ip, user_agent=ua)  # conta p/ dashboard
     _issue_session(response, user)
     return user
 
@@ -192,7 +192,9 @@ async def refresh(
         await db.execute(
             update(User).where(User.id == user_id).values(sessions_invalidated_at=datetime.now(timezone.utc))
         )
-        await write_audit_log(db, "refresh_reuse_detected", user_id=user_id, ip=_client_ip(request))
+        await write_audit_log(
+            db, "refresh_reuse_detected", user_id=user_id, ip=_client_ip(request), severity="critical"
+        )
         raise UnauthorizedError("Refresh token has been revoked")
 
     result = await db.execute(select(User).where(User.id == user_id, User.is_active.is_(True)))

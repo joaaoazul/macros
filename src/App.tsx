@@ -1,6 +1,9 @@
 import { useState } from 'react'
+import type { MealId, RecipeItem } from './types'
 import { withWaterTarget } from './lib/calc'
 import { api, ApiError } from './lib/api'
+import { entryFromRecipeItem } from './lib/recipes'
+import { todayISO } from './lib/store'
 import { useAuth } from './lib/auth'
 import { useSyncedData } from './lib/sync'
 import { useSocialSocket } from './lib/ws'
@@ -8,16 +11,18 @@ import Onboarding from './components/Onboarding'
 import Diario from './components/Diario'
 import Metas from './components/Metas'
 import Progresso from './components/Progresso'
+import Receitas from './components/Receitas'
 import Perfil from './components/Perfil'
 import Social from './components/social/Social'
-import { IconBook, IconChart, IconPeople, IconPerson, IconTarget } from './components/ui'
+import { IconBook, IconChart, IconPeople, IconPerson, IconRecipe, IconTarget } from './components/ui'
 
-type Tab = 'diario' | 'metas' | 'progresso' | 'social' | 'perfil'
+type Tab = 'diario' | 'metas' | 'progresso' | 'receitas' | 'social' | 'perfil'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'diario', label: 'Diário', icon: <IconBook /> },
   { id: 'metas', label: 'Metas', icon: <IconTarget /> },
   { id: 'progresso', label: 'Progresso', icon: <IconChart /> },
+  { id: 'receitas', label: 'Receitas', icon: <IconRecipe /> },
   { id: 'social', label: 'Social', icon: <IconPeople /> },
   { id: 'perfil', label: 'Perfil', icon: <IconPerson /> },
 ]
@@ -34,6 +39,14 @@ export default function App() {
     water, setWater, exercise, setExercise, customFoods, setCustomFoods,
     recipes, setRecipes,
   } = data
+
+  /** Regista os itens de uma receita na refeição escolhida, no dia de hoje. */
+  const logRecipeToday = (items: RecipeItem[], meal: MealId) => {
+    const today = todayISO()
+    const entries = items.map((i) => entryFromRecipeItem(i, meal))
+    setDiary((d) => ({ ...d, [today]: [...(d[today] ?? []), ...entries] }))
+    setTab('diario')
+  }
 
   if (loading) {
     return (
@@ -74,6 +87,14 @@ export default function App() {
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}
         {tab === 'progresso' && <Progresso profile={profile} diary={diary} water={water} exercise={exercise} />}
+        {tab === 'receitas' && (
+          <Receitas
+            recipes={recipes}
+            setRecipes={setRecipes}
+            customFoods={customFoods}
+            onLog={logRecipeToday}
+          />
+        )}
         {tab === 'social' && <Social socket={socket} />}
         {tab === 'perfil' && <Perfil profile={profile} setProfile={setProfile} />}
       </div>

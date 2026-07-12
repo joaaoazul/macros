@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.admin.router import router as admin_router
 from app.ai.router import router as ai_router
 from app.auth.router import router as auth_router
 from app.config import settings
@@ -17,6 +18,13 @@ from app.push.router import router as push_router
 from app.social.router import router as social_router
 
 logging.basicConfig(level=settings.LOG_LEVEL)
+
+# Fail-fast: recusa arrancar em produção (cookies seguros) com o JWT_SECRET default.
+_DEFAULT_JWT_SECRET = "macros-super-secret-key-change-in-production"
+if settings.COOKIE_SECURE and settings.JWT_SECRET == _DEFAULT_JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET está no valor default em produção — define JWT_SECRET no ambiente."
+    )
 
 app = FastAPI(
     title="Macros API",
@@ -34,6 +42,30 @@ app.add_middleware(
 )
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def ip_blocklist_guard(request: Request, call_next):
+    """Rejeita (403) IPs na blocklist. Check O(1) em set in-memory."""
+    if request.url.path.startswith("/api/"):
+        from app.admin.service import is_blocked
+        from app.net import client_ip
+
+        if is_blocked(client_ip(request)):
+            return JSONResponse({"detail": "IP bloqueado."}, status_code=403)
+    return await call_next(request)
+
+
+@app.on_event("startup")
+async def _load_blocklist_on_startup() -> None:
+    from app.admin.service import load_blocklist
+    from app.database import async_session_factory
+
+    try:
+        async with async_session_factory() as db:
+            await load_blocklist(db)
+    except Exception:
+        logging.getLogger(__name__).warning("não foi possível carregar a blocklist", exc_info=True)
 
 
 @app.middleware("http")
@@ -60,6 +92,7 @@ app.include_router(social_router)
 app.include_router(messages_router)
 app.include_router(ws_router)
 app.include_router(push_router)
+app.include_router(admin_router)
 
 
 @app.get("/api/health")

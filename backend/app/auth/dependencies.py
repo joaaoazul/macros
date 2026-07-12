@@ -65,3 +65,27 @@ async def get_current_user(
     if not token:
         raise UnauthorizedError("Not authenticated")
     return await resolve_user_from_token(token, db)
+
+
+async def require_admin(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Exige um utilizador com is_admin; audita cada acesso admin."""
+    from app.audit import write_audit_log
+    from app.exceptions import ForbiddenError
+    from app.net import client_ip
+
+    if not user.is_admin:
+        await write_audit_log(
+            db,
+            "admin_access_denied",
+            user_id=user.id,
+            detail=f"{request.method} {request.url.path}",
+            ip=client_ip(request),
+            severity="warning",
+            user_agent=request.headers.get("User-Agent", ""),
+        )
+        raise ForbiddenError("Acesso restrito a administradores.")
+    return user

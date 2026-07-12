@@ -92,18 +92,18 @@ class AllData(BaseModel):
 class DayUpsert(BaseModel):
     """Replace-the-day payload; only provided fields are touched."""
 
-    entries: list[Entry] | None = None
+    entries: list[Entry] | None = Field(default=None, max_length=200)
     waterMl: int | None = Field(default=None, ge=0, le=100000)
-    exercises: list[Exercise] | None = None
+    exercises: list[Exercise] | None = Field(default=None, max_length=100)
 
 
 class ImportPayload(BaseModel):
     profile: Profile | None = None
-    diary: dict[str, list[Entry]] = {}
-    water: dict[str, int] = {}
-    exercise: dict[str, list[Exercise]] = {}
-    customFoods: list[Food] = []
-    recipes: list[Recipe] = []
+    diary: dict[str, list[Entry]] = Field(default={}, max_length=1000)
+    water: dict[str, int] = Field(default={}, max_length=1000)
+    exercise: dict[str, list[Exercise]] = Field(default={}, max_length=1000)
+    customFoods: list[Food] = Field(default=[], max_length=2000)
+    recipes: list[Recipe] = Field(default=[], max_length=200)
 
 
 # ImportPayload é a AllData mais tolerante (tudo opcional) — recipes já incluído acima.
