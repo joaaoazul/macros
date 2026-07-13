@@ -102,6 +102,29 @@ async def test_invalid_date_rejected(client):
     assert resp.status_code == 422
 
 
+async def test_duplicate_entry_ids_are_deduped_not_500(client):
+    """Um payload com ids repetidos (replay/glitch) não deve rebentar com 500."""
+    await register_user(client)
+    dup = {**ENTRY, "foodName": "Arroz (edição nova)", "kcal": 250}
+    resp = await client.put("/api/v1/days/2026-07-11", json={"entries": [ENTRY, dup]})
+    assert resp.status_code == 200, resp.text
+
+    data = (await client.get("/api/v1/data/all")).json()
+    day = data["diary"]["2026-07-11"]
+    assert len(day) == 1  # deduplicado por id
+    assert day[0]["kcal"] == 250  # última ocorrência ganha
+
+
+async def test_duplicate_custom_food_ids_are_deduped_not_500(client):
+    await register_user(client)
+    dup = {**FOOD, "name": "Batido v2", "kcal": 200}
+    resp = await client.put("/api/v1/custom-foods", json=[FOOD, dup])
+    assert resp.status_code == 200, resp.text
+    data = (await client.get("/api/v1/data/all")).json()
+    assert len(data["customFoods"]) == 1
+    assert data["customFoods"][0]["name"] == "Batido v2"
+
+
 async def test_custom_foods_replace_all(client):
     await register_user(client)
     await client.put("/api/v1/custom-foods", json=[FOOD])

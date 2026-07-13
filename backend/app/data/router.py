@@ -43,6 +43,16 @@ def _parse_date(iso: str) -> date_type:
         raise ValidationError(f"Data inválida: {iso}")
 
 
+def _dedupe(items: list, key) -> list:
+    """Remove duplicados por id do cliente (última ocorrência ganha, ordem preservada).
+
+    Impede que um payload com ids repetidos (replay/glitch do cliente) viole a
+    UniqueConstraint no commit e rebente com um 500 cru.
+    """
+    by_id = {key(i): i for i in items}
+    return list(by_id.values())
+
+
 def _profile_out(p: DbProfile) -> Profile:
     return Profile(
         name=p.name, sex=p.sex, age=p.age, heightCm=p.height_cm, weightKg=p.weight_kg,
@@ -191,7 +201,7 @@ async def put_day(
         await db.execute(
             delete(DbDiaryEntry).where(DbDiaryEntry.user_id == user.id, DbDiaryEntry.date == day)
         )
-        for e in body.entries:
+        for e in _dedupe(body.entries, lambda e: e.id):
             db.add(_entry_row(user.id, day, e))
 
     if body.waterMl is not None:
@@ -203,7 +213,7 @@ async def put_day(
         await db.execute(
             delete(DbExercise).where(DbExercise.user_id == user.id, DbExercise.date == day)
         )
-        for x in body.exercises:
+        for x in _dedupe(body.exercises, lambda x: x.id):
             db.add(_exercise_row(user.id, day, x))
 
     await db.flush()
@@ -224,7 +234,7 @@ async def put_custom_foods(
     if len(body) > 2000:
         raise ValidationError("Demasiados alimentos personalizados.")
     await db.execute(delete(DbCustomFood).where(DbCustomFood.user_id == user.id))
-    for f in body:
+    for f in _dedupe(body, lambda f: f.id):
         db.add(_food_row(user.id, f))
     return body
 
@@ -238,7 +248,7 @@ async def put_recipes(
     if len(body) > 200:
         raise ValidationError("Demasiadas combinações/receitas.")
     await db.execute(delete(DbRecipe).where(DbRecipe.user_id == user.id))
-    for r in body:
+    for r in _dedupe(body, lambda r: r.id):
         db.add(_recipe_row(user.id, r))
     return body
 
@@ -289,29 +299,37 @@ async def import_data(
     if body.profile and current.profile is None:
         await put_profile(body.profile, db, user)
 
+    # ids já usados globalmente — evita violar a UniqueConstraint (user_id, *_id)
+    # com um export corrompido que repita ids dentro/entre dias.
+    seen_entry_ids: set[str] = set()
     for iso, entries in body.diary.items():
         if iso not in current.diary and entries:
             day = _parse_date(iso)
             for e in entries:
-                db.add(_entry_row(user.id, day, e))
+                if e.id not in seen_entry_ids:
+                    seen_entry_ids.add(e.id)
+                    db.add(_entry_row(user.id, day, e))
 
     for iso, ml in body.water.items():
         if iso not in current.water and ml > 0:
             db.add(DbWater(user_id=user.id, date=_parse_date(iso), ml=ml))
 
+    seen_exercise_ids: set[str] = set()
     for iso, exercises in body.exercise.items():
         if iso not in current.exercise and exercises:
             day = _parse_date(iso)
             for x in exercises:
-                db.add(_exercise_row(user.id, day, x))
+                if x.id not in seen_exercise_ids:
+                    seen_exercise_ids.add(x.id)
+                    db.add(_exercise_row(user.id, day, x))
 
     existing_food_ids = {f.id for f in current.customFoods}
-    for f in body.customFoods:
+    for f in _dedupe(body.customFoods, lambda f: f.id):
         if f.id not in existing_food_ids:
             db.add(_food_row(user.id, f))
 
     existing_recipe_ids = {r.id for r in current.recipes}
-    for r in body.recipes:
+    for r in _dedupe(body.recipes, lambda r: r.id):
         if r.id not in existing_recipe_ids:
             db.add(_recipe_row(user.id, r))
 
