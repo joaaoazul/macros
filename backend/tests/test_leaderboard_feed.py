@@ -4,6 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
+import app.social.router as social_router
 import app.social.service as social_service
 from tests.conftest import register_user
 from tests.test_social import make_social_user
@@ -41,7 +42,10 @@ def entry(entry_id: str, kcal: float) -> dict:
 
 @pytest.fixture(autouse=True)
 def freeze_today(monkeypatch):
+    # O router importa lisbon_today para o seu próprio namespace, por iso é preciso
+    # congelar em ambos os módulos senão a rota /leaderboard usa a data real.
     monkeypatch.setattr(social_service, "lisbon_today", lambda: TODAY)
+    monkeypatch.setattr(social_router, "lisbon_today", lambda: TODAY)
 
 
 async def seed_day(client, iso: str, kcal: float, water: int = 0, exercise_kcal: float = 0):
