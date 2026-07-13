@@ -142,3 +142,57 @@ async def test_giant_image_rejected(client):
         json={"imageBase64": "a" * 6_000_001, "apiKey": FAKE_KEY},
     )
     assert resp.status_code == 422
+
+
+# --- food-tips ---------------------------------------------------------------
+
+TIPS_JSON = {
+    "summary": "Rico em proteína e pobre em gordura.",
+    "uses": ["Grelhado com salada", "Em wraps"],
+    "pairs_with": ["arroz", "brócolos"],
+}
+
+TIPS_BODY = {
+    "name": "Peito de frango",
+    "kcal": 165,
+    "protein": 31,
+    "carbs": 0,
+    "fat": 3.6,
+    "unit": "g",
+    "apiKey": FAKE_KEY,
+}
+
+
+async def test_food_tips_requires_auth(client):
+    resp = await client.post("/api/v1/ai/food-tips", json=TIPS_BODY)
+    assert resp.status_code == 401
+
+
+async def test_food_tips_happy_path(client):
+    await register_user(client)
+    fake = _fake_client(create_return=_fake_response(json.dumps(TIPS_JSON)))
+    with patch("app.ai.router.anthropic.AsyncAnthropic", return_value=fake) as ctor:
+        resp = await client.post("/api/v1/ai/food-tips", json=TIPS_BODY)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["summary"].startswith("Rico")
+    assert body["uses"] and body["pairs_with"]
+    assert ctor.call_args.kwargs["api_key"] == FAKE_KEY
+    fake.close.assert_awaited()
+
+
+async def test_food_tips_invalid_key_maps_to_401(client):
+    await register_user(client)
+    fake = _fake_client(create_side_effect=_api_error(anthropic.AuthenticationError, 401))
+    with patch("app.ai.router.anthropic.AsyncAnthropic", return_value=fake):
+        resp = await client.post("/api/v1/ai/food-tips", json=TIPS_BODY)
+    assert resp.status_code == 401
+    assert "Anthropic" in resp.json()["detail"]
+
+
+async def test_food_tips_bad_json_maps_to_502(client):
+    await register_user(client)
+    fake = _fake_client(create_return=_fake_response("não é json"))
+    with patch("app.ai.router.anthropic.AsyncAnthropic", return_value=fake):
+        resp = await client.post("/api/v1/ai/food-tips", json=TIPS_BODY)
+    assert resp.status_code == 502

@@ -110,3 +110,8 @@ class DbCustomFood(Base):
     fat: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(2), nullable=False)
     brand: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fiber: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sugar: Mapped[float | None] = mapped_column(Float, nullable=True)
+    saturates: Mapped[float | None] = mapped_column(Float, nullable=True)
+    salt: Mapped[float | None] = mapped_column(Float, nullable=True)
+    portions: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{label,grams}]

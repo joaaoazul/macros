@@ -41,6 +41,26 @@ export async function analyzeMeal(input: { description?: string; imageBase64?: s
   })
 }
 
+export interface FoodTips {
+  summary: string
+  uses: string[]
+  pairs_with: string[]
+}
+
+export async function foodTips(input: {
+  name: string
+  brand?: string
+  kcal: number
+  protein: number
+  carbs: number
+  fat: number
+  unit: 'g' | 'ml'
+}): Promise<FoodTips> {
+  const apiKey = getAnthropicKey()
+  if (!apiKey) throw new Error('Configura a tua chave Anthropic no Perfil para veres sugestões.')
+  return api<FoodTips>('/ai/food-tips', { method: 'POST', body: { ...input, apiKey } })
+}
+
 /** Reduz a foto para ≤maxPx JPEG 0.8 (corrige orientação EXIF via createImageBitmap). */
 export async function downscaleImage(file: File, maxPx = 1024): Promise<string> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })

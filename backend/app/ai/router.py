@@ -11,7 +11,12 @@ from typing import ClassVar
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.ai.schemas import AnalyzeMealRequest, AnalyzeMealResponse
+from app.ai.schemas import (
+    AnalyzeMealRequest,
+    AnalyzeMealResponse,
+    FoodTipsRequest,
+    FoodTipsResponse,
+)
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 
@@ -137,3 +142,68 @@ async def analyze_meal(
     except ValueError:
         raise HTTPException(status_code=502, detail="A análise devolveu um formato inesperado.")
     return AnalyzeMealResponse(**data)
+
+
+TIPS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "uses": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+        "pairs_with": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
+    },
+    "required": ["summary", "uses", "pairs_with"],
+    "additionalProperties": False,
+}
+
+TIPS_SYSTEM_PROMPT = (
+    "És um nutricionista prático português. Dado um alimento e as suas macros por 100 g/ml, "
+    "escreve: 'summary' (1 frase sobre o perfil nutricional e para que serve), "
+    "'uses' (3 a 5 ideias curtas e concretas de como usar o alimento no dia-a-dia em Portugal), "
+    "e 'pairs_with' (3 a 6 alimentos que combinam bem). Português de Portugal, tom simples e útil, "
+    "frases curtas. Não inventes valores nutricionais."
+)
+
+
+@router.post("/food-tips", response_model=FoodTipsResponse)
+async def food_tips(
+    body: FoodTipsRequest,
+    user: User = Depends(get_current_user),
+) -> FoodTipsResponse:
+    ai_rate_limit.check(user.id)
+
+    name = f"{body.name}" + (f" ({body.brand})" if body.brand else "")
+    prompt = (
+        f"Alimento: {name}\n"
+        f"Por 100 {body.unit}: {body.kcal:.0f} kcal, {body.protein:.1f} g proteína, "
+        f"{body.carbs:.1f} g hidratos, {body.fat:.1f} g gordura.\n"
+        "Dá sugestões de utilização."
+    )
+
+    client = anthropic.AsyncAnthropic(api_key=body.apiKey, timeout=TIMEOUT_SECONDS, max_retries=0)
+    try:
+        response = await client.messages.create(
+            model=MODEL,
+            max_tokens=1000,
+            system=TIPS_SYSTEM_PROMPT,
+            output_config={"format": {"type": "json_schema", "schema": TIPS_SCHEMA}},
+            messages=[{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+        )
+    except anthropic.AuthenticationError:
+        raise HTTPException(status_code=401, detail="Chave Anthropic inválida.")
+    except anthropic.RateLimitError:
+        raise HTTPException(
+            status_code=429, detail="Limite da Anthropic atingido. Tenta daqui a pouco."
+        )
+    except (anthropic.APIStatusError, anthropic.APIConnectionError):
+        raise HTTPException(status_code=502, detail="Não foi possível obter sugestões. Tenta novamente.")
+    finally:
+        await client.close()
+
+    text = next((b.text for b in response.content if b.type == "text"), None)
+    if not text:
+        raise HTTPException(status_code=502, detail="Sem sugestões.")
+    try:
+        data = json.loads(text)
+    except ValueError:
+        raise HTTPException(status_code=502, detail="Formato inesperado.")
+    return FoodTipsResponse(**data)

@@ -21,7 +21,13 @@ export interface Profile {
   targets: Targets
 }
 
-/** Valores nutricionais por 100 g / 100 ml. */
+/** Uma medida caseira do alimento: 1 <label> equivale a <grams> g/ml. */
+export interface Portion {
+  label: string // "fatia", "copo", "unidade", "colher de sopa"…
+  grams: number // quantidade em g/ml de UMA unidade desta medida
+}
+
+/** Valores nutricionais por 100 g / 100 ml. Micros e porções são opcionais. */
 export interface Food {
   id: string
   name: string
@@ -33,6 +39,13 @@ export interface Food {
   unit: 'g' | 'ml'
   custom?: boolean
   brand?: string
+  // Micronutrientes por 100 g/ml (para o cartão do alimento); opcionais.
+  fiber?: number
+  sugar?: number
+  saturates?: number
+  salt?: number
+  // Medidas caseiras alternativas à pesagem (copos, fatias, unidades…).
+  portions?: Portion[]
 }
 
 export interface Entry {

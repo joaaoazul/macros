@@ -35,3 +35,20 @@ class AnalyzedFood(BaseModel):
 class AnalyzeMealResponse(BaseModel):
     foods: list[AnalyzedFood]
     notes: str | None = None
+
+
+class FoodTipsRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    brand: str | None = Field(default=None, max_length=255)
+    kcal: float = Field(ge=0, le=10000)
+    protein: float = Field(ge=0, le=1000)
+    carbs: float = Field(ge=0, le=1000)
+    fat: float = Field(ge=0, le=1000)
+    unit: str = Field(default="g", max_length=2)
+    apiKey: str = Field(min_length=20, max_length=512, repr=False)
+
+
+class FoodTipsResponse(BaseModel):
+    summary: str  # frase curta sobre o perfil nutricional
+    uses: list[str]  # 3-5 ideias de como usar/combinar
+    pairs_with: list[str]  # alimentos que combinam bem

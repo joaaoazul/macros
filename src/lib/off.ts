@@ -6,7 +6,8 @@ import type { Food } from '../types'
  * https://openfoodfacts.github.io/openfoodfacts-server/api/
  */
 const OFF_BASE = 'https://pt.openfoodfacts.org'
-const FIELDS = 'code,product_name,product_name_pt,generic_name,generic_name_pt,brands,nutriments'
+const FIELDS =
+  'code,product_name,product_name_pt,generic_name,generic_name_pt,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size'
 
 interface OffProduct {
   code: string
@@ -16,6 +17,9 @@ interface OffProduct {
   generic_name_pt?: string
   brands?: string
   nutriments?: Record<string, number | string>
+  serving_quantity?: number | string
+  serving_quantity_unit?: string
+  serving_size?: string
 }
 
 function toFood(p: OffProduct): Food | null {
@@ -38,16 +42,37 @@ function toFood(p: OffProduct): Food | null {
   ).trim()
   if (!name || !Number.isFinite(kcal)) return null
 
+  // Líquidos: se a dose vier em ml (ou o nome sugerir bebida) tratamos em ml.
+  const servingUnit = String(p.serving_quantity_unit ?? '').toLowerCase()
+  const unit: 'g' | 'ml' = servingUnit === 'ml' || servingUnit === 'cl' || servingUnit === 'l' ? 'ml' : 'g'
+
+  // Porção "1 dose" a partir do serving declarado (ex.: 1 dose = 30 g).
+  const servingQ = Number(p.serving_quantity)
+  const portions =
+    Number.isFinite(servingQ) && servingQ > 0 && servingQ !== 100
+      ? [{ label: 'dose', grams: Math.round(servingQ) }]
+      : undefined
+
+  const micro = (k: string) => {
+    const v = num(k)
+    return Number.isFinite(v) ? round1(v) : undefined
+  }
+
   return {
     id: `off-${p.code}`,
     name,
     brand: p.brands?.split(',')[0]?.trim() || undefined,
-    emoji: '🛒',
+    emoji: unit === 'ml' ? '🥤' : '🛒',
     kcal: Math.round(kcal),
     protein: round1(num('proteins_100g')),
     carbs: round1(num('carbohydrates_100g')),
     fat: round1(num('fat_100g')),
-    unit: 'g',
+    unit,
+    fiber: micro('fiber_100g'),
+    sugar: micro('sugars_100g'),
+    saturates: micro('saturated-fat_100g'),
+    salt: micro('salt_100g'),
+    portions,
   }
 }
 

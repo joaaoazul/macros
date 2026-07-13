@@ -46,6 +46,11 @@ class Exercise(BaseModel):
     kcal: float = Field(ge=0, le=100000)
 
 
+class Portion(BaseModel):
+    label: str = Field(max_length=40)
+    grams: float = Field(gt=0, le=100000)
+
+
 class Food(BaseModel):
     id: str = Field(max_length=40)
     name: str = Field(max_length=255)
@@ -57,6 +62,11 @@ class Food(BaseModel):
     unit: Unit
     custom: bool | None = None
     brand: str | None = Field(default=None, max_length=255)
+    fiber: float | None = Field(default=None, ge=0, le=1000)
+    sugar: float | None = Field(default=None, ge=0, le=1000)
+    saturates: float | None = Field(default=None, ge=0, le=1000)
+    salt: float | None = Field(default=None, ge=0, le=1000)
+    portions: list[Portion] | None = Field(default=None, max_length=12)
 
 
 class RecipeItem(BaseModel):

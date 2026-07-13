@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import type { Entry, Food, MealId, Recipe, RecipeItem } from '../types'
+import type { Entry, Food, MealId, Portion, Recipe, RecipeItem } from '../types'
 import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
@@ -14,6 +14,7 @@ import { uid } from '../lib/store'
 
 const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
 const AiMealAnalysis = lazy(() => import('./AiMealAnalysis'))
+const FoodCard = lazy(() => import('./FoodCard'))
 
 interface Props {
   meal: MealId
@@ -26,18 +27,22 @@ interface Props {
 }
 
 type OffState = { status: 'idle' | 'loading' | 'done' | 'error'; results: Food[] }
+type QtyMode = 'unit' | 'portion'
 
 export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, onAdd, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
-  const [grams, setGrams] = useState('100')
+  const [qty, setQty] = useState('100')
+  const [mode, setMode] = useState<QtyMode>('unit')
+  const [portionIdx, setPortionIdx] = useState(0)
   const [creating, setCreating] = useState(false)
   const [off, setOff] = useState<OffState>({ status: 'idle', results: [] })
   const [scanning, setScanning] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [cameraMenu, setCameraMenu] = useState(false)
-  const [combo, setCombo] = useState<RecipeItem[]>([])
+  const [cart, setCart] = useState<RecipeItem[]>([])
   const [naming, setNaming] = useState(false)
+  const [detail, setDetail] = useState<Food | null>(null)
 
   const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
   const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
@@ -62,7 +67,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
       try {
         const results = await searchOpenFoodFacts(q, controller.signal)
         setOff({ status: 'done', results })
-      } catch (err) {
+      } catch {
         if (!controller.signal.aborted) setOff({ status: 'error', results: [] })
       }
     }, 450)
@@ -72,15 +77,19 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
     }
   }, [query])
 
-  const gramsN = Number(grams)
-  const factor = gramsN > 0 ? gramsN / 100 : 0
+  const portions: Portion[] = selected?.portions ?? []
+  const currentPortion = portions[portionIdx]
+  const qtyN = Number(qty)
+  // gramas/ml efetivos: em modo porção multiplicamos pela medida caseira.
+  const effGrams = mode === 'portion' && currentPortion ? qtyN * currentPortion.grams : qtyN
+  const factor = effGrams > 0 ? effGrams / 100 : 0
 
   const selectedAsItem = (): RecipeItem | null => {
     if (!selected || factor <= 0) return null
     return {
       foodName: selected.brand ? `${selected.name} (${selected.brand})` : selected.name,
       emoji: selected.emoji,
-      grams: gramsN,
+      grams: effGrams,
       unit: selected.unit,
       kcal: selected.kcal * factor,
       protein: selected.protein * factor,
@@ -89,35 +98,38 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
     }
   }
 
-  const confirm = () => {
+  /** Junta o alimento atual ao cesto e volta à pesquisa (podes continuar a juntar). */
+  const addToCart = () => {
     const item = selectedAsItem()
     if (!item) return
-    navigator.vibrate?.(30)
-    onAdd(entryFromRecipeItem(item, meal))
-  }
-
-  const addToCombo = () => {
-    const item = selectedAsItem()
-    if (!item) return
-    setCombo((c) => [...c, item])
+    navigator.vibrate?.(20)
+    setCart((c) => [...c, item])
     setSelected(null)
     setQuery('')
   }
 
   /** Regista todos os itens dados como entradas; se ≥2, lembra o combo. Fecha o sheet. */
   const logItems = (items: RecipeItem[]) => {
+    if (items.length === 0) return
     navigator.vibrate?.(30)
     for (const item of items) onAdd(entryFromRecipeItem(item, meal))
     if (items.length >= 2) setRecipes((rs) => rememberCombo(rs, items))
     onClose()
   }
 
-  const comboKcal = combo.reduce((s, i) => s + i.kcal, 0)
-  const comboAlreadySaved = combo.length >= 2 && !!findByItems(recipes, combo)?.name
+  const cartKcal = cart.reduce((s, i) => s + i.kcal, 0)
+  const cartAlreadySaved = cart.length >= 2 && !!findByItems(recipes, cart)?.name
 
   const pick = (f: Food) => {
     setSelected(f)
-    setGrams('100')
+    if (f.portions && f.portions.length > 0) {
+      setMode('portion')
+      setPortionIdx(0)
+      setQty('1')
+    } else {
+      setMode('unit')
+      setQty('100')
+    }
   }
 
   const mealLabel = MEALS.find((m) => m.id === meal)?.label ?? ''
@@ -176,7 +188,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
                   <SectionLabel>Básicos e meus alimentos</SectionLabel>
                   <ul>
                     {localResults.map((f) => (
-                      <FoodRow key={f.id} food={f} onPick={pick} />
+                      <FoodRow key={f.id} food={f} onPick={pick} onInfo={setDetail} />
                     ))}
                   </ul>
                 </>
@@ -194,7 +206,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
                   )}
                   <ul>
                     {off.results.map((f) => (
-                      <FoodRow key={f.id} food={f} onPick={pick} />
+                      <FoodRow key={f.id} food={f} onPick={pick} onInfo={setDetail} />
                     ))}
                   </ul>
                 </>
@@ -219,21 +231,21 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
               </button>
             </div>
 
-            {combo.length > 0 && (
+            {cart.length > 0 && (
               <div className="border-t border-line bg-surface px-5 py-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold">
-                    Combinação · {combo.length} {combo.length === 1 ? 'item' : 'itens'}
+                    No cesto · {cart.length} {cart.length === 1 ? 'item' : 'itens'}
                   </span>
-                  <span className="text-sm tabular-nums text-muted">{Math.round(comboKcal)} kcal</span>
+                  <span className="text-sm tabular-nums text-muted">{Math.round(cartKcal)} kcal</span>
                 </div>
                 <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                  {combo.map((item, i) => (
+                  {cart.map((item, i) => (
                     <li key={i} className="flex items-center gap-1 rounded-full bg-bg px-2.5 py-1 text-xs">
                       <span aria-hidden>{item.emoji}</span>
                       <span className="max-w-[8rem] truncate">{item.foodName}</span>
                       <button
-                        onClick={() => setCombo((c) => c.filter((_, j) => j !== i))}
+                        onClick={() => setCart((c) => c.filter((_, j) => j !== i))}
                         className="text-muted"
                         aria-label={`Remover ${item.foodName}`}
                       >
@@ -244,12 +256,12 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
                 </ul>
                 <div className="mt-2.5 flex gap-2">
                   <button
-                    onClick={() => logItems(combo)}
+                    onClick={() => logItems(cart)}
                     className="flex-1 rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-white transition active:scale-[0.98]"
                   >
-                    Registar {combo.length} {combo.length === 1 ? 'item' : 'itens'}
+                    Registar {cart.length} {cart.length === 1 ? 'item' : 'itens'}
                   </button>
-                  {combo.length >= 2 && !comboAlreadySaved && (
+                  {cart.length >= 2 && !cartAlreadySaved && (
                     <button
                       onClick={() => setNaming(true)}
                       className="rounded-full bg-accent-soft px-4 py-2.5 text-sm font-semibold text-accent transition active:scale-95"
@@ -281,31 +293,95 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
               </div>
             </div>
 
-            <label className="mt-6 block">
-              <span className="mb-1.5 block text-sm font-medium text-ink-2">Quantidade ({selected.unit})</span>
+            {/* alternador g/ml ↔ porção (só se o alimento tiver medidas caseiras) */}
+            {portions.length > 0 && (
+              <div className="mt-5 flex rounded-xl bg-surface p-1 text-sm font-medium">
+                <button
+                  onClick={() => {
+                    setMode('unit')
+                    setQty('100')
+                  }}
+                  className={`flex-1 rounded-lg py-1.5 transition ${mode === 'unit' ? 'bg-bg shadow-sm text-ink' : 'text-muted'}`}
+                >
+                  {selected.unit === 'ml' ? 'ml' : 'gramas'}
+                </button>
+                <button
+                  onClick={() => {
+                    setMode('portion')
+                    setQty('1')
+                  }}
+                  className={`flex-1 rounded-lg py-1.5 transition ${mode === 'portion' ? 'bg-bg shadow-sm text-ink' : 'text-muted'}`}
+                >
+                  Porção
+                </button>
+              </div>
+            )}
+
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-sm font-medium text-ink-2">
+                {mode === 'portion' ? 'Quantas porções' : `Quantidade (${selected.unit})`}
+              </span>
               <input
                 type="number"
                 inputMode="decimal"
-                value={grams}
-                onChange={(e) => setGrams(e.target.value)}
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
                 className="w-full rounded-xl bg-surface px-4 py-3 text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
                 autoFocus
               />
             </label>
 
-            <div className="mt-3 flex gap-2">
-              {[50, 100, 150, 200].map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setGrams(String(g))}
-                  className={`flex-1 rounded-lg border px-2 py-1.5 text-sm font-medium ${
-                    grams === String(g) ? 'border-accent bg-accent-soft text-accent' : 'border-transparent bg-surface text-ink-2'
-                  }`}
-                >
-                  {g} {selected.unit}
-                </button>
-              ))}
-            </div>
+            {mode === 'portion' ? (
+              <>
+                {portions.length > 1 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {portions.map((p, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setPortionIdx(i)}
+                        className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                          i === portionIdx ? 'border-accent bg-accent-soft text-accent' : 'border-transparent bg-surface text-ink-2'
+                        }`}
+                      >
+                        {p.label} ({p.grams} {selected.unit})
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 flex gap-2">
+                  {[1, 2, 3, 4].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setQty(String(n))}
+                      className={`flex-1 rounded-lg border px-2 py-1.5 text-sm font-medium ${
+                        qty === String(n) ? 'border-accent bg-accent-soft text-accent' : 'border-transparent bg-surface text-ink-2'
+                      }`}
+                    >
+                      {n}×
+                    </button>
+                  ))}
+                </div>
+                {currentPortion && effGrams > 0 && (
+                  <p className="mt-2 text-xs text-muted">
+                    = {Math.round(effGrams)} {selected.unit} · {currentPortion.label}
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="mt-3 flex gap-2">
+                {(selected.unit === 'ml' ? [100, 200, 250, 330] : [50, 100, 150, 200]).map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setQty(String(g))}
+                    className={`flex-1 rounded-lg border px-2 py-1.5 text-sm font-medium ${
+                      qty === String(g) ? 'border-accent bg-accent-soft text-accent' : 'border-transparent bg-surface text-ink-2'
+                    }`}
+                  >
+                    {g} {selected.unit}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="mt-5 grid grid-cols-4 gap-2 rounded-2xl bg-surface p-4 text-center">
               <Preview label="Hidratos" value={selected.carbs * factor} suffix="g" dotVar="--carbs" />
@@ -314,21 +390,27 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
               <Preview label="kcal" value={selected.kcal * factor} />
             </div>
 
-            <div className="mt-auto mb-6 flex gap-2">
+            {/* micros, quando o alimento os tiver */}
+            {(selected.fiber != null || selected.sugar != null || selected.saturates != null || selected.salt != null) && (
+              <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-2xl bg-surface px-4 py-3 text-sm">
+                {selected.sugar != null && <MicroRow label="Açúcares" value={selected.sugar * factor} />}
+                {selected.fiber != null && <MicroRow label="Fibra" value={selected.fiber * factor} />}
+                {selected.saturates != null && <MicroRow label="Saturadas" value={selected.saturates * factor} />}
+                {selected.salt != null && <MicroRow label="Sal" value={selected.salt * factor} />}
+              </div>
+            )}
+
+            <div className="mt-auto mb-6 pt-5">
               <button
-                onClick={addToCombo}
+                onClick={addToCart}
                 disabled={factor <= 0}
-                className="flex-1 rounded-full border border-accent bg-accent-soft px-4 py-3.5 font-semibold text-accent transition active:scale-[0.98] disabled:opacity-40"
+                className="w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
               >
-                ➕ Juntar
+                {cart.length > 0 ? `Juntar ao cesto (${cart.length + 1})` : 'Adicionar'}
               </button>
-              <button
-                onClick={confirm}
-                disabled={factor <= 0}
-                className="flex-1 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
-              >
-                Adicionar
-              </button>
+              <p className="mt-2 text-center text-xs text-muted">
+                Junta quantos alimentos quiseres e depois regista tudo de uma vez.
+              </p>
             </div>
           </div>
         )}
@@ -337,7 +419,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
           <NameRecipeSheet
             onCancel={() => setNaming(false)}
             onSave={(name) => {
-              setRecipes((rs) => saveAsNamed(rs, combo, name))
+              setRecipes((rs) => saveAsNamed(rs, cart, name))
               setNaming(false)
             }}
           />
@@ -411,6 +493,19 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
             }}
           />
         )}
+
+        {detail && (
+          <Suspense fallback={null}>
+            <FoodCard
+              food={detail}
+              onChoose={(f) => {
+                setDetail(null)
+                pick(f)
+              }}
+              onClose={() => setDetail(null)}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   )
@@ -420,10 +515,19 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-muted first:mt-0">{children}</div>
 }
 
-function FoodRow({ food, onPick }: { food: Food; onPick: (f: Food) => void }) {
+function MicroRow({ label, value }: { label: string; value: number }) {
   return (
-    <li>
-      <button onClick={() => onPick(food)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
+    <div className="flex items-center justify-between">
+      <span className="text-muted">{label}</span>
+      <span className="tabular-nums font-medium">{value < 10 ? value.toFixed(1) : Math.round(value)} g</span>
+    </div>
+  )
+}
+
+function FoodRow({ food, onPick, onInfo }: { food: Food; onPick: (f: Food) => void; onInfo: (f: Food) => void }) {
+  return (
+    <li className="flex items-center">
+      <button onClick={() => onPick(food)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
         <span className="text-xl" aria-hidden>
           {food.emoji}
         </span>
@@ -437,6 +541,13 @@ function FoodRow({ food, onPick }: { food: Food; onPick: (f: Food) => void }) {
             {food.kcal} kcal · H {food.carbs} · P {food.protein} · G {food.fat} (100 {food.unit})
           </div>
         </div>
+      </button>
+      <button
+        onClick={() => onInfo(food)}
+        className="shrink-0 rounded-full px-2.5 py-2 text-muted transition active:scale-90"
+        aria-label={`Ver detalhes de ${food.name}`}
+      >
+        ⓘ
       </button>
     </li>
   )
@@ -521,49 +632,104 @@ function Preview({ label, value, suffix = '', dotVar }: { label: string; value: 
 
 function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: (f: Food) => void }) {
   const [name, setName] = useState('')
+  const [unit, setUnit] = useState<'g' | 'ml'>('g')
   const [kcal, setKcal] = useState('')
   const [protein, setProtein] = useState('')
   const [carbs, setCarbs] = useState('')
   const [fat, setFat] = useState('')
+  const [showMore, setShowMore] = useState(false)
+  const [fiber, setFiber] = useState('')
+  const [sugar, setSugar] = useState('')
+  const [saturates, setSaturates] = useState('')
+  const [salt, setSalt] = useState('')
+  const [portionLabel, setPortionLabel] = useState('')
+  const [portionGrams, setPortionGrams] = useState('')
 
   const valid = name.trim() && Number(kcal) >= 0 && Number(protein) >= 0 && Number(carbs) >= 0 && Number(fat) >= 0 && kcal !== ''
 
   const numCls =
     'w-full rounded-xl bg-surface px-3 py-2.5 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent'
+  const opt = (v: string) => (v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined)
+
+  const create = () => {
+    const pg = Number(portionGrams)
+    const portions =
+      portionLabel.trim() && pg > 0 ? [{ label: portionLabel.trim(), grams: pg }] : undefined
+    onCreate({
+      id: `custom-${uid()}`,
+      name: name.trim(),
+      emoji: unit === 'ml' ? '🥤' : '🍴',
+      kcal: Number(kcal),
+      protein: Number(protein) || 0,
+      carbs: Number(carbs) || 0,
+      fat: Number(fat) || 0,
+      unit,
+      custom: true,
+      fiber: opt(fiber),
+      sugar: opt(sugar),
+      saturates: opt(saturates),
+      salt: opt(salt),
+      portions,
+    })
+  }
 
   return (
-    <div className="flex flex-1 flex-col px-5 pt-4">
+    <div className="flex flex-1 flex-col overflow-y-auto px-5 pt-4">
       <button onClick={onCancel} className="self-start text-sm font-medium text-accent">
         ‹ Voltar
       </button>
-      <h3 className="mt-3 font-semibold">Novo alimento (valores por 100 g)</h3>
+      <h3 className="mt-3 font-semibold">Novo alimento (valores por 100 {unit})</h3>
 
       <div className="mt-4 space-y-3">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do alimento" className={numCls} autoFocus />
+
+        <div className="flex rounded-xl bg-surface p-1 text-sm font-medium">
+          <button
+            onClick={() => setUnit('g')}
+            className={`flex-1 rounded-lg py-1.5 transition ${unit === 'g' ? 'bg-bg shadow-sm text-ink' : 'text-muted'}`}
+          >
+            Sólido (g)
+          </button>
+          <button
+            onClick={() => setUnit('ml')}
+            className={`flex-1 rounded-lg py-1.5 transition ${unit === 'ml' ? 'bg-bg shadow-sm text-ink' : 'text-muted'}`}
+          >
+            Líquido (ml)
+          </button>
+        </div>
+
         <input type="number" inputMode="decimal" value={kcal} onChange={(e) => setKcal(e.target.value)} placeholder="Calorias (kcal)" className={numCls} />
         <div className="grid grid-cols-3 gap-2">
           <input type="number" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} placeholder="Hidratos g" className={numCls} />
           <input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} placeholder="Proteína g" className={numCls} />
           <input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} placeholder="Gordura g" className={numCls} />
         </div>
+
+        <button onClick={() => setShowMore((s) => !s)} className="text-sm font-medium text-accent">
+          {showMore ? '− Menos detalhes' : '+ Mais detalhes (fibra, açúcar, sal, porção)'}
+        </button>
+
+        {showMore && (
+          <div className="space-y-3 rounded-xl bg-surface/50 p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <input type="number" inputMode="decimal" value={fiber} onChange={(e) => setFiber(e.target.value)} placeholder="Fibra g" className={numCls} />
+              <input type="number" inputMode="decimal" value={sugar} onChange={(e) => setSugar(e.target.value)} placeholder="Açúcares g" className={numCls} />
+              <input type="number" inputMode="decimal" value={saturates} onChange={(e) => setSaturates(e.target.value)} placeholder="Saturadas g" className={numCls} />
+              <input type="number" inputMode="decimal" value={salt} onChange={(e) => setSalt(e.target.value)} placeholder="Sal g" className={numCls} />
+            </div>
+            <div className="text-xs font-medium text-muted">Medida caseira (opcional)</div>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={portionLabel} onChange={(e) => setPortionLabel(e.target.value)} placeholder={unit === 'ml' ? 'copo' : 'fatia'} className={numCls} />
+              <input type="number" inputMode="decimal" value={portionGrams} onChange={(e) => setPortionGrams(e.target.value)} placeholder={`1 unidade = ? ${unit}`} className={numCls} />
+            </div>
+          </div>
+        )}
       </div>
 
       <button
-        onClick={() =>
-          onCreate({
-            id: `custom-${uid()}`,
-            name: name.trim(),
-            emoji: '🍴',
-            kcal: Number(kcal),
-            protein: Number(protein) || 0,
-            carbs: Number(carbs) || 0,
-            fat: Number(fat) || 0,
-            unit: 'g',
-            custom: true,
-          })
-        }
+        onClick={create}
         disabled={!valid}
-        className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
+        className="mt-5 mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-40"
       >
         Guardar alimento
       </button>

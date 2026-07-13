@@ -73,6 +73,8 @@ def _food_row(user_id: int, f: Food) -> DbCustomFood:
     return DbCustomFood(
         user_id=user_id, food_id=f.id, name=f.name, emoji=f.emoji, kcal=f.kcal,
         protein=f.protein, carbs=f.carbs, fat=f.fat, unit=f.unit, brand=f.brand,
+        fiber=f.fiber, sugar=f.sugar, saturates=f.saturates, salt=f.salt,
+        portions=[p.model_dump() for p in f.portions] if f.portions else None,
     )
 
 
@@ -80,6 +82,8 @@ def _food_out(f: DbCustomFood) -> Food:
     return Food(
         id=f.food_id, name=f.name, emoji=f.emoji, kcal=f.kcal, protein=f.protein,
         carbs=f.carbs, fat=f.fat, unit=f.unit, custom=True, brand=f.brand,
+        fiber=f.fiber, sugar=f.sugar, saturates=f.saturates, salt=f.salt,
+        portions=f.portions,
     )
 
 
