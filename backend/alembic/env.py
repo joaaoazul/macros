@@ -21,6 +21,7 @@ from app.data.models import (  # noqa: F401
     DbWater,
 )
 from app.messages.models import Message  # noqa: F401
+from app.reminders.models import DbReminder  # noqa: F401
 from app.social.models import FeedEvent, Friendship, LeaderboardRank  # noqa: F401
 
 config = context.config

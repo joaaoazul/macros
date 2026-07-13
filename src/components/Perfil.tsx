@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
 import { clearLocalCache } from '../lib/sync'
 import { getPushState, subscribeToPush, unsubscribeFromPush, type PushState } from '../lib/push'
+import { listReminders, saveReminders, REMINDER_META, type Reminder } from '../lib/reminders'
 import { social, type SocialMe } from '../lib/social'
 import PesoDetail from './details/PesoDetail'
 import Avatar from './social/Avatar'
@@ -190,6 +191,9 @@ export default function Perfil({ profile, setProfile }: Props) {
         {/* notificações push */}
         <NotificationsCard />
 
+        {/* lembretes */}
+        <RemindersCard />
+
         {/* chave IA */}
         <ApiKeyCard />
 
@@ -287,6 +291,83 @@ function NotificationsCard() {
           </button>
         )}
       </div>
+      {error && <p role="alert" className="mt-2 text-sm font-medium text-critical">{error}</p>}
+    </Card>
+  )
+}
+
+/** Configurar lembretes push (hora local + on/off por tipo). Requer notificações ativas. */
+function RemindersCard() {
+  const [reminders, setReminders] = useState<Reminder[] | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    listReminders().then(setReminders).catch(() => setReminders([]))
+  }, [])
+
+  const persist = async (next: Reminder[]) => {
+    setReminders(next) // otimista
+    setSaving(true)
+    setError('')
+    try {
+      setReminders(await saveReminders(next))
+    } catch {
+      setError('Não foi possível guardar os lembretes.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const patch = (kind: string, change: Partial<Reminder>) => {
+    if (!reminders) return
+    persist(reminders.map((r) => (r.kind === kind ? { ...r, ...change } : r)))
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted">Lembretes</div>
+        {saving && <span className="text-[11px] text-muted">a guardar…</span>}
+      </div>
+      <p className="mt-1 text-sm text-ink-2">
+        Recebe um aviso à hora que definires. Requer as notificações ativas.
+      </p>
+
+      {reminders === null ? (
+        <p className="mt-3 text-sm text-muted">A carregar…</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-line">
+          {reminders.map((r) => {
+            const meta = REMINDER_META[r.kind]
+            return (
+              <li key={r.kind} className="flex items-center gap-3 py-2.5">
+                <span className="text-lg" aria-hidden>{meta?.emoji ?? '🔔'}</span>
+                <span className="flex-1 text-[15px] font-medium">{meta?.label ?? r.kind}</span>
+                <input
+                  type="time"
+                  value={r.hhmm}
+                  onChange={(e) => patch(r.kind, { hhmm: e.target.value })}
+                  disabled={!r.enabled}
+                  aria-label={`Hora do lembrete: ${meta?.label ?? r.kind}`}
+                  className="rounded-lg bg-surface px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-40"
+                />
+                <button
+                  role="switch"
+                  aria-checked={r.enabled}
+                  aria-label={`Ativar lembrete: ${meta?.label ?? r.kind}`}
+                  onClick={() => patch(r.kind, { enabled: !r.enabled })}
+                  className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${r.enabled ? 'bg-accent' : 'bg-line'}`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${r.enabled ? 'translate-x-[1.125rem]' : 'translate-x-0.5'}`}
+                  />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {error && <p role="alert" className="mt-2 text-sm font-medium text-critical">{error}</p>}
     </Card>
   )

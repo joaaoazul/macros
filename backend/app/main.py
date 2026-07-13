@@ -15,6 +15,7 @@ from app.gdpr.router import router as gdpr_router
 from app.messages.router import router as messages_router
 from app.messages.ws import router as ws_router
 from app.push.router import router as push_router
+from app.reminders.router import router as reminders_router
 from app.social.router import router as social_router
 
 logging.basicConfig(level=settings.LOG_LEVEL)
@@ -92,7 +93,26 @@ app.include_router(social_router)
 app.include_router(messages_router)
 app.include_router(ws_router)
 app.include_router(push_router)
+app.include_router(reminders_router)
 app.include_router(admin_router)
+
+
+@app.on_event("startup")
+async def _start_reminder_scheduler() -> None:
+    """Arranca o loop de fundo que envia lembretes push (single-worker)."""
+    import asyncio
+
+    from app.database import async_session_factory
+    from app.reminders.service import run_scheduler
+
+    app.state.reminder_task = asyncio.create_task(run_scheduler(async_session_factory))
+
+
+@app.on_event("shutdown")
+async def _stop_reminder_scheduler() -> None:
+    task = getattr(app.state, "reminder_task", None)
+    if task:
+        task.cancel()
 
 
 @app.get("/api/health")
