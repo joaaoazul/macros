@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Food } from '../types'
-import { foodTips, type FoodTips } from '../lib/ai'
+import { foodTips, getAnthropicKey, type FoodTips } from '../lib/ai'
 
 interface Props {
   food: Food
@@ -38,6 +38,7 @@ export default function FoodCard({ food, onChoose, onClose }: Props) {
 
   const hasMicros =
     food.fiber != null || food.sugar != null || food.saturates != null || food.salt != null
+  const hasAiKey = !!getAnthropicKey()
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" onClick={onClose}>
@@ -94,7 +95,8 @@ export default function FoodCard({ food, onChoose, onClose }: Props) {
             </div>
           )}
 
-          {/* sugestões IA */}
+          {/* sugestões IA — só se o utilizador tiver chave Anthropic configurada */}
+          {hasAiKey && (
           <div className="mt-4">
             <SectionLabel>Como usar</SectionLabel>
             {!tips && tipsState !== 'error' && (
@@ -139,6 +141,7 @@ export default function FoodCard({ food, onChoose, onClose }: Props) {
               </div>
             )}
           </div>
+          )}
         </div>
 
         <div className="border-t border-line px-5 py-3">
