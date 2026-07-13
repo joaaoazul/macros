@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, Profile, Recipe, WaterLog } from '../types'
 import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
 import { formatDatePT, shiftDate, todayISO, uid } from '../lib/store'
 import AddFoodSheet from './AddFoodSheet'
+
+const CopyDaySheet = lazy(() => import('./CopyDaySheet'))
 import AguaDetail from './details/AguaDetail'
 import Rings from './Rings'
 import { Card, Chevron, CircleButton, LargeTitle } from './ui'
@@ -28,6 +30,7 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
   const [addingTo, setAddingTo] = useState<MealId | null>(null)
   const [addingExercise, setAddingExercise] = useState(false)
   const [showAgua, setShowAgua] = useState(false)
+  const [showCopy, setShowCopy] = useState(false)
   const [customWater, setCustomWater] = useState('')
 
   const entries = useMemo(() => diary[date] ?? [], [diary, date])
@@ -51,6 +54,10 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
   }
   const removeEntry = (id: string) => {
     setDiary((d) => ({ ...d, [date]: (d[date] ?? []).filter((e) => e.id !== id) }))
+  }
+  const copyEntries = (cloned: Entry[]) => {
+    setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), ...cloned] }))
+    setShowCopy(false)
   }
   const addWater = (ml: number) => {
     setWater((w) => ({ ...w, [date]: Math.max(0, (w[date] ?? 0) + ml) }))
@@ -79,11 +86,16 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
           </div>
         }
       />
-      {date !== todayISO() && (
-        <button onClick={() => setDate(todayISO())} className="mx-5 -mt-1 mb-1 text-sm font-semibold text-accent">
-          Voltar a hoje
+      <div className="mx-5 -mt-1 mb-1 flex items-center gap-4">
+        {date !== todayISO() && (
+          <button onClick={() => setDate(todayISO())} className="text-sm font-semibold text-accent">
+            Voltar a hoje
+          </button>
+        )}
+        <button onClick={() => setShowCopy(true)} className="text-sm font-semibold text-accent">
+          ⧉ Copiar dia
         </button>
-      )}
+      </div>
 
       <div className="space-y-3.5 px-4 pt-2">
         {/* hero: anéis + estatísticas */}
@@ -274,6 +286,11 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
       )}
       {addingExercise && <AddExerciseSheet onAdd={addExercise} onClose={() => setAddingExercise(false)} />}
       {showAgua && <AguaDetail profile={profile} setProfile={setProfile} water={water} onClose={() => setShowAgua(false)} />}
+      {showCopy && (
+        <Suspense fallback={null}>
+          <CopyDaySheet diary={diary} currentDate={date} onCopy={copyEntries} onClose={() => setShowCopy(false)} />
+        </Suspense>
+      )}
     </div>
   )
 }
