@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth'
 import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
 import { clearLocalCache } from '../lib/sync'
 import { getPushState, subscribeToPush, unsubscribeFromPush, type PushState } from '../lib/push'
+import { ApiError } from '../lib/api'
 import { social, type SocialMe } from '../lib/social'
 import PesoDetail from './details/PesoDetail'
 import Avatar from './social/Avatar'
@@ -246,8 +247,13 @@ function NotificationsCard() {
     setError('')
     try {
       setState(state === 'on' ? await unsubscribeFromPush() : await subscribeToPush())
-    } catch {
-      setError('Não foi possível alterar as notificações.')
+    } catch (e) {
+      // 503 = servidor sem VAPID configurado (push desativado); distingue do erro genérico.
+      setError(
+        e instanceof ApiError && e.status === 503
+          ? 'As notificações ainda não estão ativas neste servidor.'
+          : 'Não foi possível alterar as notificações.',
+      )
     } finally {
       setBusy(false)
     }
