@@ -29,6 +29,10 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-Macros <macros@joaoazul.dev>}
       APP_URL: ${APP_URL:-https://macros.joaoazul.dev}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:joaoazul74@gmail.com}
+      ALERT_NTFY_URL: ${ALERT_NTFY_URL:-}
     expose:
       - "8000"
     depends_on:
