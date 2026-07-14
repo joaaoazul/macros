@@ -122,7 +122,9 @@ export default function Social({ socket }: { socket: SocialSocket }) {
         </div>
       </div>
 
-      <div key={segment} className="animate-fade">
+      {/* sem wrapper com opacity animada: criaria um stacking context que prendia
+          os overlays fixed (ex.: sheet de perfil dos Amigos) por baixo do segmented */}
+      <div key={segment}>
         {segment === 'feed' && <Feed onOpenFriends={() => setSegment('amigos')} />}
         {segment === 'classificacao' && <Leaderboard />}
         {segment === 'amigos' && <Friends onMessage={openChat} />}

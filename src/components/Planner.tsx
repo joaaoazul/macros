@@ -57,7 +57,7 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
   }
 
   return (
-    <div className="space-y-3.5 px-4 pt-1">
+    <div className="animate-fade space-y-3.5 px-4 pt-1">
       {/* barra de equilíbrio */}
       {notes.length > 0 && (
         <Card className="animate-in space-y-1.5 p-4">
@@ -471,12 +471,17 @@ function PantryView({
       </header>
 
       <div className="mx-auto w-full max-w-md flex-1 space-y-4 overflow-y-auto px-4 py-4 scroll-contain">
-        <div className="flex rounded-xl bg-surface p-1">
+        <div className="relative flex rounded-xl bg-surface p-1">
+          <div
+            className="absolute inset-y-1 w-[calc((100%-0.5rem)/2)] rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+            style={{ transform: `translateX(${tab === 'have' ? 0 : 100}%)` }}
+            aria-hidden
+          />
           {(['have', 'recurring'] as const).map((k) => (
             <button
               key={k}
               onClick={() => setTab(k)}
-              className={`flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${tab === k ? 'bg-accent-soft text-accent' : 'text-muted'}`}
+              className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${tab === k ? 'text-accent' : 'text-muted'}`}
             >
               {k === 'have' ? 'Tenho sempre' : 'Recorrentes'}
             </button>

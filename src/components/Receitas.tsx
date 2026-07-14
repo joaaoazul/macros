@@ -87,16 +87,14 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
       </div>
 
       {segment === 'planner' ? (
-        <div className="animate-fade">
-          <Planner
-            recipes={recipes}
-            customFoods={customFoods}
-            mealPlan={mealPlan}
-            setMealPlan={setMealPlan}
-            pantry={pantry}
-            setPantry={setPantry}
-          />
-        </div>
+        <Planner
+          recipes={recipes}
+          customFoods={customFoods}
+          mealPlan={mealPlan}
+          setMealPlan={setMealPlan}
+          pantry={pantry}
+          setPantry={setPantry}
+        />
       ) : (
       <div className="animate-fade space-y-3.5 px-4 pt-1">
         <button
