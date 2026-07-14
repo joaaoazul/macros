@@ -27,6 +27,7 @@ class PublicProfile(PublicProfileLite):
     stats: DerivedStats
     friendship: Literal["none", "friends", "incoming", "outgoing", "self"]
     friendshipId: int | None = None
+    badges: list[str] = []
 
 
 class SocialMe(BaseModel):
@@ -36,6 +37,7 @@ class SocialMe(BaseModel):
     avatarPhoto: str | None = None
     bio: str | None = None
     name: str
+    badges: list[str] = []
 
 
 class SocialMeUpdate(BaseModel):
@@ -97,6 +99,12 @@ class LeaderboardOut(BaseModel):
     rows: list[LeaderboardRow]
 
 
+class ReactionSummary(BaseModel):
+    counts: dict[str, int] = {}
+    total: int = 0
+    mine: str | None = None
+
+
 class FeedEventOut(BaseModel):
     id: int
     kind: str
@@ -104,3 +112,20 @@ class FeedEventOut(BaseModel):
     payload: dict
     user: PublicProfileLite
     createdAt: datetime
+    reactions: ReactionSummary = ReactionSummary()
+
+
+class ReactionIn(BaseModel):
+    emoji: str = Field(min_length=1, max_length=8)
+
+
+class NudgeIn(BaseModel):
+    userId: int
+    kind: Literal["train", "water", "log", "cheer"]
+
+
+class BadgeOut(BaseModel):
+    kind: str
+    emoji: str
+    title: str
+    description: str

@@ -30,10 +30,11 @@ export default function Leaderboard() {
         </p>
       )}
       <Card className="divide-y divide-line">
-        {board.rows.map((r) => (
+        {board.rows.map((r, i) => (
           <div
             key={r.userId}
-            className={`flex items-center gap-3 p-4 ${r.isMe ? 'bg-accent-soft' : ''}`}
+            className={`animate-in flex items-center gap-3 p-4 ${r.isMe ? 'bg-accent-soft' : ''}`}
+            style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
           >
             <span className="w-7 text-center text-lg font-bold" aria-label={`${r.rank}º lugar`}>
               {MEDALS[r.rank - 1] ?? r.rank}

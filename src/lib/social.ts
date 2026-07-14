@@ -22,6 +22,7 @@ export interface PublicProfile extends PublicProfileLite {
   stats: DerivedStats
   friendship: FriendshipStatus
   friendshipId: number | null
+  badges: string[]
 }
 
 export interface SocialMe {
@@ -31,6 +32,34 @@ export interface SocialMe {
   avatarPhoto?: string | null
   bio?: string | null
   name: string
+  badges: string[]
+}
+
+/** Reações permitidas no feed (kudos) — espelha o backend. */
+export const FEED_REACTIONS = ['👏', '🔥', '💪', '🎉', '❤️'] as const
+
+export interface ReactionSummary {
+  counts: Record<string, number>
+  total: number
+  mine: string | null
+}
+
+export type NudgeKind = 'train' | 'water' | 'log' | 'cheer'
+
+export const NUDGES: { kind: NudgeKind; emoji: string; label: string }[] = [
+  { kind: 'train', emoji: '💪', label: 'Bora treinar' },
+  { kind: 'water', emoji: '💧', label: 'Bebe água' },
+  { kind: 'log', emoji: '📓', label: 'Regista as refeições' },
+  { kind: 'cheer', emoji: '🎉', label: 'Estás a arrasar' },
+]
+
+/** Catálogo de conquistas — espelha BADGES do backend. */
+export const BADGES: Record<string, { emoji: string; title: string; description: string }> = {
+  streak_7: { emoji: '🔥', title: 'Uma semana a fogo', description: '7 dias seguidos no plano' },
+  streak_14: { emoji: '⚡', title: 'Duas semanas imparável', description: '14 dias seguidos no plano' },
+  streak_30: { emoji: '🏆', title: 'Um mês de disciplina', description: '30 dias seguidos no plano' },
+  plan_master: { emoji: '🎯', title: 'Semana perfeita', description: '7 de 7 dias no plano numa semana' },
+  centurion: { emoji: '💯', title: 'Centurião', description: '100 dias no plano no total' },
 }
 
 export interface ProfileUpdate {
@@ -79,6 +108,12 @@ export interface FeedEvent {
   payload: Record<string, unknown>
   user: PublicProfileLite
   createdAt: string
+  reactions: ReactionSummary
+}
+
+export interface MessageReaction {
+  userId: number
+  emoji: string
 }
 
 export interface Message {
@@ -86,8 +121,10 @@ export interface Message {
   senderId: number
   recipientId: number
   body: string
+  image?: string | null
   createdAt: string
   readAt: string | null
+  reactions: MessageReaction[]
 }
 
 export interface Conversation {
@@ -110,6 +147,12 @@ export const social = {
   leaderboard: () => api<LeaderboardOut>('/social/leaderboard'),
   feed: (before?: number) =>
     api<FeedEvent[]>(`/social/feed?limit=30${before ? `&before=${before}` : ''}`),
+  react: (eventId: number, emoji: string) =>
+    api<ReactionSummary>(`/social/feed/${eventId}/react`, { method: 'PUT', body: { emoji } }),
+  unreact: (eventId: number) =>
+    api<ReactionSummary>(`/social/feed/${eventId}/react`, { method: 'DELETE' }),
+  nudge: (userId: number, kind: NudgeKind) =>
+    api<{ ok: boolean }>('/social/nudge', { method: 'POST', body: { userId, kind } }),
 }
 
 export const messages = {
@@ -117,7 +160,14 @@ export const messages = {
   unreadCount: () => api<{ total: number }>('/messages/unread-count'),
   history: (userId: number, before?: number) =>
     api<Message[]>(`/messages/with/${userId}?limit=50${before ? `&before=${before}` : ''}`),
-  send: (userId: number, body: string) =>
-    api<Message>(`/messages/with/${userId}`, { method: 'POST', body: { body } }),
+  send: (userId: number, body: string, image?: string | null) =>
+    api<Message>(`/messages/with/${userId}`, { method: 'POST', body: { body, image } }),
   markRead: (userId: number) => api<void>(`/messages/with/${userId}/read`, { method: 'POST' }),
+  react: (messageId: number, emoji: string) =>
+    api<void>(`/messages/${messageId}/react`, { method: 'PUT', body: { emoji } }),
+  unreact: (messageId: number) =>
+    api<void>(`/messages/${messageId}/react`, { method: 'DELETE' }),
 }
+
+/** Reações permitidas em mensagens (tapback iOS) — espelha o backend. */
+export const MESSAGE_REACTIONS = ['❤️', '👍', '😂', '🔥', '😮', '😢'] as const

@@ -99,6 +99,7 @@ def test_ws_ping_pong_and_unread_on_connect(ws_client):
     switch(ws_client, cookies)
     with ws_client.websocket_connect("/api/v1/ws") as ws:
         assert ws.receive_json() == {"type": "unread", "total": 0}
+        assert ws.receive_json() == {"type": "notif_unread", "total": 0}
         ws.send_json({"type": "ping"})
         assert ws.receive_json() == {"type": "pong"}
 
@@ -111,9 +112,11 @@ def test_ws_send_delivers_to_recipient_and_echoes(ws_client):
     switch(ws_client, ana_cookies)
     with ws_client.websocket_connect("/api/v1/ws") as ana_ws:
         ana_ws.receive_json()  # unread inicial
+        ana_ws.receive_json()  # notif_unread inicial
         switch(ws_client, rui_cookies)
         with ws_client.websocket_connect("/api/v1/ws") as rui_ws:
             rui_ws.receive_json()  # unread inicial
+            rui_ws.receive_json()  # notif_unread inicial
 
             rui_ws.send_json({"type": "send", "to": ana["userId"], "body": "olá!", "clientId": "c1"})
 
@@ -137,6 +140,7 @@ def test_ws_send_to_non_friend_errors(ws_client):
     switch(ws_client, rui_cookies)
     with ws_client.websocket_connect("/api/v1/ws") as ws:
         ws.receive_json()  # unread
+        ws.receive_json()  # notif_unread
         ws.send_json({"type": "send", "to": ana["userId"], "body": "olá!", "clientId": "c9"})
         err = ws.receive_json()
         assert err == {"type": "error", "code": "not_friends", "clientId": "c9"}

@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -13,8 +13,16 @@ from app.auth.models import User
 from app.database import get_db
 from app.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.messages.manager import manager
-from app.messages.models import Message
-from app.messages.schemas import ConversationOut, MessageOut, SendMessage, UnreadOut
+from app.messages.models import Message, MessageReaction
+from app.messages.schemas import (
+    ALLOWED_MESSAGE_REACTIONS,
+    ConversationOut,
+    MessageOut,
+    MessageReactionOut,
+    ReactMessage,
+    SendMessage,
+    UnreadOut,
+)
 from app.social.schemas import PublicProfileLite
 from app.social.service import are_friends, friend_ids
 
@@ -36,15 +44,33 @@ def check_message_rate(user_id: int) -> bool:
     return True
 
 
-def _out(m: Message) -> MessageOut:
+def _out(m: Message, reactions: list[MessageReactionOut] | None = None) -> MessageOut:
     return MessageOut(
         id=m.id,
         senderId=m.sender_id,
         recipientId=m.recipient_id,
         body=m.body,
+        image=m.image,
         createdAt=m.created_at,
         readAt=m.read_at,
+        reactions=reactions or [],
     )
+
+
+async def _load_reactions(
+    db: AsyncSession, message_ids: list[int]
+) -> dict[int, list[MessageReactionOut]]:
+    if not message_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(MessageReaction).where(MessageReaction.message_id.in_(message_ids))
+        )
+    ).scalars()
+    out: dict[int, list[MessageReactionOut]] = {}
+    for r in rows:
+        out.setdefault(r.message_id, []).append(MessageReactionOut(userId=r.user_id, emoji=r.emoji))
+    return out
 
 
 def _pair(a: int, b: int):
@@ -55,7 +81,7 @@ def _pair(a: int, b: int):
 
 
 async def persist_and_push(
-    db: AsyncSession, sender: User, recipient_id: int, body: str
+    db: AsyncSession, sender: User, recipient_id: int, body: str, image: str | None = None
 ) -> Message:
     """Valida, persiste e empurra a mensagem via WS. Partilhado por REST e WebSocket."""
     if not await are_friends(db, sender.id, recipient_id):
@@ -63,7 +89,7 @@ async def persist_and_push(
     if not check_message_rate(sender.id):
         raise ValidationError("Demasiadas mensagens. Aguarda um pouco.")
 
-    message = Message(sender_id=sender.id, recipient_id=recipient_id, body=body)
+    message = Message(sender_id=sender.id, recipient_id=recipient_id, body=body, image=image)
     db.add(message)
     await db.flush()
     await db.refresh(message)  # created_at do servidor
@@ -73,13 +99,15 @@ async def persist_and_push(
     unread = await _unread_total(db, recipient_id)
     await manager.send_to(recipient_id, {"type": "unread", "total": unread})
 
-    # push só se o destinatário não estiver com um socket ativo (offline)
+    # push só se o destinatário estiver offline E aceitar notificações de mensagens
     if not manager.is_online(recipient_id):
+        from app.notifications.service import push_allowed
         from app.push.service import send_push
 
-        sender_name = sender.name or (f"@{sender.username}" if sender.username else "Alguém")
-        preview = body if len(body) <= 120 else body[:117] + "…"
-        await send_push(db, recipient_id, sender_name, preview, url="/")
+        if await push_allowed(db, recipient_id, "messages"):
+            sender_name = sender.name or (f"@{sender.username}" if sender.username else "Alguém")
+            preview = "📷 Foto" if not body else (body if len(body) <= 120 else body[:117] + "…")
+            await send_push(db, recipient_id, sender_name, preview, url="/")
     return message
 
 
@@ -173,8 +201,9 @@ async def history(
     if before is not None:
         query = query.where(Message.id < before)
     query = query.order_by(Message.id.desc()).limit(limit)
-    result = await db.execute(query)
-    return [_out(m) for m in result.scalars()]
+    msgs = list((await db.execute(query)).scalars())
+    reactions = await _load_reactions(db, [m.id for m in msgs])
+    return [_out(m, reactions.get(m.id, [])) for m in msgs]
 
 
 @router.post("/with/{user_id}", response_model=MessageOut, status_code=201)
@@ -184,8 +213,64 @@ async def send_message_rest(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MessageOut:
-    message = await persist_and_push(db, user, user_id, body.body)
+    message = await persist_and_push(db, user, user_id, body.body, body.image)
     return _out(message)
+
+
+@router.put("/{message_id}/react", status_code=204)
+async def react_message(
+    message_id: int,
+    body: ReactMessage,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Adiciona/troca a reação a uma mensagem de uma conversa em que participo."""
+    if body.emoji not in ALLOWED_MESSAGE_REACTIONS:
+        raise ValidationError("Reação inválida.")
+    message = (
+        await db.execute(select(Message).where(Message.id == message_id))
+    ).scalar_one_or_none()
+    if message is None or user.id not in (message.sender_id, message.recipient_id):
+        raise NotFoundError("Mensagem")
+
+    existing = (
+        await db.execute(
+            select(MessageReaction).where(
+                MessageReaction.message_id == message_id, MessageReaction.user_id == user.id
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        existing.emoji = body.emoji
+    else:
+        db.add(MessageReaction(message_id=message_id, user_id=user.id, emoji=body.emoji))
+
+    other_id = message.recipient_id if message.sender_id == user.id else message.sender_id
+    event = {"type": "reaction", "messageId": message_id, "userId": user.id, "emoji": body.emoji}
+    await manager.send_to(user.id, event)
+    await manager.send_to(other_id, event)
+
+
+@router.delete("/{message_id}/react", status_code=204)
+async def unreact_message(
+    message_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    message = (
+        await db.execute(select(Message).where(Message.id == message_id))
+    ).scalar_one_or_none()
+    if message is None or user.id not in (message.sender_id, message.recipient_id):
+        raise NotFoundError("Mensagem")
+    await db.execute(
+        delete(MessageReaction).where(
+            MessageReaction.message_id == message_id, MessageReaction.user_id == user.id
+        )
+    )
+    other_id = message.recipient_id if message.sender_id == user.id else message.sender_id
+    event = {"type": "reaction", "messageId": message_id, "userId": user.id, "emoji": None}
+    await manager.send_to(user.id, event)
+    await manager.send_to(other_id, event)
 
 
 async def mark_conversation_read(db: AsyncSession, reader_id: int, other_id: int) -> None:

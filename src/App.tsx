@@ -111,14 +111,14 @@ export default function App() {
                 tab === t.id ? 'text-accent' : 'text-muted'
               }`}
             >
-              {t.icon}
+              <span className={`transition-transform duration-200 ${tab === t.id ? 'scale-110' : ''}`}>{t.icon}</span>
               {t.label}
-              {t.id === 'social' && socket.unread > 0 && (
+              {t.id === 'social' && socket.unread + socket.notifUnread > 0 && (
                 <span
-                  className="absolute right-[calc(50%-1.5rem)] top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-critical px-1 text-[9px] font-bold text-white"
-                  aria-label={`${socket.unread} mensagens por ler`}
+                  className="animate-pop absolute right-[calc(50%-1.5rem)] top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-critical px-1 text-[9px] font-bold text-white"
+                  aria-label={`${socket.unread + socket.notifUnread} novidades por ver`}
                 >
-                  {socket.unread > 99 ? '99+' : socket.unread}
+                  {socket.unread + socket.notifUnread > 99 ? '99+' : socket.unread + socket.notifUnread}
                 </span>
               )}
             </button>

@@ -1,38 +1,48 @@
 """Social endpoints: profile, search, friends, leaderboard, feed."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.rate_limit import _RateLimiter
 from app.database import get_db
-from app.exceptions import ConflictError, NotFoundError, ValidationError
-from app.social.models import FeedEvent, Friendship
+from app.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
+from app.notifications.service import notify
+from app.social.models import Badge, FeedEvent, FeedReaction, Friendship, Nudge
 from app.social.schemas import (
+    BadgeOut,
     FeedEventOut,
     FriendRequestIn,
     FriendshipOut,
     FriendsList,
     LeaderboardOut,
     LeaderboardRow,
+    NudgeIn,
     PublicProfile,
     PublicProfileLite,
+    ReactionIn,
+    ReactionSummary,
     SearchResult,
     SocialMe,
     SocialMeUpdate,
     WeekInfo,
 )
 from app.social.service import (
+    ALLOWED_REACTIONS,
+    BADGES,
+    are_friends,
     compute_leaderboard,
     derived_stats,
     emit_friend_joined,
+    feed_reactions_summary,
     friend_ids,
     get_friendship,
     lisbon_today,
+    user_badges,
     week_window,
 )
 
@@ -45,16 +55,18 @@ MAX_PENDING_OUTGOING = 20
 
 _RESERVED_USERNAMES = {"admin", "macros", "suporte", "support", "api", "sistema"}
 
+# Um "toque" por par de amigos a cada 30 min
+NUDGE_COOLDOWN_SECONDS = 1800
+NUDGE_TEXT: dict[str, tuple[str, str]] = {
+    "train": ("💪", "Bora treinar!"),
+    "water": ("💧", "Não te esqueças de beber água!"),
+    "log": ("📓", "Já registaste as tuas refeições?"),
+    "cheer": ("🎉", "Estás a arrasar — continua!"),
+}
+
 
 def _display(u: User) -> str:
     return u.name or (f"@{u.username}" if u.username else "Alguém")
-
-
-async def _push_friend(db: AsyncSession, user_id: int, text: str) -> None:
-    """Notificação push de amizade (no-op se VAPID desativado)."""
-    from app.push.service import send_push
-
-    await send_push(db, user_id, "Macros", text, url="/")
 
 
 def _lite(u: User) -> PublicProfileLite:
@@ -68,7 +80,7 @@ def _lite(u: User) -> PublicProfileLite:
     )
 
 
-def _me(u: User) -> SocialMe:
+def _me(u: User, badges: list[str] | None = None) -> SocialMe:
     return SocialMe(
         userId=u.id,
         username=u.username,
@@ -76,12 +88,16 @@ def _me(u: User) -> SocialMe:
         avatarPhoto=u.avatar_photo,
         bio=u.bio,
         name=u.name,
+        badges=badges or [],
     )
 
 
 @router.get("/me", response_model=SocialMe)
-async def social_me(user: User = Depends(get_current_user)) -> SocialMe:
-    return _me(user)
+async def social_me(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> SocialMe:
+    return _me(user, await user_badges(db, user.id))
 
 
 @router.put("/me", response_model=SocialMe)
@@ -101,7 +117,7 @@ async def update_social_me(
     user.avatar_photo = body.avatarPhoto
     user.bio = (body.bio or "").strip() or None
     db.add(user)
-    return _me(user)
+    return _me(user, await user_badges(db, user.id))
 
 
 async def _friendship_status(db: AsyncSession, me: int, other: int) -> tuple[str, int | None]:
@@ -167,6 +183,7 @@ async def public_profile(
         stats=stats,  # type: ignore[arg-type]
         friendship=status,  # type: ignore[arg-type]
         friendshipId=fid,
+        badges=await user_badges(db, target.id),
     )
 
 
@@ -205,7 +222,10 @@ async def send_friend_request(
     friendship = Friendship(requester_id=user.id, addressee_id=target.id, status="pending")
     db.add(friendship)
     await db.flush()
-    await _push_friend(db, target.id, f"{_display(user)} enviou-te um pedido de amizade")
+    await notify(
+        db, target.id, "friend_request", "Novo pedido de amizade",
+        f"{_display(user)} quer ser teu amigo", url="/app", actor_id=user.id,
+    )
     return FriendshipOut(id=friendship.id, user=_lite(target), status="pending", direction="outgoing")
 
 
@@ -229,7 +249,10 @@ async def accept_friend_request(
     friendship.accepted_at = datetime.now(timezone.utc)
     await emit_friend_joined(db, friendship.requester_id, friendship.addressee_id, lisbon_today())
     other = (await db.execute(select(User).where(User.id == friendship.requester_id))).scalar_one()
-    await _push_friend(db, other.id, f"{_display(user)} aceitou o teu pedido de amizade")
+    await notify(
+        db, other.id, "friend_accepted", "Pedido aceite",
+        f"{_display(user)} aceitou o teu pedido de amizade", url="/app", actor_id=user.id,
+    )
     return FriendshipOut(id=friendship.id, user=_lite(other), status="accepted")
 
 
@@ -326,7 +349,8 @@ async def feed(
     if before is not None:
         query = query.where(FeedEvent.id < before)
     query = query.order_by(FeedEvent.id.desc()).limit(limit)
-    result = await db.execute(query)
+    result = (await db.execute(query)).all()
+    reactions = await feed_reactions_summary(db, [e.id for e, _ in result], user.id)
     return [
         FeedEventOut(
             id=e.id,
@@ -335,6 +359,112 @@ async def feed(
             payload=e.payload,
             user=_lite(u),
             createdAt=e.created_at,
+            reactions=ReactionSummary(**reactions.get(e.id, {})),
         )
-        for e, u in result.all()
+        for e, u in result
+    ]
+
+
+async def _event_visible(db: AsyncSession, event_id: int, user_id: int) -> FeedEvent | None:
+    """O evento existe e pertence ao utilizador ou a um amigo (está no feed dele)?"""
+    event = (
+        await db.execute(select(FeedEvent).where(FeedEvent.id == event_id))
+    ).scalar_one_or_none()
+    if event is None:
+        return None
+    if event.user_id == user_id or event.user_id in await friend_ids(db, user_id):
+        return event
+    return None
+
+
+@router.put("/feed/{event_id}/react", response_model=ReactionSummary)
+async def react_to_event(
+    event_id: int,
+    body: ReactionIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ReactionSummary:
+    if body.emoji not in ALLOWED_REACTIONS:
+        raise ValidationError("Reação inválida.")
+    event = await _event_visible(db, event_id, user.id)
+    if event is None:
+        raise NotFoundError("Evento")
+
+    existing = (
+        await db.execute(
+            select(FeedReaction).where(
+                FeedReaction.event_id == event_id, FeedReaction.user_id == user.id
+            )
+        )
+    ).scalar_one_or_none()
+    is_new = existing is None
+    if existing:
+        existing.emoji = body.emoji
+    else:
+        db.add(FeedReaction(event_id=event_id, user_id=user.id, emoji=body.emoji))
+        await db.flush()
+
+    # notifica o dono do evento (não a si próprio) só na primeira reação
+    if is_new and event.user_id != user.id:
+        await notify(
+            db, event.user_id, "reaction", "Nova reação",
+            f"{_display(user)} reagiu {body.emoji} à tua atividade", url="/app", actor_id=user.id,
+        )
+    summary = (await feed_reactions_summary(db, [event_id], user.id)).get(event_id, {})
+    return ReactionSummary(**summary)
+
+
+@router.delete("/feed/{event_id}/react", response_model=ReactionSummary)
+async def unreact_to_event(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ReactionSummary:
+    await db.execute(
+        delete(FeedReaction).where(
+            FeedReaction.event_id == event_id, FeedReaction.user_id == user.id
+        )
+    )
+    summary = (await feed_reactions_summary(db, [event_id], user.id)).get(event_id, {})
+    return ReactionSummary(**summary)
+
+
+@router.post("/nudge", status_code=201)
+async def nudge_friend(
+    body: NudgeIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    if body.userId == user.id:
+        raise ValidationError("Não podes dar um toque a ti próprio.")
+    if not await are_friends(db, user.id, body.userId):
+        raise ForbiddenError("Só podes dar um toque a amigos.")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=NUDGE_COOLDOWN_SECONDS)
+    recent = (
+        await db.execute(
+            select(Nudge.id).where(
+                Nudge.from_user_id == user.id,
+                Nudge.to_user_id == body.userId,
+                Nudge.created_at > cutoff,
+            )
+        )
+    ).first()
+    if recent:
+        raise ConflictError("Já deste um toque há pouco. Espera um bocadinho.")
+
+    db.add(Nudge(from_user_id=user.id, to_user_id=body.userId, kind=body.kind))
+    await db.flush()
+    emoji, text = NUDGE_TEXT[body.kind]
+    await notify(
+        db, body.userId, "nudge", f"{emoji} Toque de @{user.username or '?'}",
+        text, url="/app", actor_id=user.id,
+    )
+    return {"ok": True}
+
+
+@router.get("/badges/catalog", response_model=list[BadgeOut])
+async def badges_catalog() -> list[BadgeOut]:
+    return [
+        BadgeOut(kind=k, emoji=e, title=t, description=d) for k, (e, t, d) in BADGES.items()
     ]

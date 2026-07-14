@@ -8,7 +8,12 @@ import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
 import { clearLocalCache } from '../lib/sync'
 import { getPushState, subscribeToPush, unsubscribeFromPush, type PushState } from '../lib/push'
 import { listReminders, saveReminders, REMINDER_META, type Reminder } from '../lib/reminders'
-import { social, type SocialMe } from '../lib/social'
+import {
+  notifications as notificationsApi,
+  PREF_META,
+  type NotificationPrefs,
+} from '../lib/notifications'
+import { BADGES, social, type SocialMe } from '../lib/social'
 import PesoDetail from './details/PesoDetail'
 import Avatar from './social/Avatar'
 import EditProfileSheet from './social/EditProfileSheet'
@@ -235,14 +240,17 @@ function AdminAccessCard() {
   )
 }
 
-/** Ativar/desativar notificações push (Web Push). */
+/** Ativar/desativar notificações push (Web Push) + categorias + teste. */
 function NotificationsCard() {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null)
+  const [test, setTest] = useState<'idle' | 'sending' | 'sent' | 'nopush'>('idle')
 
   useEffect(() => {
     getPushState().then(setState)
+    notificationsApi.prefs().then(setPrefs).catch(() => {})
   }, [])
 
   const toggle = async () => {
@@ -262,6 +270,28 @@ function NotificationsCard() {
     }
   }
 
+  const patchPref = async (key: keyof NotificationPrefs, value: boolean) => {
+    if (!prefs) return
+    const next = { ...prefs, [key]: value }
+    setPrefs(next) // otimista
+    try {
+      setPrefs(await notificationsApi.savePrefs(next))
+    } catch {
+      setPrefs(prefs)
+    }
+  }
+
+  const runTest = async () => {
+    setTest('sending')
+    try {
+      const r = await notificationsApi.test()
+      setTest(r.pushed ? 'sent' : 'nopush')
+    } catch {
+      setTest('nopush')
+    }
+    setTimeout(() => setTest('idle'), 3000)
+  }
+
   const canToggle = state === 'on' || state === 'off'
 
   return (
@@ -271,8 +301,8 @@ function NotificationsCard() {
         <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted">Notificações</div>
           <div className="text-sm text-ink-2">
-            {state === 'on' && 'Ativas — recebes avisos de mensagens e amizades.'}
-            {state === 'off' && 'Ativa para receber mensagens e pedidos de amizade.'}
+            {state === 'on' && 'Ativas — recebes avisos em tempo real.'}
+            {state === 'off' && 'Ativa para receber mensagens, reações e mais.'}
             {state === 'denied' && 'Bloqueadas — autoriza nas definições do navegador.'}
             {state === 'ios-needs-install' && 'No iPhone, adiciona a app ao ecrã inicial primeiro.'}
             {state === 'unsupported' && 'Este dispositivo não suporta notificações push.'}
@@ -283,7 +313,7 @@ function NotificationsCard() {
           <button
             onClick={toggle}
             disabled={busy}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition active:scale-95 disabled:opacity-40 ${
+            className={`press shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-40 ${
               state === 'on' ? 'bg-bg text-critical' : 'bg-accent text-white'
             }`}
           >
@@ -292,6 +322,43 @@ function NotificationsCard() {
         )}
       </div>
       {error && <p role="alert" className="mt-2 text-sm font-medium text-critical">{error}</p>}
+
+      {/* categorias */}
+      {prefs && (
+        <ul className="mt-3 divide-y divide-line border-t border-line">
+          {PREF_META.map((meta) => (
+            <li key={meta.key} className="flex items-center gap-3 py-2.5">
+              <span className="text-lg" aria-hidden>{meta.emoji}</span>
+              <div className="flex-1">
+                <div className="text-[15px] font-medium">{meta.label}</div>
+                <div className="text-xs text-muted">{meta.hint}</div>
+              </div>
+              <button
+                role="switch"
+                aria-checked={prefs[meta.key]}
+                aria-label={meta.label}
+                onClick={() => patchPref(meta.key, !prefs[meta.key])}
+                className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${prefs[meta.key] ? 'bg-accent' : 'bg-line'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${prefs[meta.key] ? 'translate-x-[1.125rem]' : 'translate-x-0.5'}`} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {state === 'on' && (
+        <button
+          onClick={runTest}
+          disabled={test === 'sending'}
+          className="press mt-3 w-full rounded-xl bg-bg py-2.5 text-sm font-semibold text-accent disabled:opacity-40"
+        >
+          {test === 'sending' && 'A enviar…'}
+          {test === 'sent' && 'Enviada ✓ — verifica a notificação'}
+          {test === 'nopush' && 'Guardada — push ainda não ativo no servidor'}
+          {test === 'idle' && 'Enviar notificação de teste'}
+        </button>
+      )}
     </Card>
   )
 }
@@ -401,6 +468,24 @@ function SocialProfileCard() {
           )}
         </div>
       </div>
+
+      {me?.badges && me.badges.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Conquistas</div>
+          <div className="flex flex-wrap gap-1.5">
+            {me.badges.map((k) => {
+              const b = BADGES[k]
+              if (!b) return null
+              return (
+                <span key={k} title={b.description} className="animate-pop flex items-center gap-1 rounded-full bg-bg px-2.5 py-1 text-xs font-medium">
+                  <span aria-hidden>{b.emoji}</span> {b.title}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <button
         onClick={() => setEditing(true)}
         disabled={!me}

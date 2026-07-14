@@ -14,6 +14,7 @@ from app.data.router import router as data_router
 from app.gdpr.router import router as gdpr_router
 from app.messages.router import router as messages_router
 from app.messages.ws import router as ws_router
+from app.notifications.router import router as notifications_router
 from app.push.router import router as push_router
 from app.reminders.router import router as reminders_router
 from app.social.router import router as social_router
@@ -94,6 +95,7 @@ app.include_router(messages_router)
 app.include_router(ws_router)
 app.include_router(push_router)
 app.include_router(reminders_router)
+app.include_router(notifications_router)
 app.include_router(admin_router)
 
 

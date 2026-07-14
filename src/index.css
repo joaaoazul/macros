@@ -118,9 +118,96 @@ a,
   animation: backdrop-in 200ms ease-out;
 }
 
+/* --- Animações suaves ao estilo iOS --- */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes tapback {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* entrada suave; usa style={{ animationDelay }} para escalonar listas */
+.animate-in {
+  animation: fade-in-up 340ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.animate-pop {
+  animation: pop-in 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.animate-tapback {
+  animation: tapback 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.animate-toast {
+  animation: toast-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.animate-fade {
+  animation: fade-in 220ms ease-out both;
+}
+
+/* toque tátil: encolhe ligeiramente ao carregar (spring) */
+.press {
+  transition: transform 140ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.press:active {
+  transform: scale(0.94);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sheet-panel,
-  .sheet-backdrop {
+  .sheet-backdrop,
+  .animate-in,
+  .animate-pop,
+  .animate-tapback,
+  .animate-toast,
+  .animate-fade {
     animation: none;
+  }
+  .press:active {
+    transform: none;
   }
 }

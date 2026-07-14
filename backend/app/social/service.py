@@ -9,7 +9,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.data.models import DbDiaryEntry, DbExercise, DbProfile, DbWater
-from app.social.models import FeedEvent, Friendship, LeaderboardRank
+from app.social.models import Badge, FeedEvent, Friendship, LeaderboardRank
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,18 @@ _LISBON = ZoneInfo("Europe/Lisbon")
 PLAN_TOLERANCE = 0.10
 STREAK_MILESTONES = (3, 7, 14, 30)
 _STREAK_SCAN_CAP = 60  # dias
+
+# Conquistas: kind → (emoji, título, descrição). O frontend tem o mesmo catálogo.
+BADGES: dict[str, tuple[str, str, str]] = {
+    "streak_7": ("🔥", "Uma semana a fogo", "7 dias seguidos no plano"),
+    "streak_14": ("⚡", "Duas semanas imparável", "14 dias seguidos no plano"),
+    "streak_30": ("🏆", "Um mês de disciplina", "30 dias seguidos no plano"),
+    "plan_master": ("🎯", "Semana perfeita", "7 de 7 dias no plano numa semana"),
+    "centurion": ("💯", "Centurião", "100 dias no plano no total"),
+}
+
+# Reações permitidas no feed (kudos)
+ALLOWED_REACTIONS = ("👏", "🔥", "💪", "🎉", "❤️")
 
 
 def lisbon_today() -> date:
@@ -200,6 +212,7 @@ async def evaluate_day_events(db: AsyncSession, user_id: int, day: date) -> None
             streak = await streak_ending_at(db, user_id, day)
             if streak in STREAK_MILESTONES:
                 await _upsert_event(db, user_id, "streak", day, {"days": streak})
+            await _maybe_award_badges(db, user_id, day, streak)
         else:
             # edição tirou o dia do plano — remover eventos que deixaram de ser verdade
             await db.execute(
@@ -213,6 +226,93 @@ async def evaluate_day_events(db: AsyncSession, user_id: int, day: date) -> None
         await _maybe_rank_up(db, user_id, today)
     except Exception:
         logger.exception("evaluate_day_events falhou (user=%s day=%s)", user_id, day)
+
+
+# --- conquistas (badges) ---
+
+
+async def user_badges(db: AsyncSession, user_id: int) -> list[str]:
+    """Kinds das conquistas do utilizador, mais recentes primeiro."""
+    rows = await db.execute(
+        select(Badge.kind).where(Badge.user_id == user_id).order_by(Badge.id.desc())
+    )
+    return [k for (k,) in rows.all()]
+
+
+async def _award_badge(db: AsyncSession, user_id: int, kind: str, day: date) -> None:
+    """Atribui uma conquista (idempotente). Se nova: cartão no feed + notificação."""
+    exists = (
+        await db.execute(select(Badge.id).where(Badge.user_id == user_id, Badge.kind == kind))
+    ).scalar_one_or_none()
+    if exists:
+        return
+    db.add(Badge(user_id=user_id, kind=kind, earned_on=day))
+    await db.flush()
+    await _upsert_event(db, user_id, f"badge_{kind}", day, {"badge": kind})
+    emoji, title, _desc = BADGES.get(kind, ("🏅", "Nova conquista", ""))
+    try:
+        from app.notifications.service import notify
+
+        await notify(
+            db, user_id, "badge", f"{emoji} {title}", "Desbloqueaste uma nova conquista!", url="/app"
+        )
+    except Exception:
+        logger.warning("notificação de badge falhou (user=%s kind=%s)", user_id, kind, exc_info=True)
+
+
+async def _maybe_award_badges(db: AsyncSession, user_id: int, day: date, streak: int) -> None:
+    """Avalia e atribui conquistas após um dia no plano."""
+    if streak >= 30:
+        await _award_badge(db, user_id, "streak_30", day)
+    if streak >= 14:
+        await _award_badge(db, user_id, "streak_14", day)
+    if streak >= 7:
+        await _award_badge(db, user_id, "streak_7", day)
+
+    # semana perfeita: 7/7 na semana ISO que contém `day`
+    start, end = week_window(day)
+    week_stats = (await compute_plan_days(db, [user_id], start, end)).get(user_id, {})
+    if sum(1 for s in week_stats.values() if s.on_plan) >= 7:
+        await _award_badge(db, user_id, "plan_master", day)
+
+    # centurião: 100 dias no plano no total (proxy: eventos day_on_plan)
+    total = (
+        await db.execute(
+            select(func.count(FeedEvent.id)).where(
+                FeedEvent.user_id == user_id, FeedEvent.kind == "day_on_plan"
+            )
+        )
+    ).scalar_one()
+    if total >= 100:
+        await _award_badge(db, user_id, "centurion", day)
+
+
+# --- reações do feed ---
+
+
+async def feed_reactions_summary(
+    db: AsyncSession, event_ids: list[int], me: int
+) -> dict[int, dict]:
+    """Para cada evento: contagem por emoji, total e a minha reação (se houver)."""
+    from app.social.models import FeedReaction
+
+    if not event_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(FeedReaction.event_id, FeedReaction.emoji, FeedReaction.user_id).where(
+                FeedReaction.event_id.in_(event_ids)
+            )
+        )
+    ).all()
+    summary: dict[int, dict] = {eid: {"counts": {}, "total": 0, "mine": None} for eid in event_ids}
+    for eid, emoji, uid in rows:
+        s = summary[eid]
+        s["counts"][emoji] = s["counts"].get(emoji, 0) + 1
+        s["total"] += 1
+        if uid == me:
+            s["mine"] = emoji
+    return summary
 
 
 async def compute_leaderboard(db: AsyncSession, user_id: int, today: date | None = None) -> list[dict]:

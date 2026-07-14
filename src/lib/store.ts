@@ -51,3 +51,8 @@ export function formatDatePT(iso: string): string {
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
+
+/** Vibração tátil curta (no-op onde não é suportado). */
+export function haptic(ms = 15): void {
+  navigator.vibrate?.(ms)
+}

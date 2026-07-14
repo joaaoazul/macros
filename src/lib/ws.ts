@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshSession } from './api'
+import type { AppNotification } from './notifications'
 import type { Message } from './social'
 
 export type ServerEvent =
   | { type: 'message'; message: Message; clientId?: string }
   | { type: 'read'; by: number; upToId: number }
   | { type: 'unread'; total: number }
+  | { type: 'reaction'; messageId: number; userId: number; emoji: string | null }
+  | { type: 'notification'; notification: AppNotification }
+  | { type: 'notif_unread'; total: number }
   | { type: 'error'; code: string; clientId?: string }
   | { type: 'pong' }
 
@@ -24,6 +28,9 @@ export interface SocialSocket {
   /** total de mensagens por ler (badge) */
   unread: number
   setUnread: React.Dispatch<React.SetStateAction<number>>
+  /** total de notificações por ler (badge do sino) */
+  notifUnread: number
+  setNotifUnread: React.Dispatch<React.SetStateAction<number>>
 }
 
 const PING_INTERVAL = 30_000
@@ -33,6 +40,7 @@ const MAX_BACKOFF = 30_000
 export function useSocialSocket(enabled: boolean): SocialSocket {
   const [connected, setConnected] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [notifUnread, setNotifUnread] = useState(0)
   const wsRef = useRef<WebSocket | null>(null)
   const subscribers = useRef<Set<(ev: ServerEvent) => void>>(new Set())
   const backoff = useRef(1000)
@@ -78,6 +86,8 @@ export function useSocialSocket(enabled: boolean): SocialSocket {
         return
       }
       if (ev.type === 'unread') setUnread(ev.total)
+      if (ev.type === 'notif_unread') setNotifUnread(ev.total)
+      if (ev.type === 'notification') setNotifUnread((n) => n + 1)
       for (const fn of subscribers.current) fn(ev)
     }
 
@@ -141,5 +151,5 @@ export function useSocialSocket(enabled: boolean): SocialSocket {
     }
   }, [])
 
-  return { send, subscribe, connected, unread, setUnread }
+  return { send, subscribe, connected, unread, setUnread, notifUnread, setNotifUnread }
 }

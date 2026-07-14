@@ -30,10 +30,18 @@ from app.data.models import (  # noqa: F401
     DbWeight,
 )
 from app.admin.models import IpBlocklist  # noqa: F401
-from app.messages.models import Message  # noqa: F401
+from app.messages.models import Message, MessageReaction  # noqa: F401
+from app.notifications.models import DbNotification, DbNotificationPref  # noqa: F401
 from app.push.models import DbPushSubscription  # noqa: F401
 from app.reminders.models import DbReminder  # noqa: F401
-from app.social.models import FeedEvent, Friendship, LeaderboardRank  # noqa: F401
+from app.social.models import (  # noqa: F401
+    Badge,
+    FeedEvent,
+    FeedReaction,
+    Friendship,
+    LeaderboardRank,
+    Nudge,
+)
 
 
 @pytest_asyncio.fixture()

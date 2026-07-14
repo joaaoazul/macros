@@ -3,12 +3,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../../lib/api'
 import {
+  BADGES,
+  NUDGES,
   social,
   type FriendsList,
+  type NudgeKind,
   type PublicProfile,
   type PublicProfileLite,
   type SearchResult,
 } from '../../lib/social'
+import { haptic } from '../../lib/store'
 import Avatar from './Avatar'
 import { Card } from '../ui'
 
@@ -176,6 +180,24 @@ export default function Friends({ onMessage }: Props) {
               </div>
               {profile.bio && <p className="mt-3 text-sm text-ink-2">{profile.bio}</p>}
 
+              {profile.badges.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {profile.badges.map((k) => {
+                    const b = BADGES[k]
+                    if (!b) return null
+                    return (
+                      <span
+                        key={k}
+                        title={b.description}
+                        className="animate-pop flex items-center gap-1 rounded-full bg-bg px-2.5 py-1 text-xs font-medium"
+                      >
+                        <span aria-hidden>{b.emoji}</span> {b.title}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <Card className="p-4 text-center">
                   <div className="text-2xl font-bold">{profile.stats.streak} 🔥</div>
@@ -195,10 +217,11 @@ export default function Friends({ onMessage }: Props) {
                         onMessage(profile)
                         setProfile(null)
                       }}
-                      className="rounded-full bg-accent px-6 py-3 font-semibold text-white"
+                      className="press rounded-full bg-accent px-6 py-3 font-semibold text-white"
                     >
                       Enviar mensagem
                     </button>
+                    <NudgeButton userId={profile.userId} />
                     <button
                       onClick={() => act(async () => {
                         await social.removeFriend(profile.userId)
@@ -229,5 +252,56 @@ export default function Friends({ onMessage }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+/** "Dar um toque": expande num seletor de mensagens rápidas; envia com cooldown. */
+function NudgeButton({ userId }: { userId: number }) {
+  const [open, setOpen] = useState(false)
+  const [state, setState] = useState<'idle' | 'sent' | 'error'>('idle')
+  const [msg, setMsg] = useState('')
+
+  const send = async (kind: NudgeKind) => {
+    haptic(20)
+    setOpen(false)
+    try {
+      await social.nudge(userId, kind)
+      setState('sent')
+      setMsg('Toque enviado! 👋')
+    } catch (e) {
+      setState('error')
+      setMsg(e instanceof ApiError ? e.message : 'Não foi possível enviar o toque.')
+    }
+    setTimeout(() => setState('idle'), 2500)
+  }
+
+  if (state === 'sent' || state === 'error') {
+    return (
+      <p className={`animate-fade text-center text-sm font-medium ${state === 'sent' ? 'text-good' : 'text-critical'}`}>
+        {msg}
+      </p>
+    )
+  }
+
+  if (open) {
+    return (
+      <div className="animate-in grid grid-cols-2 gap-2">
+        {NUDGES.map((n) => (
+          <button
+            key={n.kind}
+            onClick={() => send(n.kind)}
+            className="press flex items-center gap-2 rounded-xl bg-bg px-3 py-2.5 text-sm font-medium"
+          >
+            <span aria-hidden>{n.emoji}</span> {n.label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <button onClick={() => { haptic(10); setOpen(true) }} className="press rounded-full bg-bg px-6 py-3 font-semibold text-ink-2">
+      Dar um toque 👋
+    </button>
   )
 }

@@ -43,13 +43,18 @@ export default function Conversations({ socket, onOpen, onBack }: Props) {
         )}
         {convs !== null && convs.length > 0 && (
           <Card className="divide-y divide-line">
-            {convs.map((c) => (
-              <button key={c.user.userId} onClick={() => onOpen(c.user)} className="flex w-full items-center gap-3 p-4 text-left">
+            {convs.map((c, i) => (
+              <button
+                key={c.user.userId}
+                onClick={() => onOpen(c.user)}
+                className="animate-in flex w-full items-center gap-3 p-4 text-left transition-colors active:bg-bg"
+                style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
+              >
                 <Avatar avatar={c.user.avatar} avatarPhoto={c.user.avatarPhoto} size={48} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">@{c.user.username}</div>
                   <div className="truncate text-sm text-muted">
-                    {c.lastMessage ? c.lastMessage.body : 'Nova conversa'}
+                    {c.lastMessage ? (c.lastMessage.image && !c.lastMessage.body ? '📷 Foto' : c.lastMessage.body) : 'Nova conversa'}
                   </div>
                 </div>
                 {c.unread > 0 && (

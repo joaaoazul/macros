@@ -69,11 +69,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     expiry_task = asyncio.create_task(_close_at_expiry(ws, seconds_left))
 
     try:
-        # unread inicial
+        # unread inicial (mensagens + notificações)
         async with async_session_factory() as db:
             from app.messages.router import _unread_total
+            from app.notifications.service import unread_count as notif_unread
 
             await ws.send_json({"type": "unread", "total": await _unread_total(db, user_id)})
+            await ws.send_json({"type": "notif_unread", "total": await notif_unread(db, user_id)})
 
         while True:
             data = await ws.receive_json()
