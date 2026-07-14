@@ -90,6 +90,27 @@ class Recipe(BaseModel):
     items: list[RecipeItem] = Field(min_length=1, max_length=40)
 
 
+class MealPlanEntry(BaseModel):
+    """Uma refeição planeada num dia da semana. items são snapshots (como Recipe)."""
+
+    id: str = Field(max_length=40)
+    day: int = Field(ge=0, le=6)  # 0=segunda .. 6=domingo
+    meal: Literal["lunch", "dinner"]
+    name: str = Field(max_length=120)
+    emoji: str = Field(default="🍽️", max_length=16)
+    servings: float = Field(default=1, gt=0, le=50)
+    items: list[RecipeItem] = Field(min_length=1, max_length=40)
+
+
+class PantryItem(BaseModel):
+    id: str = Field(max_length=40)
+    kind: Literal["have", "recurring"]
+    name: str = Field(max_length=120)
+    emoji: str = Field(default="", max_length=16)
+    grams: float | None = Field(default=None, ge=0, le=100000)
+    unit: Unit | None = None
+
+
 class AllData(BaseModel):
     profile: Profile | None
     diary: dict[str, list[Entry]]
@@ -97,6 +118,8 @@ class AllData(BaseModel):
     exercise: dict[str, list[Exercise]]
     customFoods: list[Food]
     recipes: list[Recipe] = []
+    mealPlan: list[MealPlanEntry] = []
+    pantry: list[PantryItem] = []
 
 
 class DayUpsert(BaseModel):
@@ -114,6 +137,8 @@ class ImportPayload(BaseModel):
     exercise: dict[str, list[Exercise]] = Field(default={}, max_length=1000)
     customFoods: list[Food] = Field(default=[], max_length=2000)
     recipes: list[Recipe] = Field(default=[], max_length=200)
+    mealPlan: list[MealPlanEntry] = Field(default=[], max_length=200)
+    pantry: list[PantryItem] = Field(default=[], max_length=500)
 
 
 # ImportPayload é a AllData mais tolerante (tudo opcional) — recipes já incluído acima.

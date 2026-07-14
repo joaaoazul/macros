@@ -2,7 +2,18 @@
  *  com debounce, cache em localStorage e fila offline com retry no evento 'online'. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Diary, Entry, Exercise, ExerciseLog, Food, Profile, Recipe, WaterLog } from '../types'
+import type {
+  Diary,
+  Entry,
+  Exercise,
+  ExerciseLog,
+  Food,
+  MealPlanEntry,
+  PantryItem,
+  Profile,
+  Recipe,
+  WaterLog,
+} from '../types'
 import { api } from './api'
 
 interface AllData {
@@ -12,6 +23,8 @@ interface AllData {
   exercise: ExerciseLog
   customFoods: Food[]
   recipes: Recipe[]
+  mealPlan: MealPlanEntry[]
+  pantry: PantryItem[]
 }
 
 interface DayPatch {
@@ -27,6 +40,8 @@ const KEYS = {
   exercise: 'macros.exercise',
   customFoods: 'macros.customFoods',
   recipes: 'macros.recipes',
+  mealPlan: 'macros.mealPlan',
+  pantry: 'macros.pantry',
 } as const
 
 function readCache<T>(key: string, fallback: T): T {
@@ -70,6 +85,10 @@ export interface SyncedData {
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
   recipes: Recipe[]
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
+  mealPlan: MealPlanEntry[]
+  setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
+  pantry: PantryItem[]
+  setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
 }
 
 export function useSyncedData(userId: number): SyncedData {
@@ -81,18 +100,22 @@ export function useSyncedData(userId: number): SyncedData {
   const [exercise, rawSetExercise] = useState<ExerciseLog>({})
   const [customFoods, rawSetCustomFoods] = useState<Food[]>([])
   const [recipes, rawSetRecipes] = useState<Recipe[]>([])
+  const [mealPlan, rawSetMealPlan] = useState<MealPlanEntry[]>([])
+  const [pantry, rawSetPantry] = useState<PantryItem[]>([])
 
-  // Filas de escrita pendentes (merged por dia) + flags para profile/foods/recipes
+  // Filas de escrita pendentes (merged por dia) + flags para profile/foods/recipes/plano/despensa
   const pendingDays = useRef<Map<string, DayPatch>>(new Map())
   const pendingProfile = useRef(false)
   const pendingFoods = useRef(false)
   const pendingRecipes = useRef(false)
+  const pendingMealPlan = useRef(false)
+  const pendingPantry = useRef(false)
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const stateRef = useRef({ profile, diary, water, exercise, customFoods, recipes })
-  stateRef.current = { profile, diary, water, exercise, customFoods, recipes }
+  const stateRef = useRef({ profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry })
+  stateRef.current = { profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry }
 
   const flush = useCallback(async () => {
-    const { profile, diary, water, exercise, customFoods, recipes } = stateRef.current
+    const { profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry } = stateRef.current
 
     if (pendingProfile.current && profile) {
       pendingProfile.current = false
@@ -118,6 +141,24 @@ export function useSyncedData(userId: number): SyncedData {
         await api('/recipes', { method: 'PUT', body: recipes })
       } catch {
         pendingRecipes.current = true
+      }
+    }
+
+    if (pendingMealPlan.current) {
+      pendingMealPlan.current = false
+      try {
+        await api('/meal-plan', { method: 'PUT', body: mealPlan })
+      } catch {
+        pendingMealPlan.current = true
+      }
+    }
+
+    if (pendingPantry.current) {
+      pendingPantry.current = false
+      try {
+        await api('/pantry', { method: 'PUT', body: pantry })
+      } catch {
+        pendingPantry.current = true
       }
     }
 
@@ -157,6 +198,8 @@ export function useSyncedData(userId: number): SyncedData {
     rawSetExercise(readCache<ExerciseLog>(KEYS.exercise, {}))
     rawSetCustomFoods(readCache<Food[]>(KEYS.customFoods, []))
     rawSetRecipes(readCache<Recipe[]>(KEYS.recipes, []))
+    rawSetMealPlan(readCache<MealPlanEntry[]>(KEYS.mealPlan, []))
+    rawSetPantry(readCache<PantryItem[]>(KEYS.pantry, []))
 
     let cancelled = false
     api<AllData>('/data/all')
@@ -174,12 +217,16 @@ export function useSyncedData(userId: number): SyncedData {
           rawSetExercise(data.exercise)
           rawSetCustomFoods(data.customFoods)
           rawSetRecipes(data.recipes ?? [])
+          rawSetMealPlan(data.mealPlan ?? [])
+          rawSetPantry(data.pantry ?? [])
           writeCache(KEYS.profile, data.profile)
           writeCache(KEYS.diary, data.diary)
           writeCache(KEYS.water, data.water)
           writeCache(KEYS.exercise, data.exercise)
           writeCache(KEYS.customFoods, data.customFoods)
           writeCache(KEYS.recipes, data.recipes ?? [])
+          writeCache(KEYS.mealPlan, data.mealPlan ?? [])
+          writeCache(KEYS.pantry, data.pantry ?? [])
         }
       })
       .catch(() => {
@@ -201,6 +248,8 @@ export function useSyncedData(userId: number): SyncedData {
       exercise: readCache<ExerciseLog>(KEYS.exercise, {}),
       customFoods: readCache<Food[]>(KEYS.customFoods, []),
       recipes: readCache<Recipe[]>(KEYS.recipes, []),
+      mealPlan: readCache<MealPlanEntry[]>(KEYS.mealPlan, []),
+      pantry: readCache<PantryItem[]>(KEYS.pantry, []),
     }
     const data = await api<AllData>('/data/import', { method: 'POST', body: snapshot })
     rawSetProfile(data.profile)
@@ -209,6 +258,8 @@ export function useSyncedData(userId: number): SyncedData {
     rawSetExercise(data.exercise)
     rawSetCustomFoods(data.customFoods)
     rawSetRecipes(data.recipes ?? [])
+    rawSetMealPlan(data.mealPlan ?? [])
+    rawSetPantry(data.pantry ?? [])
     setMigrationAvailable(false)
   }, [])
 
@@ -221,6 +272,8 @@ export function useSyncedData(userId: number): SyncedData {
     rawSetExercise({})
     rawSetCustomFoods([])
     rawSetRecipes([])
+    rawSetMealPlan([])
+    rawSetPantry([])
     setMigrationAvailable(false)
   }, [])
 
@@ -314,6 +367,32 @@ export function useSyncedData(userId: number): SyncedData {
     [scheduleFlush],
   )
 
+  const setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>> = useCallback(
+    (action) => {
+      rawSetMealPlan((prev) => {
+        const next = typeof action === 'function' ? action(prev) : action
+        writeCache(KEYS.mealPlan, next)
+        pendingMealPlan.current = true
+        scheduleFlush()
+        return next
+      })
+    },
+    [scheduleFlush],
+  )
+
+  const setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>> = useCallback(
+    (action) => {
+      rawSetPantry((prev) => {
+        const next = typeof action === 'function' ? action(prev) : action
+        writeCache(KEYS.pantry, next)
+        pendingPantry.current = true
+        scheduleFlush()
+        return next
+      })
+    },
+    [scheduleFlush],
+  )
+
   return useMemo(
     () => ({
       loading,
@@ -332,11 +411,16 @@ export function useSyncedData(userId: number): SyncedData {
       setCustomFoods,
       recipes,
       setRecipes,
+      mealPlan,
+      setMealPlan,
+      pantry,
+      setPantry,
     }),
     [
       loading, migrationAvailable, importLocalData, dismissMigration,
       profile, setProfile, diary, setDiary, water, setWater,
       exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes,
+      mealPlan, setMealPlan, pantry, setPantry,
     ],
   )
 }

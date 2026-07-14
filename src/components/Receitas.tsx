@@ -1,23 +1,34 @@
 import { useMemo, useState } from 'react'
-import type { Food, MealId, Recipe, RecipeItem } from '../types'
+import type { Food, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
 import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { recipeKcal, saveAsNamed } from '../lib/recipes'
+import Planner from './Planner'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
   recipes: Recipe[]
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
   customFoods: Food[]
+  mealPlan: MealPlanEntry[]
+  setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
+  pantry: PantryItem[]
+  setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
   /** regista os itens na refeição escolhida (hoje) */
   onLog: (items: RecipeItem[], meal: MealId) => void
 }
 
 const RECIPE_EMOJIS = ['🍽️', '🥪', '🥗', '🍲', '🥘', '🍜', '🥣', '🍳', '🌯', '🍝', '🍛', '🥙']
 
-export default function Receitas({ recipes, setRecipes, customFoods, onLog }: Props) {
+const SEGMENTS = [
+  { id: 'recipes' as const, label: 'Receitas' },
+  { id: 'planner' as const, label: 'Planeador' },
+]
+
+export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
   const [building, setBuilding] = useState<Recipe | 'new' | null>(null)
   const [mealFor, setMealFor] = useState<Recipe | null>(null)
+  const [segment, setSegment] = useState<'recipes' | 'planner'>('recipes')
 
   const named = recipes.filter((r) => !r.auto)
   const autos = recipes.filter((r) => r.auto)
@@ -48,12 +59,49 @@ export default function Receitas({ recipes, setRecipes, customFoods, onLog }: Pr
 
   return (
     <div>
-      <LargeTitle title="Receitas" subtitle="As tuas combinações" />
+      <LargeTitle title="Cozinha" subtitle={segment === 'recipes' ? 'As tuas combinações' : 'Planeia e compra'} />
 
-      <div className="space-y-3.5 px-4 pt-2">
+      {/* segmented control iOS com indicador deslizante */}
+      <div className="px-4 pb-2 pt-1">
+        <div className="relative flex rounded-xl bg-surface p-1" role="tablist">
+          <div
+            className="absolute inset-y-1 rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+            style={{
+              width: `calc((100% - 0.5rem) / ${SEGMENTS.length})`,
+              transform: `translateX(${SEGMENTS.findIndex((s) => s.id === segment) * 100}%)`,
+            }}
+            aria-hidden
+          />
+          {SEGMENTS.map((s) => (
+            <button
+              key={s.id}
+              role="tab"
+              aria-selected={segment === s.id}
+              onClick={() => setSegment(s.id)}
+              className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${segment === s.id ? 'text-accent' : 'text-muted'}`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {segment === 'planner' ? (
+        <div className="animate-fade">
+          <Planner
+            recipes={recipes}
+            customFoods={customFoods}
+            mealPlan={mealPlan}
+            setMealPlan={setMealPlan}
+            pantry={pantry}
+            setPantry={setPantry}
+          />
+        </div>
+      ) : (
+      <div className="animate-fade space-y-3.5 px-4 pt-1">
         <button
           onClick={() => setBuilding('new')}
-          className="w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition active:scale-[0.98]"
+          className="press w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white"
         >
           ＋ Criar receita
         </button>
@@ -95,6 +143,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, onLog }: Pr
           </Card>
         )}
       </div>
+      )}
 
       {mealFor && (
         <MealPicker

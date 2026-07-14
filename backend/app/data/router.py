@@ -13,6 +13,8 @@ from app.data.models import (
     DbCustomFood,
     DbDiaryEntry,
     DbExercise,
+    DbMealPlanEntry,
+    DbPantryItem,
     DbProfile,
     DbRecipe,
     DbWater,
@@ -25,6 +27,8 @@ from app.data.schemas import (
     Exercise,
     Food,
     ImportPayload,
+    MealPlanEntry,
+    PantryItem,
     Profile,
     Recipe,
     Weight,
@@ -108,6 +112,31 @@ def _recipe_out(r: DbRecipe) -> Recipe:
     return Recipe(id=r.recipe_id, name=r.name, emoji=r.emoji, auto=r.auto, items=r.items)
 
 
+def _plan_row(user_id: int, m: MealPlanEntry) -> DbMealPlanEntry:
+    return DbMealPlanEntry(
+        user_id=user_id, entry_id=m.id, day=m.day, meal=m.meal, name=m.name,
+        emoji=m.emoji, servings=m.servings, items=[i.model_dump() for i in m.items],
+    )
+
+
+def _plan_out(m: DbMealPlanEntry) -> MealPlanEntry:
+    return MealPlanEntry(
+        id=m.entry_id, day=m.day, meal=m.meal, name=m.name, emoji=m.emoji,
+        servings=m.servings, items=m.items,
+    )
+
+
+def _pantry_row(user_id: int, p: PantryItem) -> DbPantryItem:
+    return DbPantryItem(
+        user_id=user_id, item_id=p.id, kind=p.kind, name=p.name, emoji=p.emoji,
+        grams=p.grams, unit=p.unit,
+    )
+
+
+def _pantry_out(p: DbPantryItem) -> PantryItem:
+    return PantryItem(id=p.item_id, kind=p.kind, name=p.name, emoji=p.emoji, grams=p.grams, unit=p.unit)
+
+
 async def _load_all(db: AsyncSession, user_id: int) -> AllData:
     profile = (
         await db.execute(select(DbProfile).where(DbProfile.user_id == user_id))
@@ -140,6 +169,20 @@ async def _load_all(db: AsyncSession, user_id: int) -> AllData:
         ).scalars()
     ]
 
+    meal_plan = [
+        _plan_out(m)
+        for m in (
+            await db.execute(select(DbMealPlanEntry).where(DbMealPlanEntry.user_id == user_id))
+        ).scalars()
+    ]
+
+    pantry = [
+        _pantry_out(p)
+        for p in (
+            await db.execute(select(DbPantryItem).where(DbPantryItem.user_id == user_id))
+        ).scalars()
+    ]
+
     return AllData(
         profile=_profile_out(profile) if profile else None,
         diary=diary,
@@ -147,6 +190,8 @@ async def _load_all(db: AsyncSession, user_id: int) -> AllData:
         exercise=exercise,
         customFoods=foods,
         recipes=recipes,
+        mealPlan=meal_plan,
+        pantry=pantry,
     )
 
 
@@ -253,6 +298,34 @@ async def put_recipes(
     return body
 
 
+@router.put("/meal-plan", response_model=list[MealPlanEntry])
+async def put_meal_plan(
+    body: list[MealPlanEntry],
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[MealPlanEntry]:
+    if len(body) > 200:
+        raise ValidationError("Plano de refeições demasiado grande.")
+    await db.execute(delete(DbMealPlanEntry).where(DbMealPlanEntry.user_id == user.id))
+    for m in _dedupe(body, lambda m: m.id):
+        db.add(_plan_row(user.id, m))
+    return body
+
+
+@router.put("/pantry", response_model=list[PantryItem])
+async def put_pantry(
+    body: list[PantryItem],
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[PantryItem]:
+    if len(body) > 500:
+        raise ValidationError("Despensa demasiado grande.")
+    await db.execute(delete(DbPantryItem).where(DbPantryItem.user_id == user.id))
+    for p in _dedupe(body, lambda p: p.id):
+        db.add(_pantry_row(user.id, p))
+    return body
+
+
 @router.get("/weights", response_model=list[Weight])
 async def list_weights(
     db: AsyncSession = Depends(get_db),
@@ -332,6 +405,16 @@ async def import_data(
     for r in _dedupe(body.recipes, lambda r: r.id):
         if r.id not in existing_recipe_ids:
             db.add(_recipe_row(user.id, r))
+
+    existing_plan_ids = {m.id for m in current.mealPlan}
+    for m in _dedupe(body.mealPlan, lambda m: m.id):
+        if m.id not in existing_plan_ids:
+            db.add(_plan_row(user.id, m))
+
+    existing_pantry_ids = {p.id for p in current.pantry}
+    for p in _dedupe(body.pantry, lambda p: p.id):
+        if p.id not in existing_pantry_ids:
+            db.add(_pantry_row(user.id, p))
 
     await db.flush()
     return await _load_all(db, user.id)

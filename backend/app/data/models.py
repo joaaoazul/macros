@@ -95,6 +95,44 @@ class DbRecipe(Base, TimestampMixin):
     items: Mapped[list] = mapped_column(JSON, nullable=False)  # [{foodName,emoji,grams,unit,kcal,protein,carbs,fat}]
 
 
+class DbMealPlanEntry(Base):
+    """Uma refeição planeada (almoço/jantar) num dia da semana (0=segunda..6=domingo).
+
+    items são snapshots (como nas receitas) para a lista de compras não partir se a
+    receita de origem for editada/apagada.
+    """
+
+    __tablename__ = "meal_plan_entries"
+    __table_args__ = (UniqueConstraint("user_id", "entry_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(_user_fk(), nullable=False, index=True)
+    entry_id: Mapped[str] = mapped_column(String(40), nullable=False)  # client uid()
+    day: Mapped[int] = mapped_column(Integer, nullable=False)  # 0..6 (segunda..domingo)
+    meal: Mapped[str] = mapped_column(String(8), nullable=False)  # lunch|dinner
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(16), nullable=False, default="🍽️", server_default="🍽️")
+    servings: Mapped[float] = mapped_column(Float, nullable=False, default=1, server_default="1")
+    items: Mapped[list] = mapped_column(JSON, nullable=False)  # [{foodName,emoji,grams,unit,kcal,...}]
+
+
+class DbPantryItem(Base):
+    """Despensa: kind='have' (tenho sempre → excluir da lista) ou 'recurring'
+    (adicionar sempre à lista, ex.: aveia/ovos do pequeno-almoço)."""
+
+    __tablename__ = "pantry_items"
+    __table_args__ = (UniqueConstraint("user_id", "item_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(_user_fk(), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(40), nullable=False)  # client uid()
+    kind: Mapped[str] = mapped_column(String(10), nullable=False)  # have|recurring
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    emoji: Mapped[str] = mapped_column(String(16), nullable=False, default="", server_default="")
+    grams: Mapped[float | None] = mapped_column(Float, nullable=True)  # p/ recorrentes
+    unit: Mapped[str | None] = mapped_column(String(2), nullable=True)  # g|ml
+
+
 class DbCustomFood(Base):
     __tablename__ = "custom_foods"
     __table_args__ = (UniqueConstraint("user_id", "food_id"),)

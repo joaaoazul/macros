@@ -7,7 +7,7 @@ import type { Food } from '../types'
  */
 const OFF_BASE = 'https://pt.openfoodfacts.org'
 const FIELDS =
-  'code,product_name,product_name_pt,generic_name,generic_name_pt,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size'
+  'code,product_name,product_name_pt,generic_name,generic_name_pt,brands,nutriments,serving_quantity,serving_quantity_unit,serving_size,product_quantity,quantity'
 
 interface OffProduct {
   code: string
@@ -20,6 +20,8 @@ interface OffProduct {
   serving_quantity?: number | string
   serving_quantity_unit?: string
   serving_size?: string
+  product_quantity?: number | string
+  quantity?: string
 }
 
 function toFood(p: OffProduct): Food | null {
@@ -58,6 +60,9 @@ function toFood(p: OffProduct): Food | null {
     return Number.isFinite(v) ? round1(v) : undefined
   }
 
+  const pkg = Number(p.product_quantity)
+  const packageGrams = Number.isFinite(pkg) && pkg > 0 ? Math.round(pkg) : undefined
+
   return {
     id: `off-${p.code}`,
     name,
@@ -73,6 +78,7 @@ function toFood(p: OffProduct): Food | null {
     saturates: micro('saturated-fat_100g'),
     salt: micro('salt_100g'),
     portions,
+    packageGrams,
   }
 }
 

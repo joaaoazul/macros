@@ -24,6 +24,8 @@ from app.data.models import (  # noqa: F401
     DbCustomFood,
     DbDiaryEntry,
     DbExercise,
+    DbMealPlanEntry,
+    DbPantryItem,
     DbProfile,
     DbRecipe,
     DbWater,

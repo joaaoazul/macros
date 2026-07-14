@@ -46,6 +46,8 @@ export interface Food {
   salt?: number
   // Medidas caseiras alternativas à pesagem (copos, fatias, unidades…).
   portions?: Portion[]
+  // Tamanho da embalagem em g/ml (do Open Food Facts) — p/ converter em nº de embalagens.
+  packageGrams?: number
 }
 
 export interface Entry {
@@ -86,6 +88,27 @@ export interface Recipe {
   emoji: string
   auto: boolean
   items: RecipeItem[]
+}
+
+/** Uma refeição planeada (almoço/jantar) num dia da semana. items são snapshots. */
+export interface MealPlanEntry {
+  id: string
+  day: number // 0=segunda .. 6=domingo
+  meal: 'lunch' | 'dinner'
+  name: string
+  emoji: string
+  servings: number
+  items: RecipeItem[]
+}
+
+/** Despensa: 'have' = tenho sempre (excluir da lista); 'recurring' = juntar sempre. */
+export interface PantryItem {
+  id: string
+  kind: 'have' | 'recurring'
+  name: string
+  emoji: string
+  grams?: number | null
+  unit?: 'g' | 'ml' | null
 }
 
 /** Diário: chave é a data em ISO (YYYY-MM-DD). */

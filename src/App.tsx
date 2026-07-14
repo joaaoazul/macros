@@ -37,7 +37,7 @@ export default function App() {
     loading, migrationAvailable, importLocalData, dismissMigration,
     profile: rawProfile, setProfile, diary, setDiary,
     water, setWater, exercise, setExercise, customFoods, setCustomFoods,
-    recipes, setRecipes,
+    recipes, setRecipes, mealPlan, setMealPlan, pantry, setPantry,
   } = data
 
   /** Regista os itens de uma receita na refeição escolhida, no dia de hoje. */
@@ -92,6 +92,10 @@ export default function App() {
             recipes={recipes}
             setRecipes={setRecipes}
             customFoods={customFoods}
+            mealPlan={mealPlan}
+            setMealPlan={setMealPlan}
+            pantry={pantry}
+            setPantry={setPantry}
             onLog={logRecipeToday}
           />
         )}
