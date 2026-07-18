@@ -69,10 +69,13 @@ async def test_message_flow_unread_and_read_receipts(client):
     assert resp.status_code == 204
     assert (await client.get("/api/v1/messages/unread-count")).json()["total"] == 0
 
-    # do lado da ana, as mensagens aparecem com readAt preenchido
+    # do lado da ana, o cursor de leitura do parceiro (rui) avançou até à última msg
     switch(client, ana_cookies)
     hist = (await client.get(f"/api/v1/messages/with/{rui_id}")).json()
-    assert all(m["readAt"] is not None for m in hist if m["senderId"] == ana_id)
+    last_id = max(m["id"] for m in hist)
+    convs = (await client.get("/api/v1/messages/conversations")).json()
+    dm = next(c for c in convs if c["type"] == "dm" and c["user"]["userId"] == rui_id)
+    assert dm["partnerReadUpTo"] == last_id
 
 
 async def test_message_validation(client):

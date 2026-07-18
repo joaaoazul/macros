@@ -15,6 +15,7 @@ from app.notifications.service import notify
 from app.social.models import Badge, FeedEvent, FeedReaction, Friendship, Nudge
 from app.social.schemas import (
     BadgeOut,
+    DerivedStats,
     FeedEventOut,
     FriendRequestIn,
     FriendshipOut,
@@ -35,6 +36,7 @@ from app.social.service import (
     ALLOWED_REACTIONS,
     BADGES,
     are_friends,
+    badges_detail,
     compute_leaderboard,
     derived_stats,
     emit_friend_joined,
@@ -80,7 +82,7 @@ def _lite(u: User) -> PublicProfileLite:
     )
 
 
-def _me(u: User, badges: list[str] | None = None) -> SocialMe:
+async def _me(db: AsyncSession, u: User) -> SocialMe:
     return SocialMe(
         userId=u.id,
         username=u.username,
@@ -88,7 +90,9 @@ def _me(u: User, badges: list[str] | None = None) -> SocialMe:
         avatarPhoto=u.avatar_photo,
         bio=u.bio,
         name=u.name,
-        badges=badges or [],
+        badges=await user_badges(db, u.id),
+        badgesDetail=await badges_detail(db, u.id),
+        stats=DerivedStats(**await derived_stats(db, u.id)),
     )
 
 
@@ -97,7 +101,7 @@ async def social_me(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SocialMe:
-    return _me(user, await user_badges(db, user.id))
+    return await _me(db, user)
 
 
 @router.put("/me", response_model=SocialMe)
@@ -117,7 +121,7 @@ async def update_social_me(
     user.avatar_photo = body.avatarPhoto
     user.bio = (body.bio or "").strip() or None
     db.add(user)
-    return _me(user, await user_badges(db, user.id))
+    return await _me(db, user)
 
 
 async def _friendship_status(db: AsyncSession, me: int, other: int) -> tuple[str, int | None]:

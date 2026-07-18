@@ -16,6 +16,7 @@ import {
 import { BADGES, social, type SocialMe } from '../lib/social'
 import PesoDetail from './details/PesoDetail'
 import Avatar from './social/Avatar'
+import BadgeGrid from './social/BadgeGrid'
 import EditProfileSheet from './social/EditProfileSheet'
 import { Card, LargeTitle } from './ui'
 
@@ -444,23 +445,27 @@ function RemindersCard() {
 function SocialProfileCard() {
   const [me, setMe] = useState<SocialMe | null>(null)
   const [editing, setEditing] = useState(false)
+  const [showBadges, setShowBadges] = useState(false)
 
   useEffect(() => {
     social.me().then(setMe).catch(() => setMe(null))
   }, [])
 
+  const topBadges = (me?.badges ?? []).slice(0, 4)
+
   return (
     <Card className="p-4">
       <div className="flex items-center gap-4">
-        <Avatar avatar={me?.avatar ?? '🙂'} avatarPhoto={me?.avatarPhoto} size={56} />
+        <Avatar avatar={me?.avatar ?? '🙂'} avatarPhoto={me?.avatarPhoto} size={72} />
         <div className="min-w-0 flex-1">
           {me?.username ? (
             <>
-              <div className="truncate font-semibold">@{me.username}</div>
+              <div className="truncate text-lg font-bold leading-tight">{me.name}</div>
+              <div className="truncate text-sm text-accent">@{me.username}</div>
               {me.bio ? (
-                <div className="truncate text-sm text-muted">{me.bio}</div>
+                <div className="mt-0.5 line-clamp-2 text-sm text-muted">{me.bio}</div>
               ) : (
-                <div className="text-sm text-muted">Sem bio</div>
+                <div className="mt-0.5 text-sm text-muted">Sem bio</div>
               )}
             </>
           ) : (
@@ -469,11 +474,26 @@ function SocialProfileCard() {
         </div>
       </div>
 
-      {me?.badges && me.badges.length > 0 && (
-        <div className="mt-3 border-t border-line pt-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Conquistas</div>
+      {me?.stats && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-bg p-3 text-center">
+            <div className="text-2xl font-bold">{me.stats.streak} 🔥</div>
+            <div className="text-xs text-muted">Streak</div>
+          </div>
+          <div className="rounded-2xl bg-bg p-3 text-center">
+            <div className="text-2xl font-bold">{me.stats.daysOnPlan7d}/7</div>
+            <div className="text-xs text-muted">Dias no plano</div>
+          </div>
+        </div>
+      )}
+
+      {topBadges.length > 0 && (
+        <button
+          onClick={() => setShowBadges(true)}
+          className="press mt-3 flex w-full items-center gap-2 border-t border-line pt-3 text-left"
+        >
           <div className="flex flex-wrap gap-1.5">
-            {me.badges.map((k) => {
+            {topBadges.map((k) => {
               const b = BADGES[k]
               if (!b) return null
               return (
@@ -483,7 +503,8 @@ function SocialProfileCard() {
               )
             })}
           </div>
-        </div>
+          <span className="ml-auto shrink-0 text-sm font-semibold text-accent">Ver todas ›</span>
+        </button>
       )}
 
       <button
@@ -503,6 +524,10 @@ function SocialProfileCard() {
           }}
           onClose={() => setEditing(false)}
         />
+      )}
+
+      {showBadges && me && (
+        <BadgeGrid earned={me.badges} earnedDetail={me.badgesDetail} onClose={() => setShowBadges(false)} />
       )}
     </Card>
   )

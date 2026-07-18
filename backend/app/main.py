@@ -17,6 +17,7 @@ from app.messages.ws import router as ws_router
 from app.notifications.router import router as notifications_router
 from app.push.router import router as push_router
 from app.reminders.router import router as reminders_router
+from app.scraper.router import router as scraper_router
 from app.social.router import router as social_router
 
 logging.basicConfig(level=settings.LOG_LEVEL)
@@ -95,6 +96,7 @@ app.include_router(messages_router)
 app.include_router(ws_router)
 app.include_router(push_router)
 app.include_router(reminders_router)
+app.include_router(scraper_router)
 app.include_router(notifications_router)
 app.include_router(admin_router)
 

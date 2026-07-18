@@ -31,11 +31,11 @@ def test_client_ip_falls_back_to_peer_without_real_ip():
 
 def test_ssrf_guard_blocks_private_and_non_https():
     assert safe_push_endpoint("http://push.example.com/x") is False  # não-https
-    with patch("app.push.service.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 443))]):
+    with patch("app.net.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 443))]):
         assert safe_push_endpoint("https://evil.example.com/x") is False  # resolve p/ loopback
-    with patch("app.push.service.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("10.0.0.5", 443))]):
+    with patch("app.net.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("10.0.0.5", 443))]):
         assert safe_push_endpoint("https://evil.example.com/x") is False  # RFC1918
-    with patch("app.push.service.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("142.250.185.14", 443))]):
+    with patch("app.net.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("142.250.185.14", 443))]):
         assert safe_push_endpoint("https://fcm.googleapis.com/x") is True  # público ok
 
 

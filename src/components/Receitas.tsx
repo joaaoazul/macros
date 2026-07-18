@@ -4,7 +4,8 @@ import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { recipeKcal, saveAsNamed } from '../lib/recipes'
 import Planner from './Planner'
-import { Card, LargeTitle } from './ui'
+import ShareSheet, { recipeShare } from './social/ShareSheet'
+import { Card, LargeTitle, SegmentedControl } from './ui'
 
 interface Props {
   recipes: Recipe[]
@@ -28,6 +29,7 @@ const SEGMENTS = [
 export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
   const [building, setBuilding] = useState<Recipe | 'new' | null>(null)
   const [mealFor, setMealFor] = useState<Recipe | null>(null)
+  const [sharing, setSharing] = useState<Recipe | null>(null)
   const [segment, setSegment] = useState<'recipes' | 'planner'>('recipes')
 
   const named = recipes.filter((r) => !r.auto)
@@ -63,27 +65,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
 
       {/* segmented control iOS com indicador deslizante */}
       <div className="px-4 pb-2 pt-1">
-        <div className="relative flex rounded-xl bg-surface p-1" role="tablist">
-          <div
-            className="absolute inset-y-1 rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
-            style={{
-              width: `calc((100% - 0.5rem) / ${SEGMENTS.length})`,
-              transform: `translateX(${SEGMENTS.findIndex((s) => s.id === segment) * 100}%)`,
-            }}
-            aria-hidden
-          />
-          {SEGMENTS.map((s) => (
-            <button
-              key={s.id}
-              role="tab"
-              aria-selected={segment === s.id}
-              onClick={() => setSegment(s.id)}
-              className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${segment === s.id ? 'text-accent' : 'text-muted'}`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={SEGMENTS} value={segment} onChange={setSegment} />
       </div>
 
       {segment === 'planner' ? (
@@ -114,6 +96,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
                 onLog={() => setMealFor(r)}
                 onEdit={() => setBuilding(r)}
                 onDelete={() => remove(r)}
+                onShare={() => setSharing(r)}
               />
             ))}
           </Card>
@@ -129,6 +112,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
                 onLog={() => setMealFor(r)}
                 onEdit={() => setBuilding(r)}
                 onDelete={() => remove(r)}
+                onShare={() => setSharing(r)}
               />
             ))}
           </Card>
@@ -153,6 +137,10 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
           onClose={() => setMealFor(null)}
         />
       )}
+
+      {sharing && (
+        <ShareSheet share={recipeShare(sharing)} onClose={() => setSharing(null)} />
+      )}
     </div>
   )
 }
@@ -162,11 +150,13 @@ function RecipeItemRow({
   onLog,
   onEdit,
   onDelete,
+  onShare,
 }: {
   recipe: Recipe
   onLog: () => void
   onEdit: () => void
   onDelete: () => void
+  onShare: () => void
 }) {
   const [open, setOpen] = useState(false)
   const label = recipe.name ?? recipe.items.map((i) => i.foodName).join(' + ')
@@ -204,6 +194,9 @@ function RecipeItemRow({
           <div className="mt-3 flex gap-2">
             <button onClick={onEdit} className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-accent">
               Editar
+            </button>
+            <button onClick={onShare} className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-accent">
+              Partilhar
             </button>
             <button onClick={onDelete} className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-critical">
               Eliminar

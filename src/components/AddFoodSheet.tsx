@@ -10,6 +10,7 @@ import {
   rememberCombo,
   saveAsNamed,
 } from '../lib/recipes'
+import { foodScraper } from '../lib/social'
 import { uid } from '../lib/store'
 
 const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
@@ -43,6 +44,31 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
   const [cart, setCart] = useState<RecipeItem[]>([])
   const [naming, setNaming] = useState(false)
   const [detail, setDetail] = useState<Food | null>(null)
+  const [scrapePrefill, setScrapePrefill] = useState<Food | null>(null)
+  const [scraping, setScraping] = useState(false)
+  const [scrapeErr, setScrapeErr] = useState('')
+
+  const trimmedQuery = query.trim()
+  const isUrl = /^https?:\/\/\S+$/i.test(trimmedQuery)
+
+  const importFromLink = async () => {
+    setScraping(true)
+    setScrapeErr('')
+    try {
+      const res = await foodScraper.scrape(trimmedQuery)
+      if (res.food) {
+        setScrapePrefill(res.food)
+        setCreating(true)
+        setQuery('')
+      } else {
+        setScrapeErr('Não encontrei valores nutricionais nessa página.')
+      }
+    } catch {
+      setScrapeErr('Não consegui importar esse link.')
+    } finally {
+      setScraping(false)
+    }
+  }
 
   const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
   const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
@@ -170,6 +196,25 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
                 📷
               </button>
             </div>
+
+            {isUrl && (
+              <div className="px-5 pt-3">
+                <button
+                  onClick={() => void importFromLink()}
+                  disabled={scraping}
+                  className="press flex w-full items-center gap-3 rounded-xl bg-accent-soft px-4 py-3 text-left disabled:opacity-60"
+                >
+                  <span className="text-xl" aria-hidden>🔗</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-accent">
+                      {scraping ? 'A importar…' : 'Importar deste link'}
+                    </span>
+                    <span className="block truncate text-xs text-muted">{trimmedQuery}</span>
+                  </span>
+                </button>
+                {scrapeErr && <p className="mt-1.5 text-xs font-medium text-critical">{scrapeErr}</p>}
+              </div>
+            )}
 
             <div className="scroll-contain mt-3 flex-1 overflow-y-auto px-5 pb-5">
               {recipeResults.length > 0 && (
@@ -485,10 +530,15 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
 
         {creating && (
           <CustomFoodForm
-            onCancel={() => setCreating(false)}
+            initial={scrapePrefill}
+            onCancel={() => {
+              setCreating(false)
+              setScrapePrefill(null)
+            }}
             onCreate={(food) => {
               setCustomFoods((c) => [food, ...c])
               setCreating(false)
+              setScrapePrefill(null)
               pick(food)
             }}
           />
@@ -630,20 +680,32 @@ function Preview({ label, value, suffix = '', dotVar }: { label: string; value: 
   )
 }
 
-function CustomFoodForm({ onCancel, onCreate }: { onCancel: () => void; onCreate: (f: Food) => void }) {
-  const [name, setName] = useState('')
-  const [unit, setUnit] = useState<'g' | 'ml'>('g')
-  const [kcal, setKcal] = useState('')
-  const [protein, setProtein] = useState('')
-  const [carbs, setCarbs] = useState('')
-  const [fat, setFat] = useState('')
-  const [showMore, setShowMore] = useState(false)
-  const [fiber, setFiber] = useState('')
-  const [sugar, setSugar] = useState('')
-  const [saturates, setSaturates] = useState('')
-  const [salt, setSalt] = useState('')
-  const [portionLabel, setPortionLabel] = useState('')
-  const [portionGrams, setPortionGrams] = useState('')
+function CustomFoodForm({
+  onCancel,
+  onCreate,
+  initial,
+}: {
+  onCancel: () => void
+  onCreate: (f: Food) => void
+  initial?: Food | null
+}) {
+  const num = (v: number | null | undefined) => (v != null ? String(v) : '')
+  const initPortion = initial?.portions?.[0]
+  const [name, setName] = useState(initial?.name ?? '')
+  const [unit, setUnit] = useState<'g' | 'ml'>(initial?.unit ?? 'g')
+  const [kcal, setKcal] = useState(initial ? String(initial.kcal) : '')
+  const [protein, setProtein] = useState(initial ? String(initial.protein) : '')
+  const [carbs, setCarbs] = useState(initial ? String(initial.carbs) : '')
+  const [fat, setFat] = useState(initial ? String(initial.fat) : '')
+  const [showMore, setShowMore] = useState(
+    !!(initial && (initial.fiber != null || initial.sugar != null || initial.saturates != null || initial.salt != null || initPortion)),
+  )
+  const [fiber, setFiber] = useState(num(initial?.fiber))
+  const [sugar, setSugar] = useState(num(initial?.sugar))
+  const [saturates, setSaturates] = useState(num(initial?.saturates))
+  const [salt, setSalt] = useState(num(initial?.salt))
+  const [portionLabel, setPortionLabel] = useState(initPortion?.label ?? '')
+  const [portionGrams, setPortionGrams] = useState(initPortion ? String(initPortion.grams) : '')
 
   const valid = name.trim() && Number(kcal) >= 0 && Number(protein) >= 0 && Number(carbs) >= 0 && Number(fat) >= 0 && kcal !== ''
 

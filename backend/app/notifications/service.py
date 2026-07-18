@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 _CATEGORY: dict[str, str] = {
     "friend_request": "friends",
     "friend_accepted": "friends",
+    "group_added": "messages",
     "reaction": "social",
     "nudge": "social",
     "badge": "social",

@@ -2,9 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../lib/auth'
-import { social, type PublicProfileLite, type SocialMe } from '../../lib/social'
+import {
+  messages as messagesApi,
+  social,
+  type Conversation,
+  type PublicProfileLite,
+  type SocialMe,
+} from '../../lib/social'
+import type { Food, Recipe } from '../../types'
 import type { SocialSocket } from '../../lib/ws'
-import { LargeTitle } from '../ui'
+import { LargeTitle, SegmentedControl } from '../ui'
 import Chat from './Chat'
 import Conversations from './Conversations'
 import Feed from './Feed'
@@ -21,13 +28,21 @@ const SEGMENTS: { id: Segment; label: string }[] = [
   { id: 'amigos', label: 'Amigos' },
 ]
 
-export default function Social({ socket }: { socket: SocialSocket }) {
+interface SocialProps {
+  socket: SocialSocket
+  customFoods: Food[]
+  setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
+  recipes: Recipe[]
+  setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
+}
+
+export default function Social({ socket, customFoods, setCustomFoods, recipes, setRecipes }: SocialProps) {
   const { user } = useAuth()
   const [me, setMe] = useState<SocialMe | null | undefined>(undefined)
   const [segment, setSegment] = useState<Segment>('feed')
   const [showConversations, setShowConversations] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
-  const [chatWith, setChatWith] = useState<PublicProfileLite | null>(null)
+  const [activeConv, setActiveConv] = useState<Conversation | null>(null)
 
   useEffect(() => {
     social.me().then(setMe).catch(() => setMe(null))
@@ -51,8 +66,26 @@ export default function Social({ socket }: { socket: SocialSocket }) {
     )
   }
 
-  const openChat = (u: PublicProfileLite) => {
-    setChatWith(u)
+  const openChat = async (u: PublicProfileLite) => {
+    setShowConversations(false)
+    try {
+      const conv = await messagesApi.openDm(u.userId)
+      setActiveConv(conv)
+    } catch {
+      /* ignora — provavelmente já não são amigos */
+    }
+  }
+
+  const refreshActiveConv = async () => {
+    if (!activeConv) return
+    try {
+      const list = await messagesApi.conversations()
+      const updated = list.find((c) => c.id === activeConv.id)
+      if (updated) setActiveConv(updated)
+      else setActiveConv(null) // saíste / grupo apagado
+    } catch {
+      /* ignora */
+    }
   }
 
   return (
@@ -97,29 +130,7 @@ export default function Social({ socket }: { socket: SocialSocket }) {
 
       {/* segmented control iOS com indicador deslizante */}
       <div className="px-4 pb-3 pt-1">
-        <div className="relative flex rounded-xl bg-surface p-1" role="tablist">
-          <div
-            className="absolute inset-y-1 rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
-            style={{
-              width: `calc((100% - 0.5rem) / ${SEGMENTS.length})`,
-              transform: `translateX(${SEGMENTS.findIndex((s) => s.id === segment) * 100}%)`,
-            }}
-            aria-hidden
-          />
-          {SEGMENTS.map((s) => (
-            <button
-              key={s.id}
-              role="tab"
-              aria-selected={segment === s.id}
-              onClick={() => setSegment(s.id)}
-              className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${
-                segment === s.id ? 'text-accent' : 'text-muted'
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={SEGMENTS} value={segment} onChange={setSegment} />
       </div>
 
       {/* sem wrapper com opacity animada: criaria um stacking context que prendia
@@ -127,26 +138,31 @@ export default function Social({ socket }: { socket: SocialSocket }) {
       <div key={segment}>
         {segment === 'feed' && <Feed onOpenFriends={() => setSegment('amigos')} />}
         {segment === 'classificacao' && <Leaderboard />}
-        {segment === 'amigos' && <Friends onMessage={openChat} />}
+        {segment === 'amigos' && <Friends onMessage={(u) => void openChat(u)} />}
       </div>
 
       {showNotifications && (
         <NotificationCenter socket={socket} onBack={() => setShowNotifications(false)} />
       )}
 
-      {showConversations && !chatWith && (
+      {showConversations && !activeConv && (
         <Conversations
           socket={socket}
-          onOpen={(u) => setChatWith(u)}
+          onOpen={(c) => setActiveConv(c)}
           onBack={() => setShowConversations(false)}
         />
       )}
-      {chatWith && user && (
+      {activeConv && user && (
         <Chat
           me={user.id}
-          other={chatWith}
+          conversation={activeConv}
           socket={socket}
-          onBack={() => setChatWith(null)}
+          onBack={() => setActiveConv(null)}
+          onConversationChanged={() => void refreshActiveConv()}
+          customFoods={customFoods}
+          setCustomFoods={setCustomFoods}
+          recipes={recipes}
+          setRecipes={setRecipes}
         />
       )}
     </div>

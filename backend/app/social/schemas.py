@@ -30,6 +30,11 @@ class PublicProfile(PublicProfileLite):
     badges: list[str] = []
 
 
+class BadgeEarned(BaseModel):
+    kind: str
+    earnedOn: date
+
+
 class SocialMe(BaseModel):
     userId: int
     username: str | None
@@ -38,6 +43,8 @@ class SocialMe(BaseModel):
     bio: str | None = None
     name: str
     badges: list[str] = []
+    badgesDetail: list[BadgeEarned] = []
+    stats: DerivedStats | None = None
 
 
 class SocialMeUpdate(BaseModel):

@@ -1,15 +1,13 @@
 """Envio de Web Push via pywebpush. No-op se VAPID não estiver configurado."""
 
-import ipaddress
 import json
 import logging
-import socket
-from urllib.parse import urlparse
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.net import safe_outbound_url
 from app.push.models import DbPushSubscription
 
 logger = logging.getLogger(__name__)
@@ -22,25 +20,8 @@ def push_enabled() -> bool:
 
 
 def safe_push_endpoint(endpoint: str) -> bool:
-    """Anti-SSRF: só https, e o host não pode resolver para um IP privado/loopback.
-
-    Bloqueia o endpoint (browser-controlado) de apontar a serviços internos.
-    """
-    try:
-        u = urlparse(endpoint)
-    except ValueError:
-        return False
-    if u.scheme != "https" or not u.hostname:
-        return False
-    try:
-        infos = socket.getaddrinfo(u.hostname, u.port or 443, proto=socket.IPPROTO_TCP)
-    except OSError:
-        return False
-    for *_, sockaddr in infos:
-        ip = ipaddress.ip_address(sockaddr[0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            return False
-    return True
+    """Anti-SSRF: só https, e o host não pode resolver para um IP privado/loopback."""
+    return safe_outbound_url(endpoint, ("https",)) is not None
 
 
 async def send_push(db: AsyncSession, user_id: int, title: str, body: str, url: str = "/") -> None:

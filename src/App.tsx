@@ -99,7 +99,15 @@ export default function App() {
             onLog={logRecipeToday}
           />
         )}
-        {tab === 'social' && <Social socket={socket} />}
+        {tab === 'social' && (
+          <Social
+            socket={socket}
+            customFoods={customFoods}
+            setCustomFoods={setCustomFoods}
+            recipes={recipes}
+            setRecipes={setRecipes}
+          />
+        )}
         {tab === 'perfil' && <Perfil profile={profile} setProfile={setProfile} />}
       </div>
 

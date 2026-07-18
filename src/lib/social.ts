@@ -25,6 +25,11 @@ export interface PublicProfile extends PublicProfileLite {
   badges: string[]
 }
 
+export interface BadgeEarned {
+  kind: string
+  earnedOn: string
+}
+
 export interface SocialMe {
   userId: number
   username: string | null
@@ -33,6 +38,15 @@ export interface SocialMe {
   bio?: string | null
   name: string
   badges: string[]
+  badgesDetail?: BadgeEarned[]
+  stats?: DerivedStats
+}
+
+export interface BadgeCatalogItem {
+  kind: string
+  emoji: string
+  title: string
+  description: string
 }
 
 /** Reações permitidas no feed (kudos) — espelha o backend. */
@@ -60,6 +74,9 @@ export const BADGES: Record<string, { emoji: string; title: string; description:
   streak_30: { emoji: '🏆', title: 'Um mês de disciplina', description: '30 dias seguidos no plano' },
   plan_master: { emoji: '🎯', title: 'Semana perfeita', description: '7 de 7 dias no plano numa semana' },
   centurion: { emoji: '💯', title: 'Centurião', description: '100 dias no plano no total' },
+  heavy_tracker: { emoji: '📒', title: 'Registador dedicado', description: '30 dias com refeições registadas' },
+  first_recipe: { emoji: '🍳', title: 'Chef de estreia', description: 'Criaste a tua primeira receita' },
+  sharer: { emoji: '🤝', title: 'Partilha é cuidar', description: 'Um amigo guardou algo que partilhaste' },
 }
 
 export interface ProfileUpdate {
@@ -116,25 +133,49 @@ export interface MessageReaction {
   emoji: string
 }
 
+/** Snapshot partilhado numa mensagem: um alimento ou uma receita. */
+export interface Share {
+  kind: 'food' | 'recipe'
+  payload: Record<string, unknown>
+}
+
 export interface Message {
   id: number
   senderId: number
-  recipientId: number
+  conversationId: number | null
   body: string
   image?: string | null
+  share?: Share | null
   createdAt: string
-  readAt: string | null
   reactions: MessageReaction[]
 }
 
+export type ConversationType = 'dm' | 'group'
+
 export interface Conversation {
-  user: PublicProfileLite
-  lastMessage: Message | null
+  id: number
+  type: ConversationType
+  title: string | null
+  emoji: string
+  /** o outro membro (só em DMs) */
+  user: PublicProfileLite | null
+  members: PublicProfileLite[]
+  role: 'owner' | 'member'
   unread: number
+  lastMessage: Message | null
+  /** cursor de leitura do parceiro (DMs): mensagens minhas com id <= isto foram lidas */
+  partnerReadUpTo: number | null
+}
+
+export interface SaveShareOut {
+  kind: 'food' | 'recipe'
+  food?: import('../types').Food | null
+  recipe?: import('../types').Recipe | null
 }
 
 export const social = {
   me: () => api<SocialMe>('/social/me'),
+  badgesCatalog: () => api<BadgeCatalogItem[]>('/social/badges/catalog'),
   updateMe: (data: ProfileUpdate) => api<SocialMe>('/social/me', { method: 'PUT', body: data }),
   search: (q: string) => api<SearchResult[]>(`/social/search?q=${encodeURIComponent(q)}`),
   profile: (username: string) => api<PublicProfile>(`/social/users/${encodeURIComponent(username)}`),
@@ -155,18 +196,54 @@ export const social = {
     api<{ ok: boolean }>('/social/nudge', { method: 'POST', body: { userId, kind } }),
 }
 
+export interface SendPayload {
+  body?: string
+  image?: string | null
+  share?: Share | null
+}
+
 export const messages = {
   conversations: () => api<Conversation[]>('/messages/conversations'),
   unreadCount: () => api<{ total: number }>('/messages/unread-count'),
-  history: (userId: number, before?: number) =>
-    api<Message[]>(`/messages/with/${userId}?limit=50${before ? `&before=${before}` : ''}`),
-  send: (userId: number, body: string, image?: string | null) =>
-    api<Message>(`/messages/with/${userId}`, { method: 'POST', body: { body, image } }),
-  markRead: (userId: number) => api<void>(`/messages/with/${userId}/read`, { method: 'POST' }),
+  openDm: (userId: number) => api<Conversation>(`/messages/dm/${userId}`, { method: 'POST' }),
+  history: (conversationId: number, before?: number) =>
+    api<Message[]>(
+      `/messages/conversations/${conversationId}/messages?limit=50${before ? `&before=${before}` : ''}`,
+    ),
+  send: (conversationId: number, payload: SendPayload) =>
+    api<Message>(`/messages/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: payload,
+    }),
+  markRead: (conversationId: number) =>
+    api<void>(`/messages/conversations/${conversationId}/read`, { method: 'POST' }),
   react: (messageId: number, emoji: string) =>
     api<void>(`/messages/${messageId}/react`, { method: 'PUT', body: { emoji } }),
   unreact: (messageId: number) =>
     api<void>(`/messages/${messageId}/react`, { method: 'DELETE' }),
+  saveShare: (messageId: number) =>
+    api<SaveShareOut>(`/messages/${messageId}/save-share`, { method: 'POST' }),
+  // grupos
+  createGroup: (title: string, emoji: string, memberIds: number[]) =>
+    api<Conversation>('/messages/groups', { method: 'POST', body: { title, emoji, memberIds } }),
+  renameGroup: (conversationId: number, title?: string, emoji?: string) =>
+    api<Conversation>(`/messages/groups/${conversationId}`, { method: 'PATCH', body: { title, emoji } }),
+  addMembers: (conversationId: number, memberIds: number[]) =>
+    api<Conversation>(`/messages/groups/${conversationId}/members`, {
+      method: 'POST',
+      body: { memberIds },
+    }),
+  removeMember: (conversationId: number, userId: number) =>
+    api<void>(`/messages/groups/${conversationId}/members/${userId}`, { method: 'DELETE' }),
+}
+
+/** Alimento/receita partilháveis num chat. */
+export const foodScraper = {
+  scrape: (url: string) =>
+    api<{ food: import('../types').Food | null; source: string }>('/foods/scrape', {
+      method: 'POST',
+      body: { url },
+    }),
 }
 
 /** Reações permitidas em mensagens (tapback iOS) — espelha o backend. */

@@ -5,6 +5,10 @@ cliente). Usamos isso; caímos no peer directo se o header não existir (dev loc
 `X-Forwarded-For` NÃO é usado: é appendável pelo cliente e portanto spoofável.
 """
 
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
 from fastapi import Request
 
 
@@ -13,3 +17,35 @@ def client_ip(request: Request) -> str:
     if real:
         return real[:64]
     return (request.client.host if request.client else "")[:64]
+
+
+def safe_outbound_url(url: str, allowed_schemes: tuple[str, ...] = ("https",)) -> str | None:
+    """Anti-SSRF: aceita o URL só se o esquema for permitido e o host resolver para
+    um IP público. Devolve o URL se for seguro, senão None.
+
+    Usado para pedidos de saída cujo destino é controlado pelo utilizador (push
+    endpoints, scraper de alimentos). Bloqueia apontar a serviços internos.
+    """
+    try:
+        u = urlparse(url)
+    except ValueError:
+        return None
+    if u.scheme not in allowed_schemes or not u.hostname:
+        return None
+    default_port = 443 if u.scheme == "https" else 80
+    try:
+        infos = socket.getaddrinfo(u.hostname, u.port or default_port, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return None
+    for *_, sockaddr in infos:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return None
+    return url

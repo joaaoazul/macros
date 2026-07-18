@@ -7,17 +7,31 @@ import type { Message } from './social'
 
 export type ServerEvent =
   | { type: 'message'; message: Message; clientId?: string }
-  | { type: 'read'; by: number; upToId: number }
+  | { type: 'read'; conversationId: number; by: number; upToId: number }
   | { type: 'unread'; total: number }
-  | { type: 'reaction'; messageId: number; userId: number; emoji: string | null }
+  | {
+      type: 'reaction'
+      conversationId: number
+      messageId: number
+      userId: number
+      emoji: string | null
+    }
+  | { type: 'conversation'; conversationId: number }
   | { type: 'notification'; notification: AppNotification }
   | { type: 'notif_unread'; total: number }
   | { type: 'error'; code: string; clientId?: string }
   | { type: 'pong' }
 
 type ClientEvent =
-  | { type: 'send'; to: number; body: string; clientId: string }
-  | { type: 'read'; from: number }
+  | {
+      type: 'send'
+      conversationId?: number
+      to?: number
+      body?: string
+      share?: import('./social').Share | null
+      clientId: string
+    }
+  | { type: 'read'; conversationId?: number; from?: number }
   | { type: 'ping' }
 
 export interface SocialSocket {

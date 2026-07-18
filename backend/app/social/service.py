@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.data.models import DbDiaryEntry, DbExercise, DbProfile, DbWater
+from app.data.models import DbDiaryEntry, DbExercise, DbProfile, DbRecipe, DbWater
 from app.social.models import Badge, FeedEvent, Friendship, LeaderboardRank
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,9 @@ BADGES: dict[str, tuple[str, str, str]] = {
     "streak_30": ("🏆", "Um mês de disciplina", "30 dias seguidos no plano"),
     "plan_master": ("🎯", "Semana perfeita", "7 de 7 dias no plano numa semana"),
     "centurion": ("💯", "Centurião", "100 dias no plano no total"),
+    "heavy_tracker": ("📒", "Registador dedicado", "30 dias com refeições registadas"),
+    "first_recipe": ("🍳", "Chef de estreia", "Criaste a tua primeira receita"),
+    "sharer": ("🤝", "Partilha é cuidar", "Um amigo guardou algo que partilhaste"),
 }
 
 # Reações permitidas no feed (kudos)
@@ -285,6 +288,46 @@ async def _maybe_award_badges(db: AsyncSession, user_id: int, day: date, streak:
     ).scalar_one()
     if total >= 100:
         await _award_badge(db, user_id, "centurion", day)
+
+    # registador dedicado: 30 dias distintos com registos no diário
+    logged_days = (
+        await db.execute(
+            select(func.count(func.distinct(DbDiaryEntry.date))).where(
+                DbDiaryEntry.user_id == user_id
+            )
+        )
+    ).scalar_one()
+    if logged_days >= 30:
+        await _award_badge(db, user_id, "heavy_tracker", day)
+
+    # chef de estreia: pelo menos uma receita nomeada
+    named_recipes = (
+        await db.execute(
+            select(func.count(DbRecipe.id)).where(
+                DbRecipe.user_id == user_id, DbRecipe.auto.is_(False)
+            )
+        )
+    ).scalar_one()
+    if named_recipes >= 1:
+        await _award_badge(db, user_id, "first_recipe", day)
+
+
+async def award_sharer(db: AsyncSession, user_id: int) -> None:
+    """Conquista dada a quem partilhou algo que um amigo guardou. Nunca levanta."""
+    try:
+        await _award_badge(db, user_id, "sharer", lisbon_today())
+    except Exception:
+        logger.warning("award_sharer falhou (user=%s)", user_id, exc_info=True)
+
+
+async def badges_detail(db: AsyncSession, user_id: int) -> list[dict]:
+    """Conquistas com data — mais recentes primeiro."""
+    rows = await db.execute(
+        select(Badge.kind, Badge.earned_on)
+        .where(Badge.user_id == user_id)
+        .order_by(Badge.id.desc())
+    )
+    return [{"kind": k, "earnedOn": earned} for k, earned in rows.all()]
 
 
 # --- reações do feed ---

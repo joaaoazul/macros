@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Food } from '../types'
 import { foodTips, getAnthropicKey, type FoodTips } from '../lib/ai'
+import ShareSheet, { foodShare } from './social/ShareSheet'
 
 interface Props {
   food: Food
@@ -36,6 +37,7 @@ export default function FoodCard({ food, onChoose, onClose }: Props) {
     }
   }
 
+  const [sharing, setSharing] = useState(false)
   const hasMicros =
     food.fiber != null || food.sugar != null || food.saturates != null || food.salt != null
   const hasAiKey = !!getAnthropicKey()
@@ -144,15 +146,29 @@ export default function FoodCard({ food, onChoose, onClose }: Props) {
           )}
         </div>
 
-        <div className="border-t border-line px-5 py-3">
+        <div className="flex gap-2 border-t border-line px-5 py-3">
+          <button
+            onClick={() => setSharing(true)}
+            aria-label="Partilhar alimento"
+            className="press flex h-[3.25rem] w-[3.25rem] shrink-0 items-center justify-center rounded-full bg-surface text-accent"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="18" cy="5" r="3" />
+              <circle cx="6" cy="12" r="3" />
+              <circle cx="18" cy="19" r="3" />
+              <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+            </svg>
+          </button>
           <button
             onClick={() => onChoose(food)}
-            className="w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition active:scale-[0.98]"
+            className="flex-1 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition active:scale-[0.98]"
           >
             Adicionar ao diário
           </button>
         </div>
       </div>
+
+      {sharing && <ShareSheet share={foodShare(food)} onClose={() => setSharing(false)} />}
     </div>
   )
 }

@@ -16,6 +16,46 @@ export function Card({ children, className = '' }: { children: React.ReactNode; 
   return <section className={`rounded-card bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>{children}</section>
 }
 
+/** Controlo segmentado iOS com indicador deslizante. Partilhado por Social/Cozinha. */
+export function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  className = '',
+}: {
+  options: { id: T; label: string }[]
+  value: T
+  onChange: (id: T) => void
+  className?: string
+}) {
+  const idx = Math.max(0, options.findIndex((o) => o.id === value))
+  return (
+    <div className={`relative flex rounded-xl bg-surface p-1 ${className}`} role="tablist">
+      <div
+        className="absolute inset-y-1 rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+        style={{
+          width: `calc((100% - 0.5rem) / ${options.length})`,
+          transform: `translateX(${idx * 100}%)`,
+        }}
+        aria-hidden
+      />
+      {options.map((o) => (
+        <button
+          key={o.id}
+          role="tab"
+          aria-selected={value === o.id}
+          onClick={() => onChange(o.id)}
+          className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${
+            value === o.id ? 'text-accent' : 'text-muted'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Botão circular "ghost" (ex.: setas de navegação de dias). */
 export function CircleButton({ onClick, disabled, label, children }: { onClick: () => void; disabled?: boolean; label: string; children: React.ReactNode }) {
   return (
