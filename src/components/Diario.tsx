@@ -1,9 +1,10 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import type { LaunchAction } from '../App'
 import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, Profile, Recipe, WaterLog } from '../types'
 import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
-import { buildUsageIndex } from '../lib/foods'
-import { formatDatePT, shiftDate, todayISO, uid } from '../lib/store'
+import { buildMealUsageIndex, buildUsageIndex } from '../lib/foods'
+import { formatDatePT, haptic, mealForNow, shiftDate, todayISO, uid } from '../lib/store'
 import AddFoodSheet from './AddFoodSheet'
 
 const CopyDaySheet = lazy(() => import('./CopyDaySheet'))
@@ -24,19 +25,27 @@ interface Props {
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
   recipes: Recipe[]
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
+  /** acção vinda de um atalho do ícone ou de uma partilha */
+  launch?: LaunchAction | null
+  onLaunchHandled?: () => void
 }
 
-export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes }: Props) {
+export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes, launch, onLaunchHandled }: Props) {
   const [date, setDate] = useState(todayISO)
   const [addingTo, setAddingTo] = useState<MealId | null>(null)
   const [addingExercise, setAddingExercise] = useState(false)
   const [showAgua, setShowAgua] = useState(false)
   const [showCopy, setShowCopy] = useState(false)
   const [customWater, setCustomWater] = useState('')
+  // pré-preenchimento vindo de uma partilha (link ou foto)
+  const [sheetQuery, setSheetQuery] = useState('')
+  const [sheetPhoto, setSheetPhoto] = useState<File | null>(null)
 
   const entries = useMemo(() => diary[date] ?? [], [diary, date])
   // ranking da pesquisa pelo que mais registas (derivado do diário todo)
   const usage = useMemo(() => buildUsageIndex(diary), [diary])
+  // sugestões por refeição, com base nos últimos 60 dias
+  const mealUsage = useMemo(() => buildMealUsageIndex(diary, todayISO()), [diary])
   const totals = useMemo(() => sumEntries(entries), [entries])
   const dayExercises = exercise[date] ?? []
   const burned = Math.round(dayExercises.reduce((s, e) => s + e.kcal, 0))
@@ -65,6 +74,41 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
   const addWater = (ml: number) => {
     setWater((w) => ({ ...w, [date]: Math.max(0, (w[date] ?? 0) + ml) }))
   }
+
+  /** Aplica uma vez o atalho/partilha com que a app foi aberta. */
+  useEffect(() => {
+    if (!launch) return
+    if (launch.kind === 'add') {
+      setAddingTo(launch.meal)
+    } else if (launch.kind === 'water') {
+      // escreve explicitamente em hoje: o atalho é sempre sobre hoje, mesmo que
+      // o diário estivesse noutro dia
+      const today = todayISO()
+      setDate(today)
+      setWater((w) => ({ ...w, [today]: Math.max(0, (w[today] ?? 0) + launch.ml) }))
+      haptic(20)
+    } else if (launch.kind === 'shareLink') {
+      setSheetQuery(launch.url)
+      setAddingTo(mealForNow())
+    } else if (launch.kind === 'sharePhoto') {
+      // o service worker deixou a foto em cache antes de redireccionar
+      void (async () => {
+        try {
+          const cached = await caches.match('/__shared-photo')
+          if (cached) {
+            const blob = await cached.blob()
+            setSheetPhoto(new File([blob], 'partilha.jpg', { type: blob.type || 'image/jpeg' }))
+          }
+        } catch {
+          /* sem foto: abre a folha normal */
+        }
+        setAddingTo(mealForNow())
+      })()
+    }
+    onLaunchHandled?.()
+    // só corre para a acção de arranque; as dependências mudariam a cada render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [launch])
   const addExercise = (ex: Exercise) => {
     setExercise((x) => ({ ...x, [date]: [...(x[date] ?? []), ex] }))
     setAddingExercise(false)
@@ -284,8 +328,11 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
           recipes={recipes}
           setRecipes={setRecipes}
           usage={usage}
+          mealUsage={mealUsage}
+          initialQuery={sheetQuery}
+          initialPhoto={sheetPhoto}
           onAdd={addEntry}
-          onClose={() => setAddingTo(null)}
+          onClose={() => { setAddingTo(null); setSheetQuery(''); setSheetPhoto(null) }}
         />
       )}
       {addingExercise && <AddExerciseSheet onAdd={addExercise} onClose={() => setAddingExercise(false)} />}

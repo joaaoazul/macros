@@ -27,11 +27,47 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'perfil', label: 'Perfil', icon: <IconPerson /> },
 ]
 
+/** Acção pedida no arranque por um atalho do ícone ou por uma partilha. */
+export type LaunchAction =
+  | { kind: 'add'; meal: MealId }
+  | { kind: 'water'; ml: number }
+  | { kind: 'shareLink'; url: string }
+  | { kind: 'sharePhoto' }
+
+const MEAL_IDS: MealId[] = ['breakfast', 'lunch', 'snack', 'dinner', 'supper']
+
+/** Lê os parâmetros de arranque e limpa-os do URL (para um F5 não repetir a acção). */
+function readLaunch(): LaunchAction | null {
+  if (typeof window === 'undefined') return null
+  const p = new URLSearchParams(window.location.search)
+  let action: LaunchAction | null = null
+
+  const add = p.get('add')
+  const water = Number(p.get('water'))
+  const shared = p.get('shared')
+
+  if (add && (MEAL_IDS as string[]).includes(add)) {
+    action = { kind: 'add', meal: add as MealId }
+  } else if (Number.isFinite(water) && water > 0 && water <= 3000) {
+    action = { kind: 'water', ml: water }
+  } else if (shared === 'photo') {
+    action = { kind: 'sharePhoto' }
+  } else if (shared === 'link') {
+    const v = p.get('v') || ''
+    if (v) action = { kind: 'shareLink', url: v }
+  }
+
+  if (action) window.history.replaceState({}, '', window.location.pathname)
+  return action
+}
+
 export default function App() {
   const { user } = useAuth()
   const data = useSyncedData(user!.id)
   const [tab, setTab] = useState<Tab>('diario')
   const socket = useSocialSocket(true)
+  // atalhos do ícone e conteúdo partilhado chegam como parâmetros no URL
+  const [launch, setLaunch] = useState<LaunchAction | null>(() => readLaunch())
 
   const {
     loading, migrationAvailable, importLocalData, dismissMigration,
@@ -83,6 +119,8 @@ export default function App() {
             setCustomFoods={setCustomFoods}
             recipes={recipes}
             setRecipes={setRecipes}
+            launch={launch}
+            onLaunchHandled={() => setLaunch(null)}
           />
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}

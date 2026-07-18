@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { Entry, Food, MealId, Portion, Recipe, RecipeItem } from '../types'
 import { MEALS } from '../types'
-import { FOOD_DB, searchFoods } from '../lib/foods'
+import { FOOD_DB, searchFoods, topFoodsForMeal } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
 import {
   entryFromRecipeItem,
@@ -25,6 +25,12 @@ interface Props {
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
   /** frequência de uso por alimento, para ordenar a pesquisa */
   usage?: Map<string, number>
+  /** frequência por refeição, para sugerir o costume desta refeição */
+  mealUsage?: Map<string, Map<string, number>>
+  /** pesquisa pré-preenchida (ex.: link partilhado de outra app) */
+  initialQuery?: string
+  /** foto partilhada de outra app: abre logo a análise por IA */
+  initialPhoto?: File | null
   onAdd: (entry: Entry) => void
   onClose: () => void
 }
@@ -32,8 +38,8 @@ interface Props {
 type OffState = { status: 'idle' | 'loading' | 'done' | 'error'; results: Food[] }
 type QtyMode = 'unit' | 'portion'
 
-export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, usage, onAdd, onClose }: Props) {
-  const [query, setQuery] = useState('')
+export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, usage, mealUsage, initialQuery = '', initialPhoto = null, onAdd, onClose }: Props) {
+  const [query, setQuery] = useState(initialQuery)
   const [selected, setSelected] = useState<Food | null>(null)
   const [qty, setQty] = useState('100')
   const [mode, setMode] = useState<QtyMode>('unit')
@@ -41,7 +47,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
   const [creating, setCreating] = useState(false)
   const [off, setOff] = useState<OffState>({ status: 'idle', results: [] })
   const [scanning, setScanning] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzing, setAnalyzing] = useState(!!initialPhoto)
   const [cameraMenu, setCameraMenu] = useState(false)
   const [cart, setCart] = useState<RecipeItem[]>([])
   const [naming, setNaming] = useState(false)
@@ -76,6 +82,11 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
   const localResults = useMemo(
     () => searchFoods(localFoods, query, usage),
     [localFoods, query, usage],
+  )
+  // com a caixa vazia mostramos o costume desta refeição em vez de nada
+  const suggestions = useMemo(
+    () => (mealUsage ? topFoodsForMeal(localFoods, mealUsage, meal, 5) : []),
+    [localFoods, mealUsage, meal],
   )
   const recipeResults = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -222,6 +233,17 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
             )}
 
             <div className="scroll-contain mt-3 flex-1 overflow-y-auto px-5 pb-5">
+              {!query.trim() && suggestions.length > 0 && (
+                <>
+                  <SectionLabel>Costumas comer {mealLabel.toLowerCase()}</SectionLabel>
+                  <ul>
+                    {suggestions.map((f) => (
+                      <FoodRow key={`sug-${f.id}`} food={f} onPick={pick} onInfo={setDetail} />
+                    ))}
+                  </ul>
+                </>
+              )}
+
               {recipeResults.length > 0 && (
                 <>
                   <SectionLabel>Combinações e receitas</SectionLabel>
@@ -529,7 +551,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
 
         {analyzing && (
           <Suspense fallback={null}>
-            <AiMealAnalysis meal={meal} onAdd={onAdd} onDone={onClose} onCancel={() => setAnalyzing(false)} />
+            <AiMealAnalysis meal={meal} initialPhoto={initialPhoto} onAdd={onAdd} onDone={onClose} onCancel={() => setAnalyzing(false)} />
           </Suspense>
         )}
 

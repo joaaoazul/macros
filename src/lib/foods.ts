@@ -170,6 +170,59 @@ export function buildUsageIndex(diary: Diary): Map<string, number> {
   return counts
 }
 
+/** Como o índice geral, mas separado por refeição e só com o passado recente.
+ *
+ * Para sugestões o que importa é o hábito actual: o que comias há seis meses e
+ * deixaste de comer não deve encher a lista. Janela de 60 dias.
+ */
+export function buildMealUsageIndex(
+  diary: Diary,
+  today: string,
+  days = 60,
+): Map<string, Map<string, number>> {
+  const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const cutoff = new Date(today)
+  cutoff.setDate(cutoff.getDate() - days)
+  const cutoffIso = cutoff.toISOString().slice(0, 10)
+
+  const byMeal = new Map<string, Map<string, number>>()
+  for (const [date, entries] of Object.entries(diary)) {
+    if (date < cutoffIso) continue // chaves ISO comparam bem como strings
+    for (const e of entries) {
+      const name = norm(e.foodName).replace(/\s*\([^)]*\)\s*$/, '')
+      const counts = byMeal.get(e.meal) ?? new Map<string, number>()
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+      byMeal.set(e.meal, counts)
+    }
+  }
+  return byMeal
+}
+
+/** Os alimentos que mais registas nesta refeição, prontos a mostrar. */
+export function topFoodsForMeal(
+  foods: Food[],
+  index: Map<string, Map<string, number>>,
+  meal: string,
+  limit = 5,
+): Food[] {
+  const counts = index.get(meal)
+  if (!counts || counts.size === 0) return []
+  const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+  const scored: { food: Food; n: number }[] = []
+  const seen = new Set<string>()
+  for (const f of foods) {
+    const key = norm(f.name)
+    if (seen.has(key)) continue // customFoods e FOOD_DB podem repetir nomes
+    const n = counts.get(key) ?? 0
+    if (n > 0) {
+      scored.push({ food: f, n })
+      seen.add(key)
+    }
+  }
+  return scored.sort((a, b) => b.n - a.n).slice(0, limit).map((s) => s.food)
+}
+
 /** Pesquisa sem acentos e sem distinção de maiúsculas.
  *
  * Com `usage`, ordena por relevância e depois pelo que mais registas: quem come

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Entry, MealId } from '../types'
 import { ApiError } from '../lib/api'
 import { analyzeMeal, downscaleImage, getAnthropicKey, type AnalyzedFood } from '../lib/ai'
@@ -6,6 +6,8 @@ import { uid } from '../lib/store'
 
 interface Props {
   meal: MealId
+  /** foto já escolhida noutro sítio (ex.: partilhada de outra app) */
+  initialPhoto?: File | null
   onAdd: (entry: Entry) => void
   onDone: () => void
   onCancel: () => void
@@ -19,7 +21,7 @@ interface ResultRow extends AnalyzedFood {
   base: AnalyzedFood
 }
 
-export default function AiMealAnalysis({ meal, onAdd, onDone, onCancel }: Props) {
+export default function AiMealAnalysis({ meal, initialPhoto = null, onAdd, onDone, onCancel }: Props) {
   const [step, setStep] = useState<Step>('input')
   const [description, setDescription] = useState('')
   const [imageBase64, setImageBase64] = useState<string | null>(null)
@@ -40,6 +42,12 @@ export default function AiMealAnalysis({ meal, onAdd, onDone, onCancel }: Props)
       setError('Não foi possível processar a foto.')
     }
   }
+
+  // foto que veio partilhada de outra app: entra como se a tivesses escolhido
+  useEffect(() => {
+    if (initialPhoto) void pickPhoto(initialPhoto)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPhoto])
 
   const analyze = async () => {
     setError('')

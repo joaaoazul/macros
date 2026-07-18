@@ -38,11 +38,46 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+const SHARE = `${VERSION}-share`
+const SHARE_KEY = '/__shared-photo'
+
+/* O browser faz POST do conteúdo partilhado para /share-target. Uma SPA estática
+ * não sabe responder a POST, por isso o service worker guarda o que veio e
+ * redirecciona para a app com uma pista no URL. */
+async function handleShare(request) {
+  try {
+    const form = await request.formData()
+    const photo = form.get('photo')
+    const text = (form.get('text') || '').toString()
+    const shared = (form.get('url') || '').toString()
+
+    if (photo && photo.size) {
+      const cache = await caches.open(SHARE)
+      await cache.put(
+        SHARE_KEY,
+        new Response(photo, { headers: { 'content-type': photo.type || 'image/jpeg' } }),
+      )
+      return Response.redirect('/app?shared=photo', 303)
+    }
+    // muitas apps mandam o link dentro do texto
+    const link = shared || text
+    if (link) return Response.redirect(`/app?shared=link&v=${encodeURIComponent(link)}`, 303)
+    return Response.redirect('/app', 303)
+  } catch {
+    return Response.redirect('/app', 303)
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event
+  const shareUrl = new URL(request.url)
+  if (request.method === 'POST' && shareUrl.pathname === '/share-target') {
+    event.respondWith(handleShare(request))
+    return
+  }
   if (request.method !== 'GET') return
 
-  const url = new URL(request.url)
+  const url = shareUrl
   if (url.origin !== self.location.origin) return // OFF e afins: passa directo
   if (url.pathname.startsWith('/api/')) return // dados nunca em cache
 
