@@ -1,5 +1,6 @@
 """Message REST endpoints: conversations (DM + grupos), histórico, envio, leitura, partilhas."""
 
+from datetime import timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query
@@ -13,11 +14,19 @@ from app.data.schemas import Food, Recipe
 from app.database import get_db
 from app.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.messages.manager import manager
-from app.messages.models import Conversation, ConversationMember, Message, MessageReaction
+from app.messages.models import (
+    Challenge,
+    Conversation,
+    ConversationMember,
+    Message,
+    MessageReaction,
+)
 from app.messages.schemas import (
     ALLOWED_MESSAGE_REACTIONS,
     AddMembers,
+    ChallengeOut,
     ConversationOut,
+    CreateChallenge,
     CreateGroup,
     MessageOut,
     MessageReactionOut,
@@ -474,6 +483,119 @@ async def remove_group_member(
     await _broadcast_conversation_changed(
         db, [m.user_id for m in remaining] + [member_user_id], conversation_id
     )
+
+
+# ---------- desafios de grupo ----------
+
+
+async def _challenge_out(
+    db: AsyncSession, challenge: Challenge, me_id: int
+) -> ChallengeOut:
+    """Progresso agregado + o meu. Nunca por pessoa — ver nota em ChallengeOut."""
+    from app.social.service import compute_plan_days
+
+    members = await members_of(db, challenge.conversation_id)
+    ids = [m.user_id for m in members]
+    plan = await compute_plan_days(db, ids, challenge.starts_on, challenge.ends_on)
+
+    per_user = {
+        uid: sum(1 for s in plan.get(uid, {}).values() if s.on_plan) for uid in ids
+    }
+    # cada pessoa conta no máximo o seu alvo, senão um só membro "ganhava" tudo
+    group_progress = sum(min(n, challenge.target) for n in per_user.values())
+    group_target = challenge.target * len(ids)
+    return ChallengeOut(
+        id=challenge.id,
+        kind=challenge.kind,
+        target=challenge.target,
+        startsOn=challenge.starts_on,
+        endsOn=challenge.ends_on,
+        participants=len(ids),
+        groupTarget=group_target,
+        groupProgress=group_progress,
+        myProgress=min(per_user.get(me_id, 0), challenge.target),
+        done=group_progress >= group_target,
+    )
+
+
+async def _active_challenge(db: AsyncSession, conversation_id: int) -> Challenge | None:
+    return (
+        await db.execute(
+            select(Challenge)
+            .where(Challenge.conversation_id == conversation_id)
+            .order_by(Challenge.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+@router.get("/groups/{conversation_id}/challenge", response_model=ChallengeOut | None)
+async def get_challenge(
+    conversation_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ChallengeOut | None:
+    await membership(db, conversation_id, user.id)
+    challenge = await _active_challenge(db, conversation_id)
+    return await _challenge_out(db, challenge, user.id) if challenge else None
+
+
+@router.post("/groups/{conversation_id}/challenge", response_model=ChallengeOut, status_code=201)
+async def create_challenge(
+    conversation_id: int,
+    body: CreateChallenge,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ChallengeOut:
+    from app.social.service import lisbon_today
+
+    conversation, me = await membership(db, conversation_id, user.id)
+    if conversation.type != "group":
+        raise NotFoundError("Grupo")
+    if me.role != "owner":
+        raise ForbiddenError("Só o dono pode lançar um desafio.")
+    if body.target > body.days:
+        raise ValidationError("O alvo não pode ser maior que a duração.")
+
+    start = lisbon_today()
+    challenge = Challenge(
+        conversation_id=conversation_id,
+        kind=body.kind,
+        target=body.target,
+        starts_on=start,
+        ends_on=start + timedelta(days=body.days - 1),
+        created_by=user.id,
+    )
+    db.add(challenge)
+    await db.flush()
+
+    from app.notifications.service import notify
+
+    for m in await members_of(db, conversation_id):
+        if m.user_id != user.id:
+            await notify(
+                db,
+                m.user_id,
+                "group_added",
+                f"Novo desafio em «{conversation.title}»",
+                f"{body.target} dias no plano em {body.days}",
+                actor_id=user.id,
+            )
+    return await _challenge_out(db, challenge, user.id)
+
+
+@router.delete("/groups/{conversation_id}/challenge", status_code=204)
+async def delete_challenge(
+    conversation_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    _, me = await membership(db, conversation_id, user.id)
+    if me.role != "owner":
+        raise ForbiddenError("Só o dono pode terminar o desafio.")
+    challenge = await _active_challenge(db, conversation_id)
+    if challenge:
+        await db.delete(challenge)
 
 
 # ---------- reações ----------

@@ -1,9 +1,10 @@
 """Conversations (DM + group), messages and per-message reactions."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -55,6 +56,31 @@ class ConversationMember(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     last_read_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class Challenge(Base):
+    """Objectivo partilhado por um grupo, numa janela de dias.
+
+    Não há tabela de participação: participam os membros do grupo. O progresso é
+    derivado de `compute_plan_days`, não guardado aqui.
+    """
+
+    __tablename__ = "challenges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)  # days_on_plan
+    target: Mapped[int] = mapped_column(Integer, nullable=False)  # dias por pessoa
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Message(Base):

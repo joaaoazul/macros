@@ -6,6 +6,7 @@ import {
   messages as messagesApi,
   MESSAGE_REACTIONS,
   social,
+  type Challenge,
   type Conversation,
   type FriendshipOut,
   type Message,
@@ -700,6 +701,8 @@ function GroupInfoSheet({
           </div>
         )}
 
+        <ChallengeCard conversationId={conversation.id} isOwner={isOwner} />
+
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Membros</div>
         <div className="mb-4 space-y-1.5">
           {conversation.members.map((m, i) => (
@@ -730,6 +733,113 @@ function GroupInfoSheet({
           Sair do grupo
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Desafio do grupo: barra com o total de todos + o meu contributo.
+ *
+ * De propósito não mostra o número de cada pessoa: os membros de um grupo não
+ * são necessariamente amigos uns dos outros. */
+function ChallengeCard({ conversationId, isOwner }: { conversationId: number; isOwner: boolean }) {
+  const [challenge, setChallenge] = useState<Challenge | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [target, setTarget] = useState(5)
+
+  const load = () =>
+    messagesApi
+      .challenge(conversationId)
+      .then(setChallenge)
+      .catch(() => setChallenge(null))
+      .finally(() => setLoading(false))
+
+  useEffect(() => {
+    void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId])
+
+  if (loading) return <div className="skeleton mb-4 h-20 rounded-2xl" />
+
+  if (!challenge) {
+    if (!isOwner) return null
+    return (
+      <div className="mb-4 rounded-2xl bg-surface p-4">
+        <div className="text-sm font-semibold">Lançar um desafio</div>
+        <p className="mt-0.5 text-xs text-muted">
+          Objectivo partilhado para os próximos 7 dias. Vê-se o total do grupo, não o de cada um.
+        </p>
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="range"
+            min={1}
+            max={7}
+            value={target}
+            onChange={(e) => setTarget(Number(e.target.value))}
+            className="flex-1 accent-[var(--accent)]"
+            aria-label="Dias no plano por pessoa"
+          />
+          <span className="w-20 shrink-0 text-xs tabular-nums text-muted">{target} dias/pessoa</span>
+        </div>
+        <button
+          onClick={async () => {
+            setBusy(true)
+            try {
+              haptic(20)
+              setChallenge(await messagesApi.createChallenge(conversationId, target, 7))
+            } finally {
+              setBusy(false)
+            }
+          }}
+          disabled={busy}
+          className="press mt-3 w-full rounded-xl bg-accent py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          Começar desafio
+        </button>
+      </div>
+    )
+  }
+
+  const pct = challenge.groupTarget > 0 ? Math.min(100, (challenge.groupProgress / challenge.groupTarget) * 100) : 0
+  return (
+    <div className="mb-4 rounded-2xl bg-surface p-4">
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm font-semibold">
+          {challenge.done ? '🏆 Desafio cumprido' : '🎯 Desafio do grupo'}
+        </span>
+        <span className="text-xs tabular-nums text-muted">
+          {challenge.groupProgress}/{challenge.groupTarget}
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs text-muted">
+        {challenge.target} dias no plano por pessoa · {challenge.participants} participantes
+      </p>
+      <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-bg">
+        <div
+          className={`h-full rounded-full transition-[width] duration-500 ${challenge.done ? 'bg-good' : 'bg-accent'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-xs text-muted">
+        Tu: {challenge.myProgress}/{challenge.target} dias
+      </p>
+      {isOwner && (
+        <button
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await messagesApi.endChallenge(conversationId)
+              setChallenge(null)
+            } finally {
+              setBusy(false)
+            }
+          }}
+          disabled={busy}
+          className="press mt-2 text-xs font-medium text-critical disabled:opacity-50"
+        >
+          Terminar desafio
+        </button>
+      )}
     </div>
   )
 }

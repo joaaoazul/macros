@@ -183,6 +183,20 @@ export interface Conversation {
   myReadUpTo?: number | null
 }
 
+/** Desafio de grupo. PRIVACIDADE: só total do grupo + o meu — sem detalhe por pessoa. */
+export interface Challenge {
+  id: number
+  kind: string
+  target: number
+  startsOn: string
+  endsOn: string
+  participants: number
+  groupTarget: number
+  groupProgress: number
+  myProgress: number
+  done: boolean
+}
+
 export interface SaveShareOut {
   kind: 'food' | 'recipe'
   food?: import('../types').Food | null
@@ -250,6 +264,16 @@ export const messages = {
       method: 'POST',
       body: { memberIds },
     }),
+  // desafios de grupo — agregado, nunca por pessoa (ver ChallengeOut no backend)
+  challenge: (conversationId: number) =>
+    api<Challenge | null>(`/messages/groups/${conversationId}/challenge`),
+  createChallenge: (conversationId: number, target: number, days: number) =>
+    api<Challenge>(`/messages/groups/${conversationId}/challenge`, {
+      method: 'POST',
+      body: { kind: 'days_on_plan', target, days },
+    }),
+  endChallenge: (conversationId: number) =>
+    api<void>(`/messages/groups/${conversationId}/challenge`, { method: 'DELETE' }),
   removeMember: (conversationId: number, userId: number) =>
     api<void>(`/messages/groups/${conversationId}/members/${userId}`, { method: 'DELETE' }),
 }

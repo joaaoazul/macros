@@ -1,6 +1,6 @@
 """Message + conversation schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -145,6 +145,32 @@ class ConversationOut(BaseModel):
     partnerReadUpTo: int | None = None
     # o MEU cursor: serve para desenhar a linha "novas mensagens" ao abrir
     myReadUpTo: int | None = None
+
+
+class CreateChallenge(BaseModel):
+    kind: Literal["days_on_plan"] = "days_on_plan"
+    target: int = Field(ge=1, le=30)  # dias no plano por pessoa
+    days: int = Field(default=7, ge=1, le=30)  # duração da janela
+
+
+class ChallengeOut(BaseModel):
+    """PRIVACIDADE: só total agregado + o meu número.
+
+    Os membros de um grupo não são necessariamente amigos uns dos outros, e dias
+    no plano é um dado derivado — mostrar o detalhe por pessoa exporia isso a
+    quem não é amigo.
+    """
+
+    id: int
+    kind: str
+    target: int  # por pessoa
+    startsOn: date
+    endsOn: date
+    participants: int
+    groupTarget: int  # target * participantes
+    groupProgress: int  # soma dos dias no plano de todos
+    myProgress: int
+    done: bool
 
 
 class UnreadOut(BaseModel):
