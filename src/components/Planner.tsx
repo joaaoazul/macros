@@ -1,7 +1,7 @@
 /** Planeador semanal (almoço + jantar) → lista de compras derivada + despensa. */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { Food, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
+import type { Food, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
 import {
@@ -23,11 +23,13 @@ interface Props {
   setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   pantry: PantryItem[]
   setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
+  /** regista no diário de hoje uma refeição já planeada */
+  onLog: (items: RecipeItem[], meal: MealId) => void
 }
 
 type SlotTarget = { day: number; meal: 'lunch' | 'dinner' }
 
-export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, pantry, setPantry }: Props) {
+export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
   const [slot, setSlot] = useState<SlotTarget | null>(null)
   const [view, setView] = useState<'plan' | 'list' | 'pantry'>('plan')
   const today = todayWeekday()
@@ -116,6 +118,15 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
                         {entry.emoji} {entry.name}
                       </button>
                       <div className="flex shrink-0 items-center gap-1.5">
+                        {day === today && (
+                          <button
+                            onClick={() => { haptic(20); onLog(entry.items, m.id) }}
+                            className="press mr-0.5 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent"
+                            aria-label={`Registar ${m.label.toLowerCase()} planeado no diário`}
+                          >
+                            Registar
+                          </button>
+                        )}
                         <button onClick={() => changeServings(entry, -1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Menos doses">−</button>
                         <span className="w-4 text-center text-xs font-semibold tabular-nums" aria-label={`${entry.servings} doses`}>{entry.servings}</span>
                         <button onClick={() => changeServings(entry, 1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Mais doses">＋</button>

@@ -23,6 +23,8 @@ interface Props {
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
   recipes: Recipe[]
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
+  /** frequência de uso por alimento, para ordenar a pesquisa */
+  usage?: Map<string, number>
   onAdd: (entry: Entry) => void
   onClose: () => void
 }
@@ -30,7 +32,7 @@ interface Props {
 type OffState = { status: 'idle' | 'loading' | 'done' | 'error'; results: Food[] }
 type QtyMode = 'unit' | 'portion'
 
-export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, onAdd, onClose }: Props) {
+export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, usage, onAdd, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
   const [qty, setQty] = useState('100')
@@ -71,7 +73,10 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
   }
 
   const localFoods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
-  const localResults = useMemo(() => searchFoods(localFoods, query), [localFoods, query])
+  const localResults = useMemo(
+    () => searchFoods(localFoods, query, usage),
+    [localFoods, query, usage],
+  )
   const recipeResults = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return recipes

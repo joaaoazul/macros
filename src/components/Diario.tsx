@@ -2,6 +2,7 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, Profile, Recipe, WaterLog } from '../types'
 import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
+import { buildUsageIndex } from '../lib/foods'
 import { formatDatePT, shiftDate, todayISO, uid } from '../lib/store'
 import AddFoodSheet from './AddFoodSheet'
 
@@ -34,6 +35,8 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
   const [customWater, setCustomWater] = useState('')
 
   const entries = useMemo(() => diary[date] ?? [], [diary, date])
+  // ranking da pesquisa pelo que mais registas (derivado do diário todo)
+  const usage = useMemo(() => buildUsageIndex(diary), [diary])
   const totals = useMemo(() => sumEntries(entries), [entries])
   const dayExercises = exercise[date] ?? []
   const burned = Math.round(dayExercises.reduce((s, e) => s + e.kcal, 0))
@@ -280,6 +283,7 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
           setCustomFoods={setCustomFoods}
           recipes={recipes}
           setRecipes={setRecipes}
+          usage={usage}
           onAdd={addEntry}
           onClose={() => setAddingTo(null)}
         />

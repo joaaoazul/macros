@@ -76,6 +76,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
           setMealPlan={setMealPlan}
           pantry={pantry}
           setPantry={setPantry}
+          onLog={onLog}
         />
       ) : (
       <div className="animate-fade space-y-3.5 px-4 pt-1">

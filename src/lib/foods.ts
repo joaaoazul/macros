@@ -1,4 +1,4 @@
-import type { Food } from '../types'
+import type { Diary, Food } from '../types'
 
 /** Base de dados de alimentos comuns em Portugal — valores por 100 g/ml. */
 export const FOOD_DB: Food[] = [
@@ -152,10 +152,43 @@ export const FOOD_DB: Food[] = [
   { id: 'cafe', name: 'Café (expresso)', emoji: '☕', kcal: 2, protein: 0.1, carbs: 0, fat: 0, unit: 'ml' },
 ]
 
-/** Pesquisa simples, sem acentos e sem distinção de maiúsculas. */
-export function searchFoods(foods: Food[], query: string): Food[] {
+/** Conta quantas vezes cada alimento já foi registado, a partir do próprio diário.
+ *
+ * Não guarda contadores novos: deriva do que já está sincronizado, portanto
+ * funciona em qualquer dispositivo. As entradas guardam "Nome (Marca)", por isso
+ * tira-se o sufixo entre parênteses para casar com Food.name.
+ */
+export function buildUsageIndex(diary: Diary): Map<string, number> {
+  const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const counts = new Map<string, number>()
+  for (const entries of Object.values(diary)) {
+    for (const e of entries) {
+      const name = norm(e.foodName).replace(/\s*\([^)]*\)\s*$/, '')
+      counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+  }
+  return counts
+}
+
+/** Pesquisa sem acentos e sem distinção de maiúsculas.
+ *
+ * Com `usage`, ordena por relevância e depois pelo que mais registas: quem come
+ * frango 200 vezes não o deve ver ao mesmo nível de algo provado uma vez.
+ */
+export function searchFoods(foods: Food[], query: string, usage?: Map<string, number>): Food[] {
   const normalize = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const q = normalize(query.trim())
-  if (!q) return foods
-  return foods.filter((f) => normalize(f.name).includes(q))
+  const matches = q ? foods.filter((f) => normalize(f.name).includes(q)) : foods.slice()
+  if (!usage) return matches
+
+  const score = (f: Food) => usage.get(normalize(f.name)) ?? 0
+  return matches.sort((a, b) => {
+    if (q) {
+      // quem começa pelo que escreveste vem primeiro
+      const pa = normalize(a.name).startsWith(q) ? 1 : 0
+      const pb = normalize(b.name).startsWith(q) ? 1 : 0
+      if (pa !== pb) return pb - pa
+    }
+    return score(b) - score(a)
+  })
 }
