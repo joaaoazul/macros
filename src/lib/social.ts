@@ -18,11 +18,16 @@ export interface PublicProfileLite {
 
 export type FriendshipStatus = 'none' | 'friends' | 'incoming' | 'outgoing' | 'self'
 
+/** PRIVACIDADE: stats/badges/mutualFriends/recentEvents vêm vazios se não fores
+ * amigo (nem o próprio) — o backend só os preenche para amigos. */
 export interface PublicProfile extends PublicProfileLite {
-  stats: DerivedStats
+  stats: DerivedStats | null
   friendship: FriendshipStatus
   friendshipId: number | null
   badges: string[]
+  joinedAt?: string | null
+  mutualFriends?: PublicProfileLite[]
+  recentEvents?: FeedEvent[]
 }
 
 export interface BadgeEarned {

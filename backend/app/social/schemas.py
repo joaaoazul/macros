@@ -24,10 +24,21 @@ class PublicProfileLite(BaseModel):
 
 
 class PublicProfile(PublicProfileLite):
-    stats: DerivedStats
+    """Perfil público.
+
+    PRIVACIDADE: `stats`, `badges`, `mutualFriends` e `recentEvents` só são
+    preenchidos para amigos (ou para o próprio). Os usernames são enumeráveis
+    pela pesquisa, portanto mostrar dados derivados a não-amigos equivale a
+    mostrá-los a toda a gente.
+    """
+
+    stats: DerivedStats | None = None
     friendship: Literal["none", "friends", "incoming", "outgoing", "self"]
     friendshipId: int | None = None
     badges: list[str] = []
+    joinedAt: date | None = None
+    mutualFriends: list[PublicProfileLite] = []
+    recentEvents: list["FeedEventOut"] = []
 
 
 class BadgeEarned(BaseModel):
@@ -136,3 +147,7 @@ class BadgeOut(BaseModel):
     emoji: str
     title: str
     description: str
+
+
+# PublicProfile.recentEvents refere FeedEventOut, que só é definido mais abaixo
+PublicProfile.model_rebuild()

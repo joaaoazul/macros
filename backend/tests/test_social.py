@@ -14,6 +14,62 @@ async def make_social_user(client, email, username, name="User"):
     return resp.json()
 
 
+async def test_profile_hides_stats_and_badges_from_non_friends(client):
+    """Um estranho não pode ver streak nem conquistas de ninguém.
+
+    Os usernames são enumeráveis por /social/search, portanto expor estatísticas
+    a quem não é amigo é expor a toda a gente.
+    """
+    await make_social_user(client, "ana@example.com", "ana_fit")
+
+    client.cookies.clear()
+    await make_social_user(client, "x@example.com", "estranho")
+    body = (await client.get("/api/v1/social/users/ana_fit")).json()
+
+    # o cartão público continua a existir (para poder pedir amizade)
+    assert body["username"] == "ana_fit"
+    assert body["friendship"] == "none"
+    # mas nada de dados derivados
+    assert body.get("stats") is None
+    assert body.get("badges") == []
+
+
+async def test_profile_shows_derived_data_to_friends(client):
+    """O contrário do teste anterior: amigos veem stats, badges, mútuos e actividade."""
+    ana = await make_social_user(client, "ana@example.com", "ana_fit")
+    ana_cookies = dict(client.cookies)
+
+    client.cookies.clear()
+    await make_social_user(client, "rui@example.com", "rui_gains")
+    fid = (
+        await client.post("/api/v1/social/friends/requests", json={"username": "ana_fit"})
+    ).json()["id"]
+    rui_cookies = dict(client.cookies)
+
+    client.cookies.clear()
+    for k, v in ana_cookies.items():
+        client.cookies.set(k, v)
+    await client.post(f"/api/v1/social/friends/requests/{fid}/accept")
+
+    client.cookies.clear()
+    for k, v in rui_cookies.items():
+        client.cookies.set(k, v)
+    body = (await client.get("/api/v1/social/users/ana_fit")).json()
+    assert body["friendship"] == "friends"
+    assert body["stats"] is not None and "streak" in body["stats"]
+    assert body["joinedAt"] is not None
+    assert isinstance(body["mutualFriends"], list)
+    assert isinstance(body["recentEvents"], list)
+    assert ana["userId"] == body["userId"]
+
+    # e o próprio continua a ver-se
+    client.cookies.clear()
+    for k, v in ana_cookies.items():
+        client.cookies.set(k, v)
+    mine = (await client.get("/api/v1/social/users/ana_fit")).json()
+    assert mine["friendship"] == "self" and mine["stats"] is not None
+
+
 async def test_social_me_starts_without_username(client):
     await register_user(client)
     resp = await client.get("/api/v1/social/me")

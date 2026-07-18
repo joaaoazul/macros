@@ -198,16 +198,22 @@ export default function Friends({ onMessage }: Props) {
                 </div>
               )}
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <Card className="p-4 text-center">
-                  <div className="text-2xl font-bold">{profile.stats.streak} 🔥</div>
-                  <div className="text-xs uppercase tracking-wide text-muted">Streak</div>
-                </Card>
-                <Card className="p-4 text-center">
-                  <div className="text-2xl font-bold">{profile.stats.daysOnPlan7d}/7</div>
-                  <div className="text-xs uppercase tracking-wide text-muted">Dias no plano</div>
-                </Card>
-              </div>
+              {profile.stats ? (
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <Card className="p-4 text-center">
+                    <div className="text-2xl font-bold">{profile.stats.streak} 🔥</div>
+                    <div className="text-xs uppercase tracking-wide text-muted">Streak</div>
+                  </Card>
+                  <Card className="p-4 text-center">
+                    <div className="text-2xl font-bold">{profile.stats.daysOnPlan7d}/7</div>
+                    <div className="text-xs uppercase tracking-wide text-muted">Dias no plano</div>
+                  </Card>
+                </div>
+              ) : (
+                <p className="mt-5 rounded-2xl bg-surface px-4 py-3 text-center text-sm text-muted">
+                  Fica amigo para veres o progresso.
+                </p>
+              )}
 
               <div className="mt-5 flex flex-col gap-2.5">
                 {profile.friendship === 'friends' && (

@@ -173,23 +173,65 @@ async def public_profile(
     target = result.scalar_one_or_none()
     if not target:
         raise NotFoundError("Utilizador")
-    stats = await derived_stats(db, target.id)
-    if target.id == user.id:
+
+    is_self = target.id == user.id
+    if is_self:
         status, fid = "self", None
     else:
         status, fid = await _friendship_status(db, user.id, target.id)
-    return PublicProfile(
+
+    profile = PublicProfile(
         userId=target.id,
         username=target.username or "?",
         avatar=target.avatar,
         avatarPhoto=target.avatar_photo,
         bio=target.bio,
         name=target.name,
-        stats=stats,  # type: ignore[arg-type]
         friendship=status,  # type: ignore[arg-type]
         friendshipId=fid,
-        badges=await user_badges(db, target.id),
     )
+    # Só amigos (e o próprio) veem dados derivados. Um estranho fica pelo cartão
+    # público, que é o suficiente para lhe enviar um pedido de amizade.
+    if not (is_self or status == "friends"):
+        return profile
+
+    profile.stats = DerivedStats(**await derived_stats(db, target.id))
+    profile.badges = await user_badges(db, target.id)
+    profile.joinedAt = target.created_at.date() if target.created_at else None
+    profile.mutualFriends = [] if is_self else await _mutual_friends(db, user.id, target.id)
+    profile.recentEvents = await _recent_events(db, target.id)
+    return profile
+
+
+async def _mutual_friends(db: AsyncSession, me: int, other: int) -> list[PublicProfileLite]:
+    """Amigos em comum — só ids que ambos têm na lista de aceites."""
+    shared = set(await friend_ids(db, me)) & set(await friend_ids(db, other))
+    if not shared:
+        return []
+    rows = await db.execute(select(User).where(User.id.in_(shared)).limit(20))
+    return [_lite(u) for u in rows.scalars()]
+
+
+async def _recent_events(db: AsyncSession, user_id: int, limit: int = 10) -> list[FeedEventOut]:
+    """Actividade recente: os MESMOS eventos derivados do feed, nada de diário."""
+    rows = await db.execute(
+        select(FeedEvent, User)
+        .join(User, User.id == FeedEvent.user_id)
+        .where(FeedEvent.user_id == user_id)
+        .order_by(FeedEvent.id.desc())
+        .limit(limit)
+    )
+    return [
+        FeedEventOut(
+            id=e.id,
+            kind=e.kind,
+            refDate=e.ref_date,
+            payload=e.payload,
+            user=_lite(u),
+            createdAt=e.created_at,
+        )
+        for e, u in rows.all()
+    ]
 
 
 @router.post("/friends/requests", response_model=FriendshipOut, status_code=201)
