@@ -170,6 +170,8 @@ export interface Conversation {
   lastMessage: Message | null
   /** cursor de leitura do parceiro (DMs): mensagens minhas com id <= isto foram lidas */
   partnerReadUpTo: number | null
+  /** o meu cursor ao abrir — para a linha "novas mensagens" */
+  myReadUpTo?: number | null
 }
 
 export interface SaveShareOut {

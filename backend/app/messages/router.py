@@ -177,6 +177,7 @@ async def _conversation_out(
         unread=await unread_in(db, conversation.id, me),
         lastMessage=_out(last) if last else None,
         partnerReadUpTo=partner_read,
+        myReadUpTo=me.last_read_message_id,
     )
 
 

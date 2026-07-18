@@ -132,6 +132,8 @@ class ConversationOut(BaseModel):
     lastMessage: MessageOut | None = None
     # cursor de leitura do parceiro (DMs): mensagens minhas com id <= isto foram lidas
     partnerReadUpTo: int | None = None
+    # o MEU cursor: serve para desenhar a linha "novas mensagens" ao abrir
+    myReadUpTo: int | None = None
 
 
 class UnreadOut(BaseModel):

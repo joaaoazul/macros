@@ -10,6 +10,7 @@ import type { MealId, RecipeItem } from '../types'
 import { MEALS } from '../types'
 import { scaleItems } from '../lib/recipes'
 import { haptic } from '../lib/store'
+import { useToast } from '../lib/toast'
 
 const PORTIONS: { factor: number; label: string }[] = [
   { factor: 0.25, label: '¼' },
@@ -32,6 +33,7 @@ interface Props {
 
 export default function LogPortionSheet({ title, emoji, items, meal, onLog, onClose }: Props) {
   const [factor, setFactor] = useState(1)
+  const toast = useToast()
 
   const totalKcal = items.reduce((s, i) => s + i.kcal, 0)
   const shownKcal = Math.round(totalKcal * factor)
@@ -39,6 +41,7 @@ export default function LogPortionSheet({ title, emoji, items, meal, onLog, onCl
   const log = (m: MealId) => {
     haptic(30)
     onLog(scaleItems(items, factor), m)
+    toast(`${title} registado · ${shownKcal} kcal`)
   }
 
   return (

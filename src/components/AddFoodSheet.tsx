@@ -12,6 +12,7 @@ import {
 } from '../lib/recipes'
 import { foodScraper } from '../lib/social'
 import { uid } from '../lib/store'
+import { useToast } from '../lib/toast'
 
 const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
 const AiMealAnalysis = lazy(() => import('./AiMealAnalysis'))
@@ -55,6 +56,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
   const [scrapePrefill, setScrapePrefill] = useState<Food | null>(null)
   const [scraping, setScraping] = useState(false)
   const [scrapeErr, setScrapeErr] = useState('')
+  const toast = useToast()
 
   const trimmedQuery = query.trim()
   const isUrl = /^https?:\/\/\S+$/i.test(trimmedQuery)
@@ -68,6 +70,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
         setScrapePrefill(res.food)
         setCreating(true)
         setQuery('')
+        toast('Importado — confirma os valores')
       } else {
         setScrapeErr('Não encontrei valores nutricionais nessa página.')
       }

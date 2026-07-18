@@ -12,6 +12,7 @@ import {
   type PublicProfileLite,
 } from '../../lib/social'
 import { haptic, uid } from '../../lib/store'
+import { useToast } from '../../lib/toast'
 import type { Food, Recipe } from '../../types'
 import type { SocialSocket } from '../../lib/ws'
 import Avatar from './Avatar'
@@ -58,8 +59,15 @@ export default function Chat({
   const [pickerFor, setPickerFor] = useState<number | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [partnerReadUpTo, setPartnerReadUpTo] = useState<number>(conversation.partnerReadUpTo ?? 0)
+  // congelado ao abrir: o markRead() logo a seguir avança o cursor no servidor,
+  // mas a linha "novas mensagens" tem de ficar onde estava quando entraste
+  const [unreadFrom] = useState<number>(conversation.myReadUpTo ?? 0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set())
   const [showInfo, setShowInfo] = useState(false)
+  const toast = useToast()
   const bottomRef = useRef<HTMLDivElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
   const galleryInput = useRef<HTMLInputElement>(null)
@@ -84,6 +92,7 @@ export default function Chat({
     messagesApi
       .history(convId)
       .then((msgs) => {
+        setHasMore(msgs.length >= 50) // veio a página cheia → há provavelmente mais
         setHistory(msgs.reverse()) // API é newest-first; UI é oldest-first
         setLoaded(true)
         markRead()
@@ -124,6 +133,31 @@ export default function Chat({
       }
     })
   }, [socket, me, convId, scrollDown, markRead])
+
+  /** Carrega a página anterior mantendo a posição visual (senão o conteúdo salta). */
+  const loadOlder = async () => {
+    const oldest = history[0]
+    const box = scrollRef.current
+    if (!oldest || loadingMore || !box) return
+    setLoadingMore(true)
+    const before = box.scrollHeight
+    try {
+      const older = await messagesApi.history(convId, oldest.id)
+      setHasMore(older.length >= 50)
+      if (older.length > 0) {
+        setHistory((h) => [...older.reverse(), ...h])
+        // depois de o React pintar, repõe o offset relativo ao novo conteúdo
+        requestAnimationFrame(() => {
+          const box2 = scrollRef.current
+          if (box2) box2.scrollTop += box2.scrollHeight - before
+        })
+      }
+    } catch {
+      /* fica como está; o utilizador pode tentar outra vez */
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const send = async () => {
     const body = draft.trim()
@@ -197,8 +231,9 @@ export default function Chat({
         setRecipes((prev) => (prev.some((r) => r.id === recipe.id) ? prev : [recipe, ...prev]))
       }
       setSavedIds((s) => new Set(s).add(message.id))
+      toast(res.kind === 'recipe' ? 'Receita guardada' : 'Alimento guardado')
     } catch {
-      setError('Não foi possível guardar.')
+      toast('Não foi possível guardar.', 'error')
     }
   }
 
@@ -227,8 +262,19 @@ export default function Chat({
         )}
       </header>
 
-      <div className="mx-auto w-full max-w-md flex-1 space-y-1 overflow-y-auto px-4 py-3 scroll-contain" onClick={() => setPickerFor(null)}>
+      <div ref={scrollRef} className="mx-auto w-full max-w-md flex-1 space-y-1 overflow-y-auto px-4 py-3 scroll-contain" onClick={() => setPickerFor(null)}>
         {!loaded && <p className="py-8 text-center text-sm text-muted">A carregar…</p>}
+        {loaded && hasMore && (
+          <div className="pb-2 text-center">
+            <button
+              onClick={() => void loadOlder()}
+              disabled={loadingMore}
+              className="press rounded-full bg-surface px-4 py-1.5 text-xs font-semibold text-accent disabled:opacity-50"
+            >
+              {loadingMore ? 'A carregar…' : 'Ver mensagens anteriores'}
+            </button>
+          </div>
+        )}
         {loaded && history.length === 0 && pending.length === 0 && (
           <p className="animate-in py-8 text-center text-sm text-muted">
             {isGroup ? `Início do grupo ${titleOf(conversation)} 👋` : `Diz olá a ${titleOf(conversation)} 👋`}
@@ -238,7 +284,20 @@ export default function Chat({
           const mine = m.senderId === me
           const prev = history[i - 1]
           const startsCluster = !prev || prev.senderId !== m.senderId
+          // primeira mensagem de outra pessoa depois do meu cursor de leitura
+          const firstUnread =
+            !mine && m.id > unreadFrom && (!prev || prev.id <= unreadFrom) && unreadFrom > 0
           return (
+            <div key={`w-${m.id}`}>
+            {firstUnread && (
+              <div className="my-2 flex items-center gap-2" aria-label="Novas mensagens">
+                <span className="h-px flex-1 bg-critical/40" />
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-critical">
+                  Novas mensagens
+                </span>
+                <span className="h-px flex-1 bg-critical/40" />
+              </div>
+            )}
             <Bubble
               key={m.id}
               message={m}
@@ -255,6 +314,7 @@ export default function Chat({
               onOpenImage={setLightbox}
               onSaveShare={() => saveShare(m)}
             />
+            </div>
           )
         })}
         {pending.map((p) => (
