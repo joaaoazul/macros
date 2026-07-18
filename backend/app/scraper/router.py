@@ -12,7 +12,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.data.schemas import Food
 from app.exceptions import ValidationError
-from app.net import safe_outbound_url
+from app.net import ip_is_public, safe_outbound_url
 from app.scraper.parser import parse
 
 router = APIRouter(prefix="/api/v1/foods", tags=["scraper"])
@@ -47,6 +47,21 @@ class ScrapeResponse(BaseModel):
     source: str  # recipe | product | title | none
 
 
+def _assert_peer_public(resp: httpx.Response) -> None:
+    """Falha se a ligação aberta terminou num IP interno (DNS rebinding).
+
+    Fecha a janela TOCTOU do `safe_outbound_url`: aquilo valida a resolução de
+    DNS, isto valida o socket que ficou mesmo aberto. Falha fechado — se não
+    conseguirmos saber o peer, recusamos em vez de assumir que é público.
+    """
+    stream = resp.extensions.get("network_stream")
+    if stream is None:
+        raise ValidationError("Não foi possível validar o destino do pedido.")
+    peer = stream.get_extra_info("server_addr")
+    if not peer or not ip_is_public(str(peer[0])):
+        raise ValidationError("URL não permitido.")
+
+
 async def _fetch(url: str) -> str:
     """GET com redireccionamentos manuais (revalida SSRF a cada salto) e limite de tamanho.
 
@@ -63,6 +78,11 @@ async def _fetch(url: str) -> str:
             if safe is None:
                 raise ValidationError("URL não permitido.")
             async with client.stream("GET", safe) as resp:
+                # Anti-DNS-rebinding: o safe_outbound_url resolveu o host ANTES de
+                # ligar; entre as duas coisas o DNS pode devolver um IP interno.
+                # Validamos o peer REALMENTE ligado, antes de ler qualquer corpo.
+                _assert_peer_public(resp)
+
                 if resp.is_redirect:
                     location = resp.headers.get("location")
                     if not location:

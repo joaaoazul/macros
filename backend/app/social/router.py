@@ -44,6 +44,7 @@ from app.social.service import (
     friend_ids,
     get_friendship,
     lisbon_today,
+    remove_friend_joined,
     user_badges,
     week_window,
 )
@@ -323,6 +324,8 @@ async def remove_friend(
     if not friendship or friendship.status != "accepted":
         raise NotFoundError("Amizade")
     await db.delete(friendship)
+    # o cartão "ficaram amigos" deixa de fazer sentido nos dois feeds
+    await remove_friend_joined(db, user.id, user_id)
 
 
 @router.get("/leaderboard", response_model=LeaderboardOut)

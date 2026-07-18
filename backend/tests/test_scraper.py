@@ -87,11 +87,22 @@ class _FakeStream:
         return False
 
 
-def _fake_client(html: str, headers: dict | None = None):
+class _FakeStreamInfo:
+    """Simula resp.extensions['network_stream'] com o peer realmente ligado."""
+
+    def __init__(self, peer_ip: str):
+        self._peer = (peer_ip, 443)
+
+    def get_extra_info(self, name: str):
+        return self._peer if name == "server_addr" else None
+
+
+def _fake_client(html: str, headers: dict | None = None, peer_ip: str = "93.184.216.34"):
     resp = SimpleNamespace(
         is_redirect=False,
         encoding="utf-8",
         headers=headers if headers is not None else {"content-type": "text/html"},
+        extensions={"network_stream": _FakeStreamInfo(peer_ip)},
         raise_for_status=lambda: None,
         aiter_bytes=lambda: _aiter(html.encode()),
     )
@@ -113,6 +124,35 @@ async def test_scrape_endpoint_returns_food(client):
     assert body["source"] == "recipe"
     assert body["food"]["name"] == "Panquecas de Aveia"
     assert body["food"]["id"].startswith("scraped-")
+
+
+async def test_scrape_blocks_dns_rebinding(client):
+    """O host passa na validação de DNS mas a ligação acaba num IP interno."""
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    for internal in ("127.0.0.1", "10.0.0.5", "169.254.169.254", "::ffff:127.0.0.1"):
+        with patch(
+            "app.scraper.router.safe_outbound_url", side_effect=lambda u, s=("https",): u
+        ), patch(
+            "app.scraper.router.httpx.AsyncClient",
+            return_value=_fake_client(RECIPE_HTML, peer_ip=internal),
+        ):
+            resp = await client.post(
+                "/api/v1/foods/scrape", json={"url": "https://rebind.example.com/x"}
+            )
+        assert resp.status_code == 422, f"peer {internal} devia ser recusado"
+
+
+async def test_scrape_fails_closed_without_peer_info(client):
+    """Sem network_stream não dá para validar o destino → recusa."""
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    fake = _fake_client(RECIPE_HTML)
+    with patch("app.scraper.router.safe_outbound_url", side_effect=lambda u, s=("https",): u), patch(
+        "app.scraper.router.httpx.AsyncClient", return_value=fake
+    ):
+        # remove a info do peer que o httpx normalmente fornece
+        fake.stream("GET", "x")._resp.extensions = {}
+        resp = await client.post("/api/v1/foods/scrape", json={"url": "https://x.example.com/x"})
+    assert resp.status_code == 422
 
 
 async def test_scrape_aborts_oversized_body(client):

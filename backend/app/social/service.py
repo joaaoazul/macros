@@ -200,6 +200,27 @@ async def emit_friend_joined(db: AsyncSession, a: int, b: int, day: date) -> Non
     await _upsert_event(db, b, "friend_joined", day, {"friendId": a})
 
 
+async def remove_friend_joined(db: AsyncSession, a: int, b: int) -> None:
+    """Apaga os cartões "ficaram amigos" quando a amizade acaba.
+
+    Sem isto o cartão fica no feed dos dois a apontar para alguém que já não é
+    amigo (e o payload continua a expor o id do outro). Filtra-se em Python
+    porque o payload é JSON e a query varia entre dialectos; são poucas linhas.
+    """
+    rows = (
+        await db.execute(
+            select(FeedEvent).where(
+                FeedEvent.user_id.in_([a, b]), FeedEvent.kind == "friend_joined"
+            )
+        )
+    ).scalars()
+    pair = {a, b}
+    for event in rows:
+        other = (event.payload or {}).get("friendId")
+        if other in pair and other != event.user_id:
+            await db.delete(event)
+
+
 async def evaluate_day_events(db: AsyncSession, user_id: int, day: date) -> None:
     """Avalia conquistas do dia após uma escrita. NUNCA pode partir a gravação do diário."""
     try:

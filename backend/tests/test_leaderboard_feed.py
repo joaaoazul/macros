@@ -145,3 +145,79 @@ async def test_feed_only_shows_friends(client):
     await make_social_user(client, "x@example.com", "estranho")
     feed = (await client.get("/api/v1/social/feed")).json()
     assert feed == []
+
+
+async def test_feed_hidden_while_request_only_pending(client):
+    """Pedido enviado mas AINDA não aceite não dá acesso ao feed."""
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    await client.put("/api/v1/profile", json=PROFILE)
+    await seed_day(client, "2026-07-08", 2000)
+    assert len((await client.get("/api/v1/social/feed")).json()) > 0  # ana vê o seu
+
+    client.cookies.clear()
+    await make_social_user(client, "rui@example.com", "rui_gains")
+    resp = await client.post("/api/v1/social/friends/requests", json={"username": "ana_fit"})
+    assert resp.status_code == 201  # pedido pendente, não aceite
+
+    assert (await client.get("/api/v1/social/feed")).json() == []
+
+
+async def test_feed_disappears_after_unfriend(client):
+    """Deixar de ser amigo remove o acesso ao feed retroactivamente."""
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    ana_cookies = dict(client.cookies)
+    await client.put("/api/v1/profile", json=PROFILE)
+    await seed_day(client, "2026-07-08", 2000)
+
+    client.cookies.clear()
+    rui = await make_social_user(client, "rui@example.com", "rui_gains")
+    fid = (
+        await client.post("/api/v1/social/friends/requests", json={"username": "ana_fit"})
+    ).json()["id"]
+    rui_cookies = dict(client.cookies)
+
+    client.cookies.clear()
+    for k, v in ana_cookies.items():
+        client.cookies.set(k, v)
+    await client.post(f"/api/v1/social/friends/requests/{fid}/accept")
+
+    # amigo: vê os eventos da ana
+    client.cookies.clear()
+    for k, v in rui_cookies.items():
+        client.cookies.set(k, v)
+    assert len((await client.get("/api/v1/social/feed")).json()) > 0
+
+    # ana remove o rui → o feed dele deixa de mostrar eventos dela
+    client.cookies.clear()
+    for k, v in ana_cookies.items():
+        client.cookies.set(k, v)
+    assert (await client.delete(f"/api/v1/social/friends/{rui['userId']}")).status_code == 204
+
+    client.cookies.clear()
+    for k, v in rui_cookies.items():
+        client.cookies.set(k, v)
+    assert (await client.get("/api/v1/social/feed")).json() == []
+
+
+async def test_notification_inbox_is_per_user(client):
+    """As notificações de um utilizador nunca aparecem na caixa de outro."""
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    ana_cookies = dict(client.cookies)
+
+    client.cookies.clear()
+    await make_social_user(client, "rui@example.com", "rui_gains")
+    await client.post("/api/v1/social/friends/requests", json={"username": "ana_fit"})
+    # o rui fez o pedido → a notificação é da ana, não dele
+    assert (await client.get("/api/v1/notifications")).json() == []
+
+    client.cookies.clear()
+    for k, v in ana_cookies.items():
+        client.cookies.set(k, v)
+    mine = (await client.get("/api/v1/notifications")).json()
+    assert len(mine) == 1 and mine[0]["kind"] == "friend_request"
+
+    # um terceiro não vê nenhuma das duas
+    client.cookies.clear()
+    await make_social_user(client, "x@example.com", "estranho")
+    assert (await client.get("/api/v1/notifications")).json() == []
+    assert (await client.get("/api/v1/notifications/unread-count")).json()["total"] == 0
