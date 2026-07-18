@@ -30,6 +30,7 @@ type ClientEvent =
       to?: number
       body?: string
       share?: import('./social').Share | null
+      replyToId?: number | null
       clientId: string
     }
   | { type: 'read'; conversationId?: number; from?: number }

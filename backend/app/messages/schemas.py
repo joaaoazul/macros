@@ -60,6 +60,15 @@ class MessageReactionOut(BaseModel):
     emoji: str
 
 
+class ReplyPreview(BaseModel):
+    """Citação leve: nunca leva a foto em base64 da mensagem original."""
+
+    id: int
+    senderId: int
+    text: str  # já resumido para caber numa linha
+    kind: Literal["text", "image", "share"] = "text"
+
+
 class MessageOut(BaseModel):
     id: int
     senderId: int
@@ -67,6 +76,7 @@ class MessageOut(BaseModel):
     body: str
     image: str | None = None
     share: dict | None = None
+    replyTo: ReplyPreview | None = None
     createdAt: datetime
     reactions: list[MessageReactionOut] = []
 
@@ -75,6 +85,7 @@ class SendMessage(BaseModel):
     body: str = Field(default="", max_length=2000)
     image: str | None = Field(default=None, max_length=MAX_IMAGE_CHARS)
     share: Share | None = None
+    replyToId: int | None = None
 
     @model_validator(mode="after")
     def _check(self) -> "SendMessage":

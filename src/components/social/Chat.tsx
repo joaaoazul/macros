@@ -67,6 +67,7 @@ export default function Chat({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set())
   const [showInfo, setShowInfo] = useState(false)
+  const [replyTo, setReplyTo] = useState<Message | null>(null)
   const [typingBy, setTypingBy] = useState<Map<number, number>>(new Map())
   const lastTypingSent = useRef(0)
   const toast = useToast()
@@ -203,14 +204,16 @@ export default function Chat({
     setDraft('')
     setError('')
     const clientId = uid()
+    const replyToId = replyTo?.id ?? null
+    setReplyTo(null)
 
-    if (socket.send({ type: 'send', conversationId: convId, body, clientId })) {
+    if (socket.send({ type: 'send', conversationId: convId, body, replyToId, clientId })) {
       setPending((p) => [...p, { clientId, body }])
       setTimeout(() => scrollDown(), 0)
       return
     }
     try {
-      const m = await messagesApi.send(convId, { body })
+      const m = await messagesApi.send(convId, { body, replyToId })
       setHistory((h) => [...h, m])
       setTimeout(() => scrollDown(), 0)
     } catch {
@@ -348,6 +351,7 @@ export default function Chat({
               saved={savedIds.has(m.id)}
               picking={pickerFor === m.id}
               onOpenPicker={() => { haptic(10); setPickerFor((cur) => (cur === m.id ? null : m.id)) }}
+              onReply={() => { haptic(10); setPickerFor(null); setReplyTo(m) }}
               onReact={(emoji) => react(m, emoji)}
               onOpenImage={setLightbox}
               onSaveShare={() => saveShare(m)}
@@ -375,6 +379,22 @@ export default function Chat({
       )}
 
       <div className="border-t border-line/70 bg-surface/80 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 backdrop-blur-xl">
+        {replyTo && (
+          <div className="animate-in mx-auto mb-2 flex max-w-md items-center gap-2 rounded-xl bg-bg px-3 py-2">
+            <span className="h-8 w-0.5 shrink-0 rounded-full bg-accent" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-semibold text-accent">
+                A responder a {replyTo.senderId === me ? 'ti' : (membersById.get(replyTo.senderId)?.name ?? 'mensagem')}
+              </div>
+              <div className="truncate text-xs text-muted">
+                {replyTo.share ? '🧾 Partilha' : replyTo.image && !replyTo.body ? '📷 Foto' : replyTo.body}
+              </div>
+            </div>
+            <button onClick={() => setReplyTo(null)} aria-label="Cancelar resposta" className="press shrink-0 text-muted">
+              ✕
+            </button>
+          </div>
+        )}
         <div className="mx-auto flex max-w-md items-end gap-2">
           <input ref={cameraInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && sendPhoto(e.target.files[0])} />
           <input ref={galleryInput} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && sendPhoto(e.target.files[0])} />
@@ -437,6 +457,7 @@ function Bubble({
   saved,
   picking,
   onOpenPicker,
+  onReply,
   onReact,
   onOpenImage,
   onSaveShare,
@@ -451,6 +472,7 @@ function Bubble({
   saved: boolean
   picking: boolean
   onOpenPicker: () => void
+  onReply: () => void
   onReact: (emoji: string) => void
   onOpenImage: (src: string) => void
   onSaveShare: () => void
@@ -480,6 +502,12 @@ function Bubble({
                   {emoji}
                 </button>
               ))}
+              <button
+                onClick={(e) => { e.stopPropagation(); onReply() }}
+                className="press ml-0.5 rounded-full px-2 text-xs font-semibold text-accent"
+              >
+                Responder
+              </button>
             </div>
           )}
           {message.share ? (
@@ -491,6 +519,16 @@ function Bubble({
                 message.image ? '' : mine ? 'bg-accent text-white' : 'bg-surface'
               }`}
             >
+              {message.replyTo && (
+                <span
+                  className={`mb-1 flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs ${
+                    mine ? 'bg-white/15' : 'bg-bg'
+                  }`}
+                >
+                  <span className={`h-3.5 w-0.5 shrink-0 rounded-full ${mine ? 'bg-white/60' : 'bg-accent'}`} aria-hidden />
+                  <span className="truncate opacity-80">{message.replyTo.text}</span>
+                </span>
+              )}
               {message.image ? (
                 <img
                   src={`data:image/jpeg;base64,${message.image}`}

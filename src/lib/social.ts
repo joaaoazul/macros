@@ -144,6 +144,14 @@ export interface Share {
   payload: Record<string, unknown>
 }
 
+/** Citação leve da mensagem a que se responde (nunca traz a foto original). */
+export interface ReplyPreview {
+  id: number
+  senderId: number
+  text: string
+  kind: 'text' | 'image' | 'share'
+}
+
 export interface Message {
   id: number
   senderId: number
@@ -151,6 +159,7 @@ export interface Message {
   body: string
   image?: string | null
   share?: Share | null
+  replyTo?: ReplyPreview | null
   createdAt: string
   reactions: MessageReaction[]
 }
@@ -207,6 +216,7 @@ export interface SendPayload {
   body?: string
   image?: string | null
   share?: Share | null
+  replyToId?: number | null
 }
 
 export const messages = {

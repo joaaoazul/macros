@@ -80,6 +80,10 @@ class Message(Base):
     image: Mapped[str | None] = mapped_column(Text, nullable=True)  # JPEG base64 ~1024px
     # {"kind": "recipe"|"food", "payload": {...snapshot...}} — shared card
     share: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # citação: SET NULL para a resposta sobreviver ao desaparecimento do original
+    reply_to_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

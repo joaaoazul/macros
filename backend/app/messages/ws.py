@@ -168,7 +168,12 @@ async def _handle(ws: WebSocket, user_id: int, data: dict) -> None:
             await ws.send_json({"type": "error", "code": "bad_request", "clientId": client_id})
             return
         try:
-            parsed = SendMessage(body=body_raw, share=share_raw)
+            reply_raw = data.get("replyToId")
+            parsed = SendMessage(
+                body=body_raw,
+                share=share_raw,
+                replyToId=reply_raw if isinstance(reply_raw, int) else None,
+            )
         except ValueError:
             await ws.send_json({"type": "error", "code": "too_long", "clientId": client_id})
             return
@@ -186,7 +191,9 @@ async def _handle(ws: WebSocket, user_id: int, data: dict) -> None:
                     conversation, _ = await membership(db, conversation_id, user_id)
                 else:
                     conversation = await get_or_create_dm(db, sender, to)
-                message = await persist_and_push(db, sender, conversation, parsed.body, share=share)
+                message = await persist_and_push(
+                    db, sender, conversation, parsed.body, share=share, reply_to_id=parsed.replyToId
+                )
                 await db.commit()
             except ForbiddenError:
                 await db.rollback()

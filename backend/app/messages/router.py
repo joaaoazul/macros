@@ -23,6 +23,7 @@ from app.messages.schemas import (
     MessageReactionOut,
     PatchGroup,
     ReactMessage,
+    ReplyPreview,
     SaveShareOut,
     SendMessage,
     Share,
@@ -50,7 +51,27 @@ MAX_CUSTOM_FOODS = 2000
 MAX_RECIPES = 200
 
 
-def _out(m: Message, reactions: list[MessageReactionOut] | None = None) -> MessageOut:
+def _preview(m: Message) -> ReplyPreview:
+    """Resumo de uma linha da mensagem citada — sem arrastar a foto em base64."""
+    if m.share:
+        name = (m.share.get("payload") or {}).get("name") or ""
+        kind = "share"
+        text = f"{'🧾' if m.share.get('kind') == 'recipe' else '🍎'} {name}".strip()
+    elif m.image and not m.body:
+        kind, text = "image", "📷 Foto"
+    else:
+        kind, text = "text", m.body
+    return ReplyPreview(
+        id=m.id, senderId=m.sender_id, kind=kind, text=text[:120]  # type: ignore[arg-type]
+    )
+
+
+def _out(
+    m: Message,
+    reactions: list[MessageReactionOut] | None = None,
+    replies: dict[int, Message] | None = None,
+) -> MessageOut:
+    quoted = replies.get(m.reply_to_id) if (replies and m.reply_to_id) else None
     return MessageOut(
         id=m.id,
         senderId=m.sender_id,
@@ -58,9 +79,19 @@ def _out(m: Message, reactions: list[MessageReactionOut] | None = None) -> Messa
         body=m.body,
         image=m.image,
         share=m.share,
+        replyTo=_preview(quoted) if quoted else None,
         createdAt=m.created_at,
         reactions=reactions or [],
     )
+
+
+async def _load_replies(db: AsyncSession, msgs: list[Message]) -> dict[int, Message]:
+    """Carrega de uma vez as mensagens citadas (evita uma query por bolha)."""
+    ids = {m.reply_to_id for m in msgs if m.reply_to_id}
+    if not ids:
+        return {}
+    rows = (await db.execute(select(Message).where(Message.id.in_(ids)))).scalars()
+    return {m.id: m for m in rows}
 
 
 def _lite(u: User) -> PublicProfileLite:
@@ -97,8 +128,19 @@ async def persist_and_push(
     body: str,
     image: str | None = None,
     share: dict | None = None,
+    reply_to_id: int | None = None,
 ) -> Message:
     """Valida, persiste e faz fan-out da mensagem a todos os membros. REST e WS."""
+    quoted: Message | None = None
+    if reply_to_id is not None:
+        quoted = (
+            await db.execute(select(Message).where(Message.id == reply_to_id))
+        ).scalar_one_or_none()
+        # citar só dentro da mesma conversa: senão dava para puxar texto de
+        # threads onde não se participa
+        if quoted is None or quoted.conversation_id != conversation.id:
+            raise NotFoundError("Mensagem citada")
+
     members = await members_of(db, conversation.id)
     other_ids = [m.user_id for m in members if m.user_id != sender.id]
     if conversation.type == "dm":
@@ -115,12 +157,14 @@ async def persist_and_push(
         body=body,
         image=image,
         share=share,
+        reply_to_id=reply_to_id,
     )
     db.add(message)
     await db.flush()
     await db.refresh(message)  # created_at do servidor
 
-    payload = {"type": "message", "message": _out(message).model_dump(mode="json")}
+    replies = {quoted.id: quoted} if quoted else None
+    payload = {"type": "message", "message": _out(message, None, replies).model_dump(mode="json")}
     sender_name = sender.name or (f"@{sender.username}" if sender.username else "Alguém")
     preview = body if body else (_share_preview(share) or "📷 Foto")
     if len(preview) > 120:
@@ -247,7 +291,8 @@ async def conversation_history(
     query = query.order_by(Message.id.desc()).limit(limit)
     msgs = list((await db.execute(query)).scalars())
     reactions = await _load_reactions(db, [m.id for m in msgs])
-    return [_out(m, reactions.get(m.id, [])) for m in msgs]
+    replies = await _load_replies(db, msgs)
+    return [_out(m, reactions.get(m.id, []), replies) for m in msgs]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageOut, status_code=201)
@@ -259,8 +304,8 @@ async def send_to_conversation(
 ) -> MessageOut:
     conversation, _ = await membership(db, conversation_id, user.id)
     share = body.share.model_dump(mode="json") if body.share else None
-    message = await persist_and_push(db, user, conversation, body.body, body.image, share)
-    return _out(message)
+    message = await persist_and_push(db, user, conversation, body.body, body.image, share, body.replyToId)
+    return _out(message, None, await _load_replies(db, [message]))
 
 
 async def mark_conversation_read(
@@ -609,8 +654,8 @@ async def send_message_legacy(
 ) -> MessageOut:
     conversation = await get_or_create_dm(db, user, user_id)
     share = body.share.model_dump(mode="json") if body.share else None
-    message = await persist_and_push(db, user, conversation, body.body, body.image, share)
-    return _out(message)
+    message = await persist_and_push(db, user, conversation, body.body, body.image, share, body.replyToId)
+    return _out(message, None, await _load_replies(db, [message]))
 
 
 @router.post("/with/{user_id}/read", status_code=204)

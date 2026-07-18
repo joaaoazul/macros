@@ -108,6 +108,46 @@ async def test_non_member_cannot_save_share(client):
     assert (await client.post(f"/api/v1/messages/{msg['id']}/save-share")).status_code == 404
 
 
+async def test_reply_quotes_within_conversation_only(client):
+    """Citar é bom; citar uma mensagem de OUTRA conversa seria fuga de texto."""
+    ana_c, rui_c, ana_id, rui_id = await make_friends(client)
+    conv = await _dm(client, ana_c, rui_id)
+
+    original = (
+        await client.post(
+            f"/api/v1/messages/conversations/{conv}/messages", json={"body": "trazes água?"}
+        )
+    ).json()
+
+    switch(client, rui_c)
+    answer = await client.post(
+        f"/api/v1/messages/conversations/{conv}/messages",
+        json={"body": "trago sim", "replyToId": original["id"]},
+    )
+    assert answer.status_code == 201
+    quoted = answer.json()["replyTo"]
+    assert quoted["id"] == original["id"]
+    assert quoted["text"] == "trazes água?"
+    assert quoted["senderId"] == ana_id
+
+    # o histórico também traz a citação
+    hist = (await client.get(f"/api/v1/messages/conversations/{conv}/messages")).json()
+    assert any(m.get("replyTo") and m["replyTo"]["id"] == original["id"] for m in hist)
+
+    # noutra conversa (grupo) a mensagem da DM não pode ser citada
+    switch(client, ana_c)
+    group = await client.post(
+        "/api/v1/messages/groups",
+        json={"title": "Treino", "emoji": "💪", "memberIds": [rui_id]},
+    )
+    assert group.status_code == 201
+    cross = await client.post(
+        f"/api/v1/messages/conversations/{group.json()['id']}/messages",
+        json={"body": "olha o que ela disse", "replyToId": original["id"]},
+    )
+    assert cross.status_code == 404
+
+
 async def test_share_rejects_bad_payload(client):
     ana_c, _, _, rui_id = await make_friends(client)
     gid = await _dm(client, ana_c, rui_id)
