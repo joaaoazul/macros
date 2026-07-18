@@ -14,6 +14,7 @@ import {
   type ShoppingItem,
 } from '../lib/shopping'
 import { haptic, uid } from '../lib/store'
+import LogPortionSheet from './LogPortionSheet'
 import { Card } from './ui'
 
 interface Props {
@@ -31,6 +32,7 @@ type SlotTarget = { day: number; meal: 'lunch' | 'dinner' }
 
 export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
   const [slot, setSlot] = useState<SlotTarget | null>(null)
+  const [logging, setLogging] = useState<{ entry: MealPlanEntry; meal: MealId } | null>(null)
   const [view, setView] = useState<'plan' | 'list' | 'pantry'>('plan')
   const today = todayWeekday()
 
@@ -120,7 +122,7 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
                       <div className="flex shrink-0 items-center gap-1.5">
                         {day === today && (
                           <button
-                            onClick={() => { haptic(20); onLog(entry.items, m.id) }}
+                            onClick={() => { haptic(8); setLogging({ entry, meal: m.id }) }}
                             className="press mr-0.5 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent"
                             aria-label={`Registar ${m.label.toLowerCase()} planeado no diário`}
                           >
@@ -147,6 +149,20 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
           </div>
         </Card>
       ))}
+
+      {logging && (
+        <LogPortionSheet
+          title={logging.entry.name}
+          emoji={logging.entry.emoji}
+          items={logging.entry.items}
+          meal={logging.meal}
+          onLog={(items, meal) => {
+            onLog(items, meal)
+            setLogging(null)
+          }}
+          onClose={() => setLogging(null)}
+        />
+      )}
 
       {slot && (
         <SlotPicker

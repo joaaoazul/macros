@@ -50,6 +50,22 @@ export function recipeKcal(r: Recipe): number {
   return r.items.reduce((s, i) => s + i.kcal, 0)
 }
 
+/** Escala os ingredientes por um factor — cozinhaste para 4 e comeste 1 → 0.25.
+ *
+ * Arredonda a 1 casa para não encher o diário de 33.333333 g. */
+export function scaleItems(items: RecipeItem[], factor: number): RecipeItem[] {
+  if (factor === 1) return items
+  const r1 = (n: number) => Math.round(n * factor * 10) / 10
+  return items.map((i) => ({
+    ...i,
+    grams: r1(i.grams),
+    kcal: Math.round(i.kcal * factor),
+    protein: r1(i.protein),
+    carbs: r1(i.carbs),
+    fat: r1(i.fat),
+  }))
+}
+
 /**
  * Regista uma combinação como "usada anteriormente" (auto) se ainda não existir.
  * Mantém no máximo MAX_AUTO_COMBOS autos (LRU); não mexe nas receitas nomeadas.

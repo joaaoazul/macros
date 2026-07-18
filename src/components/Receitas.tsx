@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { Food, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
-import { MEALS } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { recipeKcal, saveAsNamed } from '../lib/recipes'
+import LogPortionSheet from './LogPortionSheet'
 import Planner from './Planner'
 import ShareSheet, { recipeShare } from './social/ShareSheet'
 import { Card, LargeTitle, SegmentedControl } from './ui'
@@ -129,10 +129,12 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
       )}
 
       {mealFor && (
-        <MealPicker
-          recipe={mealFor}
-          onPick={(meal) => {
-            onLog(mealFor.items, meal)
+        <LogPortionSheet
+          title={mealFor.name ?? 'Combinação'}
+          emoji={mealFor.emoji}
+          items={mealFor.items}
+          onLog={(items, meal) => {
+            onLog(items, meal)
             setMealFor(null)
           }}
           onClose={() => setMealFor(null)}
@@ -205,39 +207,6 @@ function RecipeItemRow({
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function MealPicker({ recipe, onPick, onClose }: { recipe: Recipe; onPick: (m: MealId) => void; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
-      <div
-        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Escolher refeição"
-      >
-        <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-line" aria-hidden />
-        <h2 className="text-lg font-bold">Adicionar a que refeição?</h2>
-        <p className="mt-1 text-sm text-muted">{recipe.name ?? 'Combinação'} · hoje</p>
-        <div className="mt-4 space-y-2">
-          {MEALS.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => {
-                navigator.vibrate?.(30)
-                onPick(m.id)
-              }}
-              className="flex w-full items-center gap-3 rounded-xl bg-surface px-4 py-3.5 text-left transition active:scale-[0.99]"
-            >
-              <span className="text-2xl" aria-hidden>{m.emoji}</span>
-              <span className="font-semibold">{m.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }
