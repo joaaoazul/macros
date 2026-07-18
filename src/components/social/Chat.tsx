@@ -67,7 +67,43 @@ export default function Chat({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set())
   const [showInfo, setShowInfo] = useState(false)
+  const [typingBy, setTypingBy] = useState<Map<number, number>>(new Map())
+  const lastTypingSent = useRef(0)
   const toast = useToast()
+
+  /** Avisa que estou a escrever, no máximo uma vez a cada 3s. */
+  const pingTyping = () => {
+    const now = Date.now()
+    if (now - lastTypingSent.current < 3000) return
+    lastTypingSent.current = now
+    socket.send({ type: 'typing', conversationId: convId })
+  }
+
+  // limpa quem parou de escrever (o evento não tem "parei", expira sozinho)
+  useEffect(() => {
+    if (typingBy.size === 0) return
+    const t = setInterval(() => {
+      const cutoff = Date.now() - 5000
+      setTypingBy((prev) => {
+        const next = new Map([...prev].filter(([, at]) => at > cutoff))
+        return next.size === prev.size ? prev : next
+      })
+    }, 1500)
+    return () => clearInterval(t)
+  }, [typingBy.size])
+
+  const typingLabel = (() => {
+    const ids = [...typingBy.keys()]
+    if (ids.length === 0) return null
+    if (!isGroup) return 'a escrever…'
+    const names = ids
+      .map((id) => membersById.get(id))
+      .map((m) => (m ? m.name || `@${m.username}` : null))
+      .filter(Boolean) as string[]
+    if (names.length === 0) return 'alguém está a escrever…'
+    if (names.length === 1) return `${names[0]} está a escrever…`
+    return `${names.length} pessoas estão a escrever…`
+  })()
   const bottomRef = useRef<HTMLDivElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
   const galleryInput = useRef<HTMLInputElement>(null)
@@ -111,6 +147,8 @@ export default function Chat({
         if (ev.clientId) setPending((p) => p.filter((x) => x.clientId !== ev.clientId))
         if (m.senderId !== me) markRead()
         setTimeout(() => scrollDown(), 0)
+      } else if (ev.type === 'typing' && ev.conversationId === convId && ev.userId !== me) {
+        setTypingBy((prev) => new Map(prev).set(ev.userId, Date.now()))
       } else if (ev.type === 'read' && ev.conversationId === convId && ev.by !== me) {
         setPartnerReadUpTo((cur) => Math.max(cur, ev.upToId))
       } else if (ev.type === 'reaction' && ev.conversationId === convId) {
@@ -324,6 +362,12 @@ export default function Chat({
         <div ref={bottomRef} />
       </div>
 
+      {typingLabel && (
+        <p className="animate-fade mx-auto w-full max-w-md px-4 pb-0.5 text-[11px] italic text-muted" aria-live="polite">
+          {typingLabel}
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="mx-auto w-full max-w-md px-4 pb-1 text-xs font-medium text-critical">
           {error}
@@ -337,7 +381,7 @@ export default function Chat({
           <PhotoButton onCamera={() => cameraInput.current?.click()} onGallery={() => galleryInput.current?.click()} disabled={sendingPhoto} />
           <textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => { setDraft(e.target.value); pingTyping() }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()

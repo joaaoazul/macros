@@ -111,6 +111,26 @@ async def _handle(ws: WebSocket, user_id: int, data: dict) -> None:
         await ws.send_json({"type": "pong"})
         return
 
+    if msg_type == "typing":
+        # efémero: não guarda nada, só avisa quem está na conversa
+        conversation_id = data.get("conversationId")
+        if not isinstance(conversation_id, int):
+            return
+        from app.messages.service import members_of, membership
+
+        async with async_session_factory() as db:
+            try:
+                await membership(db, conversation_id, user_id)  # 404 se não participo
+                for m in await members_of(db, conversation_id):
+                    if m.user_id != user_id:
+                        await manager.send_to(
+                            m.user_id,
+                            {"type": "typing", "conversationId": conversation_id, "userId": user_id},
+                        )
+            except NotFoundError:
+                pass
+        return
+
     if msg_type == "read":
         # aceita conversationId (novo) ou from=userId (legado DM)
         conversation_id = data.get("conversationId")

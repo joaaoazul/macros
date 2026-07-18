@@ -133,6 +133,44 @@ def test_ws_send_delivers_to_recipient_and_echoes(ws_client):
             assert msg["message"]["senderId"] == rui["userId"]
 
 
+def test_ws_typing_reaches_member_and_ignores_outsider(ws_client):
+    ana, ana_cookies = make_user(ws_client, "ana@example.com", "ana_fit")
+    rui, rui_cookies = make_user(ws_client, "rui@example.com", "rui_gains")
+    _, zed_cookies = make_user(ws_client, "zed@example.com", "zed_lifts")
+    befriend(ws_client, ana_cookies, rui_cookies)
+
+    # abre a DM para existir uma conversa com id
+    switch(ws_client, rui_cookies)
+    conv_id = ws_client.post(f"/api/v1/messages/dm/{ana['userId']}").json()["id"]
+
+    switch(ws_client, ana_cookies)
+    with ws_client.websocket_connect("/api/v1/ws") as ana_ws:
+        ana_ws.receive_json()  # unread inicial
+        ana_ws.receive_json()  # notif_unread inicial
+
+        switch(ws_client, rui_cookies)
+        with ws_client.websocket_connect("/api/v1/ws") as rui_ws:
+            rui_ws.receive_json()
+            rui_ws.receive_json()
+            rui_ws.send_json({"type": "typing", "conversationId": conv_id})
+
+            ev = ana_ws.receive_json()
+            assert ev == {"type": "typing", "conversationId": conv_id, "userId": rui["userId"]}
+
+        # um estranho não consegue fazer barulho na conversa dos outros
+        switch(ws_client, zed_cookies)
+        with ws_client.websocket_connect("/api/v1/ws") as zed_ws:
+            zed_ws.receive_json()
+            zed_ws.receive_json()
+            zed_ws.send_json({"type": "typing", "conversationId": conv_id})
+            zed_ws.send_json({"type": "ping"})
+            assert zed_ws.receive_json() == {"type": "pong"}  # tratou o typing como no-op
+
+        # e a ana não recebeu nada do estranho: o próximo evento dela é o seu pong
+        ana_ws.send_json({"type": "ping"})
+        assert ana_ws.receive_json() == {"type": "pong"}
+
+
 def test_ws_send_to_non_friend_errors(ws_client):
     ana, ana_cookies = make_user(ws_client, "ana@example.com", "ana_fit")
     _, rui_cookies = make_user(ws_client, "rui@example.com", "rui_gains")

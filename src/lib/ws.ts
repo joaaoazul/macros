@@ -17,6 +17,7 @@ export type ServerEvent =
       emoji: string | null
     }
   | { type: 'conversation'; conversationId: number }
+  | { type: 'typing'; conversationId: number; userId: number }
   | { type: 'notification'; notification: AppNotification }
   | { type: 'notif_unread'; total: number }
   | { type: 'error'; code: string; clientId?: string }
@@ -32,6 +33,7 @@ type ClientEvent =
       clientId: string
     }
   | { type: 'read'; conversationId?: number; from?: number }
+  | { type: 'typing'; conversationId: number }
   | { type: 'ping' }
 
 export interface SocialSocket {
