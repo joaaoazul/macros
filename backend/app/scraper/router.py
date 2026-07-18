@@ -48,7 +48,12 @@ class ScrapeResponse(BaseModel):
 
 
 async def _fetch(url: str) -> str:
-    """GET com redireccionamentos manuais (revalida SSRF a cada salto) e limite de tamanho."""
+    """GET com redireccionamentos manuais (revalida SSRF a cada salto) e limite de tamanho.
+
+    Usa `stream()` e não `get()`: o `get()` lê o corpo TODO para memória antes de
+    devolver, o que tornava o limite de tamanho inútil contra uma página enorme.
+    Assim os headers chegam primeiro e abortamos a meio do corpo.
+    """
     current = url
     async with httpx.AsyncClient(
         timeout=TIMEOUT_SECONDS, follow_redirects=False, headers={"User-Agent": "MacrosBot/1.0"}
@@ -57,23 +62,32 @@ async def _fetch(url: str) -> str:
             safe = safe_outbound_url(current, _ALLOWED_SCHEMES)
             if safe is None:
                 raise ValidationError("URL não permitido.")
-            resp = await client.get(safe)
-            if resp.is_redirect:
-                location = resp.headers.get("location")
-                if not location:
-                    break
-                current = str(httpx.URL(safe).join(location))
-                continue
-            resp.raise_for_status()
-            chunks: list[bytes] = []
-            total = 0
-            async for chunk in resp.aiter_bytes():
-                total += len(chunk)
-                if total > MAX_BYTES:
+            async with client.stream("GET", safe) as resp:
+                if resp.is_redirect:
+                    location = resp.headers.get("location")
+                    if not location:
+                        raise ValidationError("Redireccionamento inválido.")
+                    current = str(httpx.URL(safe).join(location))
+                    continue
+                resp.raise_for_status()
+
+                # só faz sentido ler HTML; evita descarregar vídeos/binários
+                ctype = resp.headers.get("content-type", "")
+                if ctype and not any(t in ctype.lower() for t in ("html", "xml", "text/plain")):
+                    raise ValidationError("Esse link não é uma página web.")
+                declared = resp.headers.get("content-length")
+                if declared and declared.isdigit() and int(declared) > MAX_BYTES:
                     raise ValidationError("Página demasiado grande.")
-                chunks.append(chunk)
-            raw = b"".join(chunks)
-            return raw.decode(resp.encoding or "utf-8", errors="replace")
+
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in resp.aiter_bytes():
+                    total += len(chunk)
+                    if total > MAX_BYTES:  # aborta a ligação a meio do download
+                        raise ValidationError("Página demasiado grande.")
+                    chunks.append(chunk)
+                raw = b"".join(chunks)
+                return raw.decode(resp.encoding or "utf-8", errors="replace")
     raise ValidationError("Demasiados redireccionamentos.")
 
 

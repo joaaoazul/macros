@@ -69,22 +69,37 @@ def test_ssrf_blocks_private_and_scheme():
         assert safe_outbound_url("https://example.com/x", ("http", "https")) == "https://example.com/x"
 
 
-def _fake_client(html: str):
+async def _aiter(data: bytes, chunk: int = 4096):
+    for i in range(0, len(data), chunk):
+        yield data[i : i + chunk]
+
+
+class _FakeStream:
+    """Context manager devolvido por client.stream('GET', url)."""
+
+    def __init__(self, resp):
+        self._resp = resp
+
+    async def __aenter__(self):
+        return self._resp
+
+    async def __aexit__(self, *_):
+        return False
+
+
+def _fake_client(html: str, headers: dict | None = None):
     resp = SimpleNamespace(
         is_redirect=False,
         encoding="utf-8",
+        headers=headers if headers is not None else {"content-type": "text/html"},
         raise_for_status=lambda: None,
         aiter_bytes=lambda: _aiter(html.encode()),
     )
     client = AsyncMock()
-    client.get = AsyncMock(return_value=resp)
+    client.stream = lambda method, url: _FakeStream(resp)
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=False)
     return client
-
-
-async def _aiter(data: bytes):
-    yield data
 
 
 async def test_scrape_endpoint_returns_food(client):
@@ -98,6 +113,37 @@ async def test_scrape_endpoint_returns_food(client):
     assert body["source"] == "recipe"
     assert body["food"]["name"] == "Panquecas de Aveia"
     assert body["food"]["id"].startswith("scraped-")
+
+
+async def test_scrape_aborts_oversized_body(client):
+    """Regressão: com client.get() o corpo era lido todo p/ memória antes do limite."""
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    huge = "<html>" + ("x" * (3 * 1024 * 1024)) + "</html>"  # 3 MB > cap de 2 MB
+    with patch("app.scraper.router.safe_outbound_url", side_effect=lambda u, s=("https",): u), patch(
+        "app.scraper.router.httpx.AsyncClient", return_value=_fake_client(huge)
+    ):
+        resp = await client.post("/api/v1/foods/scrape", json={"url": "https://big.example.com/x"})
+    assert resp.status_code == 422
+    assert "grande" in resp.text.lower()
+
+
+async def test_scrape_rejects_declared_oversize_and_non_html(client):
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    # content-length declarado acima do cap → rejeita antes de ler o corpo
+    with patch("app.scraper.router.safe_outbound_url", side_effect=lambda u, s=("https",): u), patch(
+        "app.scraper.router.httpx.AsyncClient",
+        return_value=_fake_client("<html></html>", {"content-type": "text/html", "content-length": str(9 * 1024 * 1024)}),
+    ):
+        resp = await client.post("/api/v1/foods/scrape", json={"url": "https://big.example.com/x"})
+    assert resp.status_code == 422
+
+    # binário/vídeo → nem vale a pena descarregar
+    with patch("app.scraper.router.safe_outbound_url", side_effect=lambda u, s=("https",): u), patch(
+        "app.scraper.router.httpx.AsyncClient",
+        return_value=_fake_client("...", {"content-type": "video/mp4"}),
+    ):
+        resp = await client.post("/api/v1/foods/scrape", json={"url": "https://vid.example.com/x"})
+    assert resp.status_code == 422
 
 
 async def test_scrape_endpoint_rejects_unsafe_url(client):
