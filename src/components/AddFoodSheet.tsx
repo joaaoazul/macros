@@ -13,6 +13,7 @@ import {
 import { foodScraper } from '../lib/social'
 import { uid } from '../lib/store'
 import { useToast } from '../lib/toast'
+import RestaurantSheet from './RestaurantSheet'
 
 const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
 const AiMealAnalysis = lazy(() => import('./AiMealAnalysis'))
@@ -56,6 +57,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
   const [scrapePrefill, setScrapePrefill] = useState<Food | null>(null)
   const [scraping, setScraping] = useState(false)
   const [scrapeErr, setScrapeErr] = useState('')
+  const [restaurant, setRestaurant] = useState(false)
   const toast = useToast()
 
   const trimmedQuery = query.trim()
@@ -296,6 +298,13 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
                 className="mt-3 w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-accent"
               >
                 + Criar alimento personalizado
+              </button>
+
+              <button
+                onClick={() => setRestaurant(true)}
+                className="mt-2 w-full rounded-xl border border-dashed border-line px-4 py-3 text-sm font-medium text-accent"
+              >
+                🍽️ Modo restaurante (contar unidades)
               </button>
 
               <button
@@ -556,6 +565,20 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
           <Suspense fallback={null}>
             <AiMealAnalysis meal={meal} initialPhoto={initialPhoto} onAdd={onAdd} onDone={onClose} onCancel={() => setAnalyzing(false)} />
           </Suspense>
+        )}
+
+        {restaurant && (
+          <RestaurantSheet
+            foods={localFoods}
+            usage={usage}
+            onAdd={(items) => {
+              setCart((c) => [...c, ...items])
+              setRestaurant(false)
+              toast(`${items.length} ${items.length === 1 ? 'item juntado' : 'itens juntados'} ao cesto`)
+            }}
+            onCreateFood={() => { setRestaurant(false); setCreating(true) }}
+            onClose={() => setRestaurant(false)}
+          />
         )}
 
         {creating && (

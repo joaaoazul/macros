@@ -174,7 +174,7 @@ export default function AiMealAnalysis({ meal, initialPhoto = null, onAdd, onDon
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             disabled={!hasKey}
-            placeholder="Ou descreve a refeição… (ex.: um prato de arroz com frango grelhado e salada)"
+            placeholder="Ou descreve a refeição… (ex.: 18 peças de sushi variado e 2 imperiais)"
             rows={3}
             className="mt-3 w-full rounded-xl bg-surface px-4 py-3 text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-40"
           />
