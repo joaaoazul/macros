@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-MealId = Literal["breakfast", "lunch", "snack", "dinner", "supper"]
+MealId = Literal["madrugada", "breakfast", "lunch", "snack", "dinner", "supper"]
 Unit = Literal["g", "ml"]
 
 

@@ -28,8 +28,9 @@ export function todayISO(): string {
 
 /** A refeição provável para a hora actual — para atalhos e partilhas, onde o
  * utilizador não escolheu refeição nenhuma. */
-export function mealForNow(now = new Date()): 'breakfast' | 'lunch' | 'snack' | 'dinner' | 'supper' {
+export function mealForNow(now = new Date()): 'madrugada' | 'breakfast' | 'lunch' | 'snack' | 'dinner' | 'supper' {
   const h = now.getHours()
+  if (h < 6) return 'madrugada'
   if (h < 11) return 'breakfast'
   if (h < 15) return 'lunch'
   if (h < 19) return 'snack'

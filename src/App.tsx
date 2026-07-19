@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { MealId, RecipeItem } from './types'
+import { MEALS } from './types'
 import { withWaterTarget } from './lib/calc'
 import { api, ApiError } from './lib/api'
 import { entryFromRecipeItem } from './lib/recipes'
@@ -34,7 +35,8 @@ export type LaunchAction =
   | { kind: 'shareLink'; url: string }
   | { kind: 'sharePhoto' }
 
-const MEAL_IDS: MealId[] = ['breakfast', 'lunch', 'snack', 'dinner', 'supper']
+// derivado de MEALS para não voltar a ficar desactualizado ao juntar refeições
+const MEAL_IDS: MealId[] = MEALS.map((m) => m.id)
 
 /** Lê os parâmetros de arranque e limpa-os do URL (para um F5 não repetir a acção). */
 function readLaunch(): LaunchAction | null {
