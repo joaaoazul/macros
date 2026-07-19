@@ -6,6 +6,7 @@
  */
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { Z } from '../components/ui'
 
 type ToastKind = 'ok' | 'error'
 interface Toast {
@@ -37,7 +38,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {toasts.length > 0 && (
         <div
-          className="pointer-events-none fixed inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[80] flex flex-col items-center gap-2 px-4"
+          className={`pointer-events-none fixed inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] ${Z.toast} flex flex-col items-center gap-2 px-4`}
           role="status"
           aria-live="polite"
         >

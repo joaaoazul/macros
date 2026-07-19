@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { social, type LeaderboardOut } from '../../lib/social'
-import { Card } from '../ui'
+import { Card, ListSkeleton } from '../ui'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
@@ -20,7 +20,7 @@ export default function Leaderboard() {
     social.leaderboard().then(setBoard).catch(() => setBoard({ week: { start: '', end: '' }, rows: [] }))
   }, [])
 
-  if (!board) return <p className="px-5 py-10 text-center text-muted">A carregar…</p>
+  if (!board) return <div className="px-4"><ListSkeleton rows={5} /></div>
 
   return (
     <div className="px-4">

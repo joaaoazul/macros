@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { social, type BadgeCatalogItem, type BadgeEarned } from '../../lib/social'
+import { Z } from '../ui'
 
 interface Props {
   earned: string[]
@@ -36,7 +37,7 @@ export default function BadgeGrid({ earned, earnedDetail, onClose }: Props) {
   }, [catalog, earnedSet])
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.modal} flex items-end bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div
         className="sheet-panel max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-bg p-5 scroll-contain"
         onClick={(e) => e.stopPropagation()}

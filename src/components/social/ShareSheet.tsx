@@ -11,6 +11,7 @@ import {
 import { haptic } from '../../lib/store'
 import type { Food, Recipe } from '../../types'
 import Avatar from './Avatar'
+import { Z } from '../ui'
 
 export function foodShare(food: Food): Share {
   return {
@@ -96,7 +97,7 @@ export default function ShareSheet({ share, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.top} flex items-end bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div className="sheet-panel max-h-[85vh] w-full overflow-y-auto rounded-t-3xl bg-bg p-5 scroll-contain" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
         <h2 className="mb-4 text-xl font-bold">Partilhar {share.kind === 'recipe' ? 'receita' : 'alimento'}</h2>

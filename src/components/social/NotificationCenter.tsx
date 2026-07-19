@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { notifications as api, notificationEmoji, type AppNotification } from '../../lib/notifications'
 import type { SocialSocket } from '../../lib/ws'
+import { ListSkeleton } from '../ui'
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -60,7 +61,7 @@ export default function NotificationCenter({ socket, onBack }: { socket: SocialS
       </header>
 
       <div className="mx-auto w-full max-w-md flex-1 space-y-2 overflow-y-auto px-4 py-3 scroll-contain">
-        {items === null && <p className="py-10 text-center text-sm text-muted">A carregar…</p>}
+        {items === null && <ListSkeleton rows={4} />}
         {items?.length === 0 && (
           <div className="animate-in py-16 text-center">
             <div className="text-4xl" aria-hidden>🔔</div>

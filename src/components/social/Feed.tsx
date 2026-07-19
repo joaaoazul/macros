@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { BADGES, FEED_REACTIONS, social, type FeedEvent, type ReactionSummary } from '../../lib/social'
 import { formatDatePT, haptic } from '../../lib/store'
 import Avatar from './Avatar'
-import { Card } from '../ui'
+import { Button, Card, EmptyState, ListSkeleton } from '../ui'
 
 function eventText(e: FeedEvent): string {
   if (e.kind.startsWith('badge_')) {
@@ -56,19 +56,17 @@ export default function Feed({ onOpenFriends }: { onOpenFriends: () => void }) {
     setEvents((evs) => evs?.map((e) => (e.id === id ? { ...e, reactions } : e)) ?? null)
 
   if (events === null) {
-    return <p className="px-5 py-10 text-center text-muted">A carregar…</p>
+    return <div className="px-4"><ListSkeleton rows={4} /></div>
   }
 
   if (events.length === 0) {
     return (
-      <div className="animate-in px-5 py-10 text-center">
-        <div className="text-4xl" aria-hidden>🫧</div>
-        <p className="mt-3 font-semibold">Ainda não há atividade</p>
-        <p className="mt-1 text-sm text-ink-2">Adiciona amigos para veres as conquistas deles aqui.</p>
-        <button onClick={onOpenFriends} className="press mt-4 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white">
-          Procurar amigos
-        </button>
-      </div>
+      <EmptyState
+        emoji="🫧"
+        title="Ainda não há atividade"
+        hint="Adiciona amigos para veres as conquistas deles aqui."
+        action={<Button onClick={onOpenFriends}>Procurar amigos</Button>}
+      />
     )
   }
 

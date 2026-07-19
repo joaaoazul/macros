@@ -11,6 +11,7 @@ import { MEALS } from '../types'
 import { scaleItems } from '../lib/recipes'
 import { haptic } from '../lib/store'
 import { useToast } from '../lib/toast'
+import { Z } from './ui'
 
 const PORTIONS: { factor: number; label: string }[] = [
   { factor: 0.25, label: '¼' },
@@ -45,7 +46,7 @@ export default function LogPortionSheet({ title, emoji, items, meal, onLog, onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div
         className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
         onClick={(e) => e.stopPropagation()}

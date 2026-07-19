@@ -10,7 +10,7 @@ import {
 } from '../../lib/social'
 import Avatar from './Avatar'
 import ProfilePage from './ProfilePage'
-import { Card } from '../ui'
+import { Card, ListSkeleton } from '../ui'
 
 interface Props {
   onMessage: (user: PublicProfileLite) => void
@@ -53,7 +53,7 @@ export default function Friends({ onMessage }: Props) {
     }
   }
 
-  if (!list) return <p className="px-5 py-10 text-center text-muted">A carregar…</p>
+  if (!list) return <div className="px-4"><ListSkeleton rows={4} /></div>
 
   return (
     <div className="space-y-4 px-4">

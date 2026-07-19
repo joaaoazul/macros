@@ -16,6 +16,100 @@ export function Card({ children, className = '' }: { children: React.ReactNode; 
   return <section className={`rounded-card bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>{children}</section>
 }
 
+/** Camadas de sobreposição, por nome.
+ *
+ * Antes andavam sete valores à solta (z-10 … z-[70]) escolhidos à mão, que foi
+ * como o segmented control acabou por aparecer por cima de um overlay. Quem
+ * precisar de uma camada nova mete-a aqui, na ordem certa.
+ */
+export const Z = {
+  raised: 'z-10', // dentro de um cartão/lista
+  bar: 'z-20', // barras fixas (tab bar)
+  overlay: 'z-40', // ecrãs cheios (conversas)
+  screen: 'z-50', // ecrã cheio por cima de outro (chat, perfil)
+  sheet: 'z-[55]', // sheet por cima de um ecrã
+  modal: 'z-[60]', // sheet por cima de um sheet
+  top: 'z-[70]', // partilha, lightbox
+  toast: 'z-[80]', // sempre visível
+} as const
+
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+type ButtonSize = 'sm' | 'md' | 'lg'
+
+const VARIANT: Record<ButtonVariant, string> = {
+  primary: 'bg-accent text-white',
+  secondary: 'bg-accent-soft text-accent',
+  ghost: 'bg-surface text-ink-2',
+  danger: 'bg-surface text-critical',
+}
+const SIZE: Record<ButtonSize, string> = {
+  sm: 'px-3.5 py-1.5 text-sm',
+  md: 'px-5 py-2.5 text-sm',
+  lg: 'px-6 py-3.5',
+}
+
+/** Botão da app. Existia uma dúzia de variações escritas à mão; agora há estas. */
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  full,
+  className = '',
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant
+  size?: ButtonSize
+  full?: boolean
+}) {
+  return (
+    <button
+      {...props}
+      className={`press rounded-full font-semibold transition-opacity disabled:opacity-40 ${VARIANT[variant]} ${SIZE[size]} ${full ? 'w-full' : ''} ${className}`}
+    />
+  )
+}
+
+/** Estado vazio: emoji, uma frase que explica, e opcionalmente o que fazer. */
+export function EmptyState({
+  emoji,
+  title,
+  hint,
+  action,
+}: {
+  emoji: string
+  title: string
+  hint?: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="animate-in py-12 text-center">
+      <div className="text-4xl" aria-hidden>{emoji}</div>
+      <p className="mt-3 font-semibold">{title}</p>
+      {hint && <p className="mx-auto mt-1 max-w-xs text-sm text-ink-2">{hint}</p>}
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    </div>
+  )
+}
+
+/** Placeholder de carregamento com a forma do conteúdo que vem a seguir.
+ *
+ * Uma lista cinzenta a pulsar diz "está quase" melhor do que a palavra
+ * "A carregar…", e não faz o conteúdo saltar quando chega. */
+export function ListSkeleton({ rows = 3, avatar = true }: { rows?: number; avatar?: boolean }) {
+  return (
+    <Card className="divide-y divide-line">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 p-4">
+          {avatar && <div className="skeleton h-10 w-10 shrink-0 rounded-full" />}
+          <div className="flex-1 space-y-2">
+            <div className="skeleton h-3.5 w-1/3 rounded" />
+            <div className="skeleton h-3 w-2/3 rounded" />
+          </div>
+        </div>
+      ))}
+    </Card>
+  )
+}
+
 /** Controlo segmentado iOS com indicador deslizante. Partilhado por Social/Cozinha. */
 export function SegmentedControl<T extends string>({
   options,

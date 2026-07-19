@@ -11,7 +11,7 @@ import {
 } from '../../lib/social'
 import type { Food, Recipe } from '../../types'
 import type { SocialSocket } from '../../lib/ws'
-import { LargeTitle, SegmentedControl } from '../ui'
+import { LargeTitle, ListSkeleton, SegmentedControl } from '../ui'
 import Chat from './Chat'
 import Conversations from './Conversations'
 import Feed from './Feed'
@@ -52,7 +52,7 @@ export default function Social({ socket, customFoods, setCustomFoods, recipes, s
     return (
       <div>
         <LargeTitle title="Social" />
-        <p className="px-5 py-10 text-center text-muted">A carregar…</p>
+        <div className="px-4"><ListSkeleton rows={3} /></div>
       </div>
     )
   }
