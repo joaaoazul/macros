@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react'
 import type { Diary, ExerciseLog, Profile, WaterLog } from '../types'
 import { sumEntries } from '../lib/calc'
 import { shiftDate, todayISO } from '../lib/store'
+import AdjustTargetCard from './AdjustTargetCard'
 import { BarChart } from './charts'
 import DayDetail from './details/DayDetail'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
   profile: Profile
+  setProfile: (p: Profile) => void
   diary: Diary
   water: WaterLog
   exercise: ExerciseLog
@@ -28,7 +30,7 @@ interface DayPoint {
 type Period = 7 | 14 | 30
 const PERIODS: Period[] = [7, 14, 30]
 
-export default function Progresso({ profile, diary, water, exercise }: Props) {
+export default function Progresso({ profile, setProfile, diary, water, exercise }: Props) {
   const [period, setPeriod] = useState<Period>(7)
   const [showTable, setShowTable] = useState(false)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
@@ -99,6 +101,11 @@ export default function Progresso({ profile, diary, water, exercise }: Props) {
             {p} dias
           </button>
         ))}
+      </div>
+
+      {/* sugestão de ajuste — só aparece quando a balança justifica */}
+      <div className="px-4 pt-3">
+        <AdjustTargetCard profile={profile} setProfile={setProfile} />
       </div>
 
       {/* tiles de estatística */}

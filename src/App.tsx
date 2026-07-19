@@ -124,7 +124,9 @@ export default function App() {
           />
         )}
         {tab === 'metas' && <Metas profile={profile} setProfile={setProfile} />}
-        {tab === 'progresso' && <Progresso profile={profile} diary={diary} water={water} exercise={exercise} />}
+        {tab === 'progresso' && (
+          <Progresso profile={profile} setProfile={setProfile} diary={diary} water={water} exercise={exercise} />
+        )}
         {tab === 'receitas' && (
           <Receitas
             recipes={recipes}
