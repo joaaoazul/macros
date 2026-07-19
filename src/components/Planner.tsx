@@ -7,13 +7,17 @@ import { searchOpenFoodFacts } from '../lib/off'
 import {
   analyzePlan,
   buildShoppingList,
+  extraItem,
   formatQuantity,
   PLAN_MEALS,
+  shoppingListText,
   todayWeekday,
   WEEKDAYS,
+  withExtras,
   type ShoppingItem,
 } from '../lib/shopping'
 import { haptic, uid } from '../lib/store'
+import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
 import { Card } from './ui'
 
@@ -39,6 +43,23 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
   const notes = useMemo(() => analyzePlan(mealPlan), [mealPlan])
   const entryAt = (day: number, meal: string) => mealPlan.find((e) => e.day === day && e.meal === meal)
   const plannedCount = mealPlan.length
+
+  /** kcal planeadas no dia (× doses) — dá para ver de relance dias leves e pesados. */
+  const dayKcal = (day: number) =>
+    Math.round(
+      mealPlan
+        .filter((e) => e.day === day)
+        .reduce(
+          (s, e) => s + e.items.reduce((n, i) => n + i.kcal, 0) * (e.servings > 0 ? e.servings : 1),
+          0,
+        ),
+    )
+
+  const clearWeek = () => {
+    if (!confirm('Limpar o plano da semana toda?')) return
+    haptic(20)
+    setMealPlan([])
+  }
 
   const setEntry = (day: number, meal: 'lunch' | 'dinner', entry: MealPlanEntry | null) => {
     setMealPlan((plan) => {
@@ -91,6 +112,15 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
         </button>
       </div>
 
+      {plannedCount > 0 && (
+        <button
+          onClick={clearWeek}
+          className="press w-full text-center text-xs font-medium text-muted"
+        >
+          Limpar a semana
+        </button>
+      )}
+
       {plannedCount === 0 && (
         <Card className="animate-in p-6 text-center text-sm text-muted">
           Planeia os teus almoços e jantares da semana. A lista de compras aparece a partir daqui — com as
@@ -102,8 +132,15 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
       {WEEKDAYS.map((label, day) => (
         <Card key={day} className={`animate-in overflow-hidden ${day === today ? 'ring-1 ring-accent-soft' : ''}`} >
           <div className="flex items-center justify-between px-4 pt-3">
-            <span className="text-sm font-semibold">{label}</span>
-            {day === today && <span className="text-[11px] font-semibold uppercase tracking-wide text-accent">Hoje</span>}
+            <span className="text-sm font-semibold">
+              {label}
+              {day === today && (
+                <span className="ml-2 text-[11px] font-semibold uppercase tracking-wide text-accent">Hoje</span>
+              )}
+            </span>
+            {dayKcal(day) > 0 && (
+              <span className="text-[11px] tabular-nums text-muted">{dayKcal(day)} kcal planeadas</span>
+            )}
           </div>
           <div className="mt-1 divide-y divide-line">
             {PLAN_MEALS.map((m) => {
@@ -323,10 +360,21 @@ function SlotPicker({
 }
 
 const CHECKED_KEY = 'macros.shopChecked'
+const EXTRAS_KEY = 'macros.shopExtra'
 
 /** Lista de compras derivada, agrupada por corredor, com check-off e produtos OFF. */
 function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pantry: PantryItem[]; onBack: () => void }) {
-  const groups = useMemo(() => buildShoppingList(plan, pantry), [plan, pantry])
+  const [extras, setExtras] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(EXTRAS_KEY) || '[]') as string[]
+    } catch {
+      return []
+    }
+  })
+  const groups = useMemo(
+    () => withExtras(buildShoppingList(plan, pantry), extras),
+    [plan, pantry, extras],
+  )
   const total = groups.reduce((s, g) => s + g.items.length, 0)
   const [checked, setChecked] = useState<Set<string>>(() => {
     try {
@@ -336,6 +384,63 @@ function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pan
     }
   })
   const [finding, setFinding] = useState<ShoppingItem | null>(null)
+  const [newItem, setNewItem] = useState('')
+  const toast = useToast()
+
+  const doneCount = groups.reduce(
+    (s, g) => s + g.items.filter((i) => checked.has(i.key)).length,
+    0,
+  )
+
+  // Os riscados são guardados por chave; quando o plano muda, as chaves antigas
+  // deixam de existir e ficariam a acumular no localStorage para sempre.
+  useEffect(() => {
+    const live = new Set(groups.flatMap((g) => g.items.map((i) => i.key)))
+    setChecked((cur) => {
+      const next = new Set([...cur].filter((k) => live.has(k)))
+      if (next.size === cur.size) return cur
+      try {
+        localStorage.setItem(CHECKED_KEY, JSON.stringify([...next]))
+      } catch {
+        /* cache opcional */
+      }
+      return next
+    })
+  }, [groups])
+
+  const saveExtras = (list: string[]) => {
+    setExtras(list)
+    try {
+      localStorage.setItem(EXTRAS_KEY, JSON.stringify(list))
+    } catch {
+      /* cache opcional */
+    }
+  }
+
+  const addExtra = () => {
+    const name = newItem.trim()
+    if (!name) return
+    if (extras.some((e) => e.toLowerCase() === name.toLowerCase())) {
+      setNewItem('')
+      return
+    }
+    haptic(10)
+    saveExtras([...extras, name])
+    setNewItem('')
+  }
+
+  const share = async () => {
+    const text = shoppingListText(groups, checked)
+    try {
+      if (navigator.share) await navigator.share({ text })
+      else {
+        await navigator.clipboard.writeText(text)
+        toast('Lista copiada')
+      }
+    } catch {
+      /* o utilizador cancelou a partilha */
+    }
+  }
 
   const toggle = (key: string) => {
     haptic(10)
@@ -355,13 +460,33 @@ function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pan
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">
       <header className="flex items-center justify-between border-b border-line/70 bg-surface/80 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
         <button onClick={onBack} className="press text-accent">‹ <span className="text-sm font-medium">Planeador</span></button>
-        <div className="font-semibold">Lista de compras</div>
-        {checked.size > 0 ? (
-          <button onClick={() => { setChecked(new Set()); localStorage.removeItem(CHECKED_KEY) }} className="press text-sm font-medium text-accent">Limpar</button>
+        <div className="text-center">
+          <div className="font-semibold leading-tight">Lista de compras</div>
+          {total > 0 && (
+            <div className="text-[11px] tabular-nums text-muted">{doneCount} de {total} na cesta</div>
+          )}
+        </div>
+        {total > 0 ? (
+          <button onClick={() => void share()} aria-label="Partilhar lista" className="press text-accent">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 16V4M8 8l4-4 4 4" />
+              <path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" />
+            </svg>
+          </button>
         ) : (
-          <span className="w-12" />
+          <span className="w-6" />
         )}
       </header>
+
+      {total > 0 && (
+        <div className="h-0.5 bg-line">
+          <div
+            className="h-full bg-accent transition-[width] duration-300"
+            style={{ width: `${(doneCount / total) * 100}%` }}
+            aria-hidden
+          />
+        </div>
+      )}
 
       <div className="mx-auto w-full max-w-md flex-1 space-y-4 overflow-y-auto px-4 py-4 scroll-contain">
         {total === 0 && (
@@ -371,6 +496,32 @@ function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pan
             <p className="mt-1 text-sm text-ink-2">Planeia refeições ou adiciona recorrentes na despensa.</p>
           </div>
         )}
+
+        {/* nem tudo o que se compra vem de uma receita */}
+        <div className="flex gap-2">
+          <input
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addExtra()
+              }
+            }}
+            placeholder="Juntar à lista (ex.: café)"
+            maxLength={60}
+            aria-label="Juntar item à lista"
+            className="min-w-0 flex-1 rounded-xl bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
+          />
+          <button
+            onClick={addExtra}
+            disabled={!newItem.trim()}
+            className="press shrink-0 rounded-xl bg-accent px-4 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            Juntar
+          </button>
+        </div>
+
         {groups.map((g) => (
           <section key={g.aisle.id} className="animate-in">
             <h3 className="px-1 pb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{g.aisle.emoji} {g.aisle.label}</h3>
@@ -390,8 +541,21 @@ function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pan
                       <div className={`truncate text-sm font-medium ${on ? 'text-muted line-through' : ''}`}>
                         {item.emoji} {item.name}
                       </div>
-                      <div className="text-xs text-muted">{formatQuantity(item.grams, item.unit)} · toca para ver produtos</div>
+                      <div className="text-xs text-muted">
+                        {item.grams > 0
+                          ? `${formatQuantity(item.grams, item.unit)} · toca para ver produtos`
+                          : 'toca para ver produtos'}
+                      </div>
                     </button>
+                    {item.key.startsWith('extra|') && (
+                      <button
+                        onClick={() => saveExtras(extras.filter((e) => extraItem(e).key !== item.key))}
+                        aria-label={`Remover ${item.name}`}
+                        className="press shrink-0 text-muted"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 )
               })}

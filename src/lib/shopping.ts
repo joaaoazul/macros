@@ -116,6 +116,47 @@ export function buildShoppingList(plan: MealPlanEntry[], pantry: PantryItem[]): 
   )
 }
 
+/** Item escrito à mão (papel de cozinha, café…) que não vem de nenhuma receita. */
+export function extraItem(name: string): ShoppingItem {
+  const clean = name.trim()
+  return {
+    key: `extra|${normalize(clean)}`,
+    name: clean,
+    emoji: '📝',
+    grams: 0,
+    unit: 'g',
+    aisle: aisleFor(clean),
+  }
+}
+
+/** Junta os itens escritos à mão aos derivados do plano, no corredor certo. */
+export function withExtras(groups: ShoppingGroup[], extras: string[]): ShoppingGroup[] {
+  if (extras.length === 0) return groups
+  const out = groups.map((g) => ({ aisle: g.aisle, items: [...g.items] }))
+  for (const name of extras) {
+    const item = extraItem(name)
+    const existing = out.find((g) => g.aisle.id === item.aisle.id)
+    if (existing) existing.items.push(item)
+    else out.push({ aisle: item.aisle, items: [item] })
+  }
+  for (const g of out) g.items.sort((a, b) => a.name.localeCompare(b.name, 'pt'))
+  return out.sort((a, b) => AISLE_ORDER.indexOf(a.aisle.id) - AISLE_ORDER.indexOf(b.aisle.id))
+}
+
+/** A lista em texto simples, para partilhar ou colar noutro lado. */
+export function shoppingListText(groups: ShoppingGroup[], checked: Set<string>): string {
+  const lines: string[] = ['Lista de compras']
+  for (const g of groups) {
+    const pending = g.items.filter((i) => !checked.has(i.key))
+    if (pending.length === 0) continue
+    lines.push('', `${g.aisle.emoji} ${g.aisle.label}`)
+    for (const i of pending) {
+      lines.push(`- ${i.name}${i.grams > 0 ? ` (${formatQuantity(i.grams, i.unit)})` : ''}`)
+    }
+  }
+  return lines.join('\n')
+}
+
 /** Quantidade legível para comprar: g→kg, ml→L quando faz sentido. */
 export function formatQuantity(grams: number, unit: 'g' | 'ml'): string {
   const g = Math.round(grams)
