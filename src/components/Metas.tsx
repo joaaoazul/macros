@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Profile } from '../types'
 import { splitFromTargets, targetsFromSplit } from '../lib/calc'
 import MacrosDetail from './details/MacrosDetail'
+import TargetExplainer from './TargetExplainer'
 import { Card, LargeTitle } from './ui'
 
 interface Props {
@@ -20,14 +21,19 @@ export default function Metas({ profile, setProfile }: Props) {
       <LargeTitle title="Metas" subtitle="Os teus alvos diários" />
 
       <div className="space-y-3.5 px-4 pt-2">
-        {/* meta de calorias */}
-        <Card className="flex items-center gap-4 p-5">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-2xl" aria-hidden>
-            🔥
-          </span>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted">Meta de calorias</div>
-            <div className="text-3xl font-bold tracking-tight">{targets.kcal.toLocaleString('pt-PT')} kcal</div>
+        {/* meta de calorias — um número, com o "como calculámos" atrás dele */}
+        <Card className="p-5">
+          <div className="flex items-center gap-4">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-soft text-2xl" aria-hidden>
+              🔥
+            </span>
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted">Meta de calorias</div>
+              <div className="text-3xl font-bold tracking-tight">{targets.kcal.toLocaleString('pt-PT')} kcal</div>
+            </div>
+          </div>
+          <div className="mt-4 border-t border-line pt-4">
+            <TargetExplainer profile={profile} />
           </div>
         </Card>
 

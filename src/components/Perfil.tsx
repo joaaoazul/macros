@@ -15,6 +15,7 @@ import {
   type NotificationPrefs,
 } from '../lib/notifications'
 import { BADGES, social, type SocialMe } from '../lib/social'
+import TargetExplainer from './TargetExplainer'
 import PesoDetail from './details/PesoDetail'
 import Avatar from './social/Avatar'
 import BadgeGrid from './social/BadgeGrid'
@@ -146,6 +147,9 @@ export default function Perfil({ profile, setProfile }: Props) {
                 </button>
               </div>
             </div>
+          </div>
+          <div className="p-4">
+            <TargetExplainer profile={profile} />
           </div>
         </Card>
 
