@@ -107,6 +107,17 @@ export interface LibraryRecipe {
   items: RecipeItem[]
 }
 
+/** Receita extraída de um link (backend scraper). Ainda não é uma Recipe: as
+ * linhas de ingredientes são texto livre que o frontend tenta casar com alimentos
+ * conhecidos (ver src/lib/ingredients.ts + itemsFromScraped em recipes.ts). */
+export interface ScrapedRecipe {
+  name: string
+  emoji: string
+  servings: number
+  ingredients: string[]
+  nutritionPerServing?: { kcal?: number; protein?: number; carbs?: number; fat?: number }
+}
+
 /** Uma refeição planeada (almoço/jantar) num dia da semana. items são snapshots. */
 export interface MealPlanEntry {
   id: string

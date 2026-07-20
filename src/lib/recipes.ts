@@ -1,6 +1,8 @@
 /** Helpers de combinações/receitas: assinatura para dedup e conversões. */
 
-import type { Entry, LibraryRecipe, MealId, Recipe, RecipeItem } from '../types'
+import type { Entry, Food, LibraryRecipe, MealId, Recipe, RecipeItem, ScrapedRecipe } from '../types'
+import { searchFoods } from './foods'
+import { parseIngredientLine } from './ingredients'
 import { uid } from './store'
 
 export const MAX_AUTO_COMBOS = 12
@@ -105,6 +107,52 @@ export function recipeFromLibrary(lib: LibraryRecipe): Recipe {
     emoji: lib.emoji,
     auto: false,
     items: lib.items.map((i) => ({ ...i })),
+  }
+}
+
+const r1 = (n: number) => Math.round(n * 10) / 10
+
+/** Converte as linhas de uma receita extraída em RecipeItems.
+ *
+ * Para cada linha: tenta casar o nome com um alimento conhecido (top hit) e, se
+ * também soubermos os gramas, cria um item com macros escalados. Sem match ou
+ * sem gramas → um placeholder editável com o texto original e macros a zero
+ * (nunca inventamos valores). Devolve os itens e quantos casaram, para dar
+ * feedback honesto ao utilizador. */
+export function itemsFromScraped(
+  scraped: ScrapedRecipe,
+  foods: Food[],
+): { items: RecipeItem[]; matched: number } {
+  let matched = 0
+  const items = scraped.ingredients.map<RecipeItem>((line) => {
+    const { grams, unit, query } = parseIngredientLine(line)
+    const hit = query ? searchFoods(foods, query)[0] : undefined
+    if (hit && grams != null && grams > 0) {
+      matched++
+      const factor = grams / 100
+      return {
+        foodName: hit.brand ? `${hit.name} (${hit.brand})` : hit.name,
+        emoji: hit.emoji,
+        grams,
+        unit: hit.unit,
+        kcal: Math.round(hit.kcal * factor),
+        protein: r1(hit.protein * factor),
+        carbs: r1(hit.carbs * factor),
+        fat: r1(hit.fat * factor),
+      }
+    }
+    return { foodName: line, emoji: '🍽️', grams: grams ?? 0, unit, kcal: 0, protein: 0, carbs: 0, fat: 0 }
+  })
+  return { items, matched }
+}
+
+/** Constrói uma Recipe (não guardada) a partir de uma receita extraída, para
+ * pré-preencher o construtor. id novo, auto=false; ver itemsFromScraped. */
+export function recipeFromScraped(scraped: ScrapedRecipe, foods: Food[]): { recipe: Recipe; matched: number } {
+  const { items, matched } = itemsFromScraped(scraped, foods)
+  return {
+    recipe: { id: uid(), name: scraped.name, emoji: scraped.emoji || '🍲', auto: false, items },
+    matched,
   }
 }
 

@@ -142,21 +142,78 @@ def _brand_name(brand) -> str | None:
     return None
 
 
+def _recipe_ingredients(recipe: dict) -> list[str]:
+    """Linhas de ingredientes de um Recipe ('2 ovos', '100 g de aveia'…).
+
+    Limpa HTML/espaços e ignora vazios. Devolve [] se não houver lista — nesse
+    caso o Recipe cai no cartão de alimento (comportamento antigo)."""
+    raw = recipe.get("recipeIngredient") or recipe.get("ingredients")
+    if not isinstance(raw, list):
+        return []
+    lines: list[str] = []
+    for entry in raw:
+        line = _clean(entry) if isinstance(entry, str) else ""
+        if line:
+            lines.append(line)
+    return lines[:60]  # teto defensivo — nenhuma receita real tem tantas linhas
+
+
+def _recipe_servings(recipe: dict) -> int:
+    """Nº de doses a partir de recipeYield ('4', '4 doses', ['4 servings']…)."""
+    value = recipe.get("recipeYield")
+    if isinstance(value, list):
+        value = value[0] if value else None
+    n = _num(value)
+    if n is not None and n >= 1:
+        return min(int(round(n)), 99)
+    return 1
+
+
+def _nutrition_per_serving(nutrition) -> dict | None:
+    """Macros por dose (schema.org já dá por dose) — só para o frontend validar."""
+    if not isinstance(nutrition, dict):
+        return None
+    fields = {
+        "kcal": _num(nutrition.get("calories")),
+        "protein": _num(nutrition.get("proteinContent")),
+        "carbs": _num(nutrition.get("carbohydrateContent")),
+        "fat": _num(nutrition.get("fatContent")),
+    }
+    present = {k: round(v, 1) for k, v in fields.items() if v is not None}
+    return present or None
+
+
 def parse(html: str) -> dict:
-    """Devolve {'food': {...}|None, 'name': str, 'source': 'recipe'|'product'|'title'|'none'}."""
+    """Devolve {'food': …|None, 'recipe': …|None, 'name': str, 'source': …}.
+
+    source ∈ recipe | product | title | none. Um Recipe com lista de
+    ingredientes vira 'recipe' (multi-ingrediente); sem ingredientes cai no
+    cartão de alimento, mas mantém source 'recipe'."""
     objects = extract_jsonld(html)
 
     recipe = _first_of_type(objects, "Recipe")
     if recipe is not None:
         name = _clean(recipe.get("name"))
-        nutrition = recipe.get("nutrition")
-        if name and isinstance(nutrition, dict):
-            food = _nutrition_food(name, nutrition)
-            if food is not None:
-                food["emoji"] = "🍲"
-                return {"food": food, "name": name, "source": "recipe"}
         if name:
-            return {"food": None, "name": name, "source": "recipe"}
+            ingredients = _recipe_ingredients(recipe)
+            if ingredients:
+                out = {
+                    "name": name,
+                    "emoji": "🍲",
+                    "servings": _recipe_servings(recipe),
+                    "ingredients": ingredients,
+                }
+                nps = _nutrition_per_serving(recipe.get("nutrition"))
+                if nps:
+                    out["nutritionPerServing"] = nps
+                return {"food": None, "recipe": out, "name": name, "source": "recipe"}
+            nutrition = recipe.get("nutrition")
+            if isinstance(nutrition, dict):
+                food = _nutrition_food(name, nutrition)
+                if food is not None:
+                    food["emoji"] = "🍲"
+                    return {"food": food, "recipe": None, "name": name, "source": "recipe"}
+            return {"food": None, "recipe": None, "name": name, "source": "recipe"}
 
     product = _first_of_type(objects, "Product")
     if product is not None:
@@ -166,12 +223,12 @@ def parse(html: str) -> dict:
         if name and isinstance(nutrition, dict):
             food = _nutrition_food(name, nutrition, brand)
             if food is not None:
-                return {"food": food, "name": name, "source": "product"}
+                return {"food": food, "recipe": None, "name": name, "source": "product"}
         if name:
             food = {"name": name, "emoji": "🛒", "kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "unit": "g"}
             if brand:
                 food["brand"] = _clean(brand)
-            return {"food": food, "name": name, "source": "product"}
+            return {"food": food, "recipe": None, "name": name, "source": "product"}
 
     # fallback: og:title ou <title>
     m = _OG_TITLE_RE.search(html) or _TITLE_RE.search(html)
@@ -179,7 +236,8 @@ def parse(html: str) -> dict:
     if name:
         return {
             "food": {"name": name, "emoji": "🍽️", "kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "unit": "g"},
+            "recipe": None,
             "name": name,
             "source": "title",
         }
-    return {"food": None, "name": "", "source": "none"}
+    return {"food": None, "recipe": None, "name": "", "source": "none"}

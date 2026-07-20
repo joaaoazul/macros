@@ -42,8 +42,17 @@ class ScrapeRequest(BaseModel):
     url: str = Field(min_length=8, max_length=2048)
 
 
+class ScrapedRecipe(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    emoji: str = "🍲"
+    servings: int = Field(default=1, ge=1, le=99)
+    ingredients: list[str] = Field(min_length=1, max_length=60)
+    nutritionPerServing: dict[str, float] | None = None
+
+
 class ScrapeResponse(BaseModel):
     food: Food | None = None
+    recipe: ScrapedRecipe | None = None
     source: str  # recipe | product | title | none
 
 
@@ -129,10 +138,12 @@ async def scrape(
         raise ValidationError("Não consegui ler essa página.")
 
     result = parse(html)
+    recipe_dict = result.get("recipe")
+    recipe = ScrapedRecipe.model_validate(recipe_dict) if recipe_dict else None
     food_dict = result.get("food")
     food = None
     if food_dict:
         food_dict["id"] = f"scraped-{uuid4().hex[:12]}"
         food_dict["custom"] = True
         food = Food.model_validate(food_dict)
-    return ScrapeResponse(food=food, source=result.get("source", "none"))
+    return ScrapeResponse(food=food, recipe=recipe, source=result.get("source", "none"))

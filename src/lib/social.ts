@@ -281,7 +281,11 @@ export const messages = {
 /** Alimento/receita partilháveis num chat. */
 export const foodScraper = {
   scrape: (url: string) =>
-    api<{ food: import('../types').Food | null; source: string }>('/foods/scrape', {
+    api<{
+      food: import('../types').Food | null
+      recipe: import('../types').ScrapedRecipe | null
+      source: string
+    }>('/foods/scrape', {
       method: 'POST',
       body: { url },
     }),

@@ -6,6 +6,7 @@ import { searchOpenFoodFacts } from '../lib/off'
 import {
   entryFromRecipeItem,
   findByItems,
+  itemsFromScraped,
   recipeKcal,
   rememberCombo,
   saveAsNamed,
@@ -68,7 +69,20 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
     setScrapeErr('')
     try {
       const res = await foodScraper.scrape(trimmedQuery)
-      if (res.food) {
+      if (res.recipe) {
+        // receita multi-ingrediente → guarda na Cozinha (funde via setRecipes,
+        // respeita o portão de sincronização); linhas por casar ficam como
+        // placeholders editáveis, nunca são deitadas fora
+        const { items, matched } = itemsFromScraped(res.recipe, localFoods)
+        setRecipes((rs) => saveAsNamed(rs, items, res.recipe!.name))
+        const pending = items.length - matched
+        setQuery('')
+        toast(
+          pending === 0
+            ? 'Receita guardada na Cozinha'
+            : `Receita guardada — completa ${pending} na Cozinha`,
+        )
+      } else if (res.food) {
         setScrapePrefill(res.food)
         setCreating(true)
         setQuery('')

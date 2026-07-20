@@ -31,6 +31,27 @@ PRODUCT_HTML = """
 
 TITLE_ONLY_HTML = '<html><head><meta property="og:title" content="Bolo de Cenoura"></head></html>'
 
+RECIPE_WITH_INGREDIENTS_HTML = """
+<html><head>
+<script type="application/ld+json">
+{"@type":"Recipe","name":"Massa à Bolonhesa","recipeYield":"4 doses",
+ "recipeIngredient":["400 g de massa","500 g de carne picada","2 cebolas","",100],
+ "nutrition":{"@type":"NutritionInformation","calories":"620 kcal","proteinContent":"35 g"}}
+</script></head><body></body></html>
+"""
+
+
+def test_parse_recipe_with_ingredients():
+    r = parse(RECIPE_WITH_INGREDIENTS_HTML)
+    assert r["source"] == "recipe"
+    assert r["food"] is None
+    rec = r["recipe"]
+    assert rec["name"] == "Massa à Bolonhesa"
+    assert rec["servings"] == 4
+    # linhas vazias/não-string são descartadas, não silenciosamente convertidas
+    assert rec["ingredients"] == ["400 g de massa", "500 g de carne picada", "2 cebolas"]
+    assert rec["nutritionPerServing"]["kcal"] == 620
+
 
 def test_parse_recipe_scales_to_per_100g():
     r = parse(RECIPE_HTML)
@@ -124,6 +145,23 @@ async def test_scrape_endpoint_returns_food(client):
     assert body["source"] == "recipe"
     assert body["food"]["name"] == "Panquecas de Aveia"
     assert body["food"]["id"].startswith("scraped-")
+    assert body["recipe"] is None  # esta página não tem lista de ingredientes
+
+
+async def test_scrape_endpoint_returns_recipe(client):
+    await make_social_user(client, "ana@example.com", "ana_fit")
+    with patch("app.scraper.router.safe_outbound_url", side_effect=lambda u, s=("https",): u), patch(
+        "app.scraper.router.httpx.AsyncClient",
+        return_value=_fake_client(RECIPE_WITH_INGREDIENTS_HTML),
+    ):
+        resp = await client.post("/api/v1/foods/scrape", json={"url": "https://recipes.example.com/x"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source"] == "recipe"
+    assert body["food"] is None
+    assert body["recipe"]["name"] == "Massa à Bolonhesa"
+    assert body["recipe"]["servings"] == 4
+    assert len(body["recipe"]["ingredients"]) == 3
 
 
 async def test_scrape_blocks_dns_rebinding(client):

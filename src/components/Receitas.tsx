@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import type { Food, LibraryRecipe, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
+import type { Food, LibraryRecipe, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem, ScrapedRecipe } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
-import { recipeFromLibrary, recipeKcal, saveAsNamed } from '../lib/recipes'
+import { recipeFromLibrary, recipeFromScraped, recipeKcal, saveAsNamed } from '../lib/recipes'
+import { foodScraper } from '../lib/social'
 import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
 import Planner from './Planner'
@@ -37,6 +38,8 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
   const [sharing, setSharing] = useState<Recipe | null>(null)
   const [segment, setSegment] = useState<'recipes' | 'planner'>('recipes')
   const [library, setLibrary] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importDraft, setImportDraft] = useState<Recipe | null>(null)
   const toast = useToast()
 
   const named = recipes.filter((r) => !r.auto)
@@ -60,23 +63,47 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
     return true
   }
 
-  if (building) {
+  /** Recebe uma receita extraída de um link, casa os ingredientes com alimentos
+   * conhecidos e abre o construtor pré-preenchido para o utilizador rever. */
+  const startImport = (scraped: ScrapedRecipe) => {
+    if (recipes.length >= MAX_RECIPES) {
+      toast('Atingiste o limite de receitas.', 'error')
+      return
+    }
+    const { recipe, matched } = recipeFromScraped(scraped, [...customFoods, ...FOOD_DB])
+    setImporting(false)
+    setImportDraft(recipe)
+    const pending = recipe.items.length - matched
+    toast(
+      pending === 0
+        ? 'Receita importada — confirma e guarda'
+        : `Importada — ${pending} ingrediente(s) por completar`,
+    )
+  }
+
+  // Editar uma receita existente OU rever uma importada (draft ainda não guardado).
+  const editing = building && building !== 'new' ? building : null
+  if (building || importDraft) {
     return (
       <RecipeBuilder
-        initial={building === 'new' ? null : building}
+        initial={editing ?? importDraft}
         customFoods={customFoods}
-        onCancel={() => setBuilding(null)}
+        onCancel={() => {
+          setBuilding(null)
+          setImportDraft(null)
+        }}
         onSave={(name, emoji, items) => {
           setRecipes((rs) => {
             // se estava a editar uma existente, substitui; senão guarda nova nomeada
-            if (building !== 'new') {
-              return rs.map((x) => (x.id === building.id ? { ...x, name, emoji, auto: false, items } : x))
+            if (editing) {
+              return rs.map((x) => (x.id === editing.id ? { ...x, name, emoji, auto: false, items } : x))
             }
             return saveAsNamed(rs, items, name).map((x) =>
               x.name === name && x.items === items ? { ...x, emoji } : x,
             )
           })
           setBuilding(null)
+          setImportDraft(null)
         }}
       />
     )
@@ -117,6 +144,13 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
             📖 Biblioteca
           </button>
         </div>
+
+        <button
+          onClick={() => setImporting(true)}
+          className="press w-full rounded-full border border-dashed border-line px-5 py-3 text-sm font-semibold text-accent"
+        >
+          🔗 Importar de link
+        </button>
 
         {named.length > 0 && (
           <Card className="divide-y divide-line">
@@ -177,6 +211,81 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
       )}
 
       {library && <RecipeLibrary onAdd={addFromLibrary} onClose={() => setLibrary(false)} />}
+
+      {importing && <ImportRecipeSheet onImport={startImport} onClose={() => setImporting(false)} />}
+    </div>
+  )
+}
+
+/** Cola um link, extrai a receita e devolve-a para pré-preencher o construtor. */
+function ImportRecipeSheet({
+  onImport,
+  onClose,
+}: {
+  onImport: (scraped: ScrapedRecipe) => void
+  onClose: () => void
+}) {
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const go = async () => {
+    const u = url.trim()
+    if (!/^https?:\/\/\S+$/i.test(u)) {
+      setErr('Cola um link http(s) válido.')
+      return
+    }
+    setBusy(true)
+    setErr('')
+    try {
+      const res = await foodScraper.scrape(u)
+      if (res.recipe) {
+        onImport(res.recipe)
+      } else if (res.food) {
+        setErr('Esse link parece um produto, não uma receita. Importa-o ao adicionar um alimento.')
+      } else {
+        setErr('Não encontrei uma receita nessa página.')
+      }
+    } catch {
+      setErr('Não consegui importar esse link.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
+      <div
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Importar receita de um link"
+      >
+        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" aria-hidden />
+        <h2 className="text-lg font-bold">Importar de link</h2>
+        <p className="mt-1 text-sm text-muted">
+          Cola o link de uma receita. Tentamos casar os ingredientes com alimentos conhecidos — depois
+          confirmas e completas o que faltar.
+        </p>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !busy && void go()}
+          placeholder="https://…"
+          inputMode="url"
+          className="mt-4 w-full rounded-xl bg-surface px-4 py-3 focus:outline-none focus:ring-2 focus:ring-accent"
+          autoFocus
+        />
+        {err && <p className="mt-2 text-sm font-medium text-critical">{err}</p>}
+        <button
+          onClick={() => void go()}
+          disabled={busy || !url.trim()}
+          className="mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition active:scale-[0.98] disabled:opacity-40"
+        >
+          {busy ? 'A importar…' : 'Importar receita'}
+        </button>
+      </div>
     </div>
   )
 }
