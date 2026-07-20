@@ -1,6 +1,6 @@
 /** Helpers de combinações/receitas: assinatura para dedup e conversões. */
 
-import type { Entry, MealId, Recipe, RecipeItem } from '../types'
+import type { Entry, LibraryRecipe, MealId, Recipe, RecipeItem } from '../types'
 import { uid } from './store'
 
 export const MAX_AUTO_COMBOS = 12
@@ -91,6 +91,21 @@ export function rememberCombo(recipes: Recipe[], items: RecipeItem[]): Recipe[] 
 export function findByItems(recipes: Recipe[], items: RecipeItem[]): Recipe | undefined {
   const sig = comboSignature(items)
   return recipes.find((r) => comboSignature(r.items) === sig)
+}
+
+/** Converte uma receita da biblioteca numa receita nomeada do utilizador.
+ *
+ * Novo id (uid) para não colidir com o 'lib-…', auto=false, items copiados. Não
+ * escreve nada: devolve o Recipe para quem chama meter via setRecipes (é isso
+ * que dispara o PUT full-replace e respeita o portão de sincronização). */
+export function recipeFromLibrary(lib: LibraryRecipe): Recipe {
+  return {
+    id: uid(),
+    name: lib.name,
+    emoji: lib.emoji,
+    auto: false,
+    items: lib.items.map((i) => ({ ...i })),
+  }
 }
 
 /** Promove/guarda um combo como receita nomeada. */

@@ -90,6 +90,23 @@ export interface Recipe {
   items: RecipeItem[]
 }
 
+/** Receita da biblioteca pública (empacotada na app, só-leitura).
+ *
+ * Ao contrário de Recipe (por-utilizador), tem nome obrigatório, etiquetas e
+ * doses — para se poder pesquisar e filtrar. items são snapshots absolutos, por
+ * isso a receita é auto-contida e não depende do FOOD_DB em runtime. Ao
+ * "adicionar às minhas", converte-se num Recipe normal (ver src/lib/recipes.ts).
+ */
+export interface LibraryRecipe {
+  id: string // 'lib-…'
+  name: string
+  emoji: string
+  tags: string[]
+  servings: number
+  minutes?: number
+  items: RecipeItem[]
+}
+
 /** Uma refeição planeada (almoço/jantar) num dia da semana. items são snapshots. */
 export interface MealPlanEntry {
   id: string

@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react'
-import type { Food, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
+import type { Food, LibraryRecipe, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
-import { recipeKcal, saveAsNamed } from '../lib/recipes'
+import { recipeFromLibrary, recipeKcal, saveAsNamed } from '../lib/recipes'
+import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
 import Planner from './Planner'
+import RecipeLibrary from './RecipeLibrary'
 import ShareSheet, { recipeShare } from './social/ShareSheet'
 import { Card, LargeTitle, SegmentedControl } from './ui'
+
+/** Limite de receitas por utilizador imposto pelo backend (put_recipes). */
+const MAX_RECIPES = 200
 
 interface Props {
   recipes: Recipe[]
@@ -31,11 +36,29 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
   const [mealFor, setMealFor] = useState<Recipe | null>(null)
   const [sharing, setSharing] = useState<Recipe | null>(null)
   const [segment, setSegment] = useState<'recipes' | 'planner'>('recipes')
+  const [library, setLibrary] = useState(false)
+  const toast = useToast()
 
   const named = recipes.filter((r) => !r.auto)
   const autos = recipes.filter((r) => r.auto)
 
   const remove = (r: Recipe) => setRecipes((rs) => rs.filter((x) => x.id !== r.id))
+
+  /** Adiciona uma receita da biblioteca às do utilizador. Devolve false (e avisa)
+   * se já existir uma com o mesmo nome ou se o limite estiver atingido. */
+  const addFromLibrary = (lib: LibraryRecipe): boolean => {
+    if (recipes.length >= MAX_RECIPES) {
+      toast('Atingiste o limite de receitas.', 'error')
+      return false
+    }
+    if (named.some((r) => r.name?.toLowerCase() === lib.name.toLowerCase())) {
+      toast('Já tens essa receita.', 'error')
+      return false
+    }
+    setRecipes((rs) => [recipeFromLibrary(lib), ...rs])
+    toast('Receita adicionada às tuas.')
+    return true
+  }
 
   if (building) {
     return (
@@ -80,12 +103,20 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
         />
       ) : (
       <div className="animate-fade space-y-3.5 px-4 pt-1">
-        <button
-          onClick={() => setBuilding('new')}
-          className="press w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white"
-        >
-          ＋ Criar receita
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setBuilding('new')}
+            className="press flex-1 rounded-full bg-accent px-6 py-3.5 font-semibold text-white"
+          >
+            ＋ Criar receita
+          </button>
+          <button
+            onClick={() => setLibrary(true)}
+            className="press rounded-full bg-accent-soft px-5 py-3.5 font-semibold text-accent"
+          >
+            📖 Biblioteca
+          </button>
+        </div>
 
         {named.length > 0 && (
           <Card className="divide-y divide-line">
@@ -144,6 +175,8 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
       {sharing && (
         <ShareSheet share={recipeShare(sharing)} onClose={() => setSharing(null)} />
       )}
+
+      {library && <RecipeLibrary onAdd={addFromLibrary} onClose={() => setLibrary(false)} />}
     </div>
   )
 }
