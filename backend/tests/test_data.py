@@ -71,6 +71,26 @@ async def test_profile_and_day_round_trip(client):
     assert data["exercise"]["2026-07-11"][0]["name"] == "Corrida"
 
 
+async def test_profile_birthdate_and_body_fat_round_trip(client):
+    await register_user(client)
+    body = {**PROFILE, "birthdate": "1994-03-15", "bodyFatPct": 18.5}
+    resp = await client.put("/api/v1/profile", json=body)
+    assert resp.status_code == 200
+
+    data = (await client.get("/api/v1/data/all")).json()
+    assert data["profile"]["birthdate"] == "1994-03-15"
+    assert data["profile"]["bodyFatPct"] == 18.5
+
+
+async def test_profile_omitting_new_fields_keeps_them_null(client):
+    await register_user(client)
+    resp = await client.put("/api/v1/profile", json=PROFILE)
+    assert resp.status_code == 200
+    data = (await client.get("/api/v1/data/all")).json()
+    assert data["profile"]["birthdate"] is None
+    assert data["profile"]["bodyFatPct"] is None
+
+
 async def test_day_upsert_replaces_only_provided_sections(client):
     await register_user(client)
     await client.put("/api/v1/days/2026-07-11", json={"entries": [ENTRY], "waterMl": 500})

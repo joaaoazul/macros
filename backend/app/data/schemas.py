@@ -25,6 +25,9 @@ class Profile(BaseModel):
     activity: float = Field(ge=1.0, le=2.5)
     goal: Literal["cut", "maintain", "bulk"]
     targets: Targets
+    # data de nascimento ISO (deriva a idade); % de gordura (TMB Katch-McArdle)
+    birthdate: str | None = Field(default=None, max_length=10)
+    bodyFatPct: float | None = Field(default=None, ge=3, le=70)
 
 
 class Entry(BaseModel):

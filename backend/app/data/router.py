@@ -61,6 +61,7 @@ def _profile_out(p: DbProfile) -> Profile:
     return Profile(
         name=p.name, sex=p.sex, age=p.age, heightCm=p.height_cm, weightKg=p.weight_kg,
         activity=p.activity, goal=p.goal, targets=p.targets,
+        birthdate=p.birthdate, bodyFatPct=p.body_fat_pct,
     )
 
 
@@ -221,12 +222,15 @@ async def put_profile(
         existing.activity = body.activity
         existing.goal = body.goal
         existing.targets = body.targets.model_dump()
+        existing.birthdate = body.birthdate
+        existing.body_fat_pct = body.bodyFatPct
     else:
         db.add(
             DbProfile(
                 user_id=user.id, name=body.name, sex=body.sex, age=body.age,
                 height_cm=body.heightCm, weight_kg=body.weightKg, activity=body.activity,
                 goal=body.goal, targets=body.targets.model_dump(),
+                birthdate=body.birthdate, body_fat_pct=body.bodyFatPct,
             )
         )
     return body

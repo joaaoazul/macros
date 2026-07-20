@@ -11,7 +11,7 @@
  */
 
 import type { Profile } from '../types'
-import { tdee } from './calc'
+import { ageFromBirthdate, tdee } from './calc'
 
 /** kcal por kg de massa corporal — aproximação clássica (1 kg ≈ 7700 kcal). */
 const KCAL_PER_KG = 7700
@@ -19,6 +19,12 @@ const KCAL_PER_KG = 7700
 /** Guardrails: sem isto não há sugestão nenhuma. */
 export const MIN_WEIGH_INS = 4
 export const MIN_DAYS_SPAN = 14
+/** Manutenção aprendida: mínimo de dias com registo real a sobrepor pesagens. */
+export const MIN_INTAKE_DAYS = 14
+/** Um dia com menos kcal do que isto é registo incompleto, não jejum. */
+const COMPLETE_DAY_KCAL = 800
+/** Quão longe a manutenção aprendida pode fugir do Mifflin antes de a cortarmos. */
+const LEARNED_CLAMP = 0.35
 /** Abaixo disto é ruído (água, sal, hora do dia), não tendência. */
 export const NOISE_FLOOR_KG_WEEK = 0.2
 /** Nunca sugerir mexer mais do que isto de uma vez. */
@@ -59,6 +65,51 @@ export function weightRatePerWeek(weights: Weight[]): number | null {
   return (num / den) * 7 // kg por dia → por semana
 }
 
+/** Consumo total de um dia (kcal), para aprender a manutenção real. */
+export interface DailyIntake {
+  date: string
+  kcal: number
+}
+
+/** TDEE de Mifflin com a idade derivada da data de nascimento e a % de gordura. */
+function mifflinTdee(profile: Profile): number {
+  const age = ageFromBirthdate(profile.birthdate, profile.age)
+  return tdee(profile.sex, profile.weightKg, profile.heightCm, age, profile.activity, profile.bodyFatPct)
+}
+
+/** Manutenção estimada a partir dos DADOS: se comeste `x` em média e o peso
+ * mudou a `r` kg/semana, a manutenção ≈ `x − (r/7)·7700`.
+ *
+ * Só devolve algo com dados que cheguem — ≥14 dias de registo completo a
+ * sobrepor ≥MIN_WEIGH_INS pesagens — e o resultado é cortado a ±35% do Mifflin
+ * para uma semana atípica não disparar um número absurdo. null caso contrário
+ * (quem chama cai no Mifflin). */
+export function estimateMaintenance(
+  profile: Profile,
+  weights: Weight[],
+  intake: DailyIntake[],
+): number | null {
+  const days = intake.filter((d) => Number.isFinite(d.kcal) && d.kcal >= COMPLETE_DAY_KCAL)
+  if (days.length < MIN_INTAKE_DAYS) return null
+
+  const dates = days.map((d) => d.date).sort()
+  const first = dates[0]
+  const last = dates[dates.length - 1]
+  const overlap = weights.filter((w) => w.kg > 0 && w.date >= first && w.date <= last)
+  if (overlap.length < MIN_WEIGH_INS) return null
+
+  const rate = weightRatePerWeek(overlap)
+  if (rate === null) return null
+
+  const meanIntake = days.reduce((s, d) => s + d.kcal, 0) / days.length
+  const maintenance = meanIntake - (rate / 7) * KCAL_PER_KG
+
+  const mifflin = mifflinTdee(profile)
+  const lo = mifflin * (1 - LEARNED_CLAMP)
+  const hi = mifflin * (1 + LEARNED_CLAMP)
+  return Math.round(Math.max(lo, Math.min(hi, maintenance)))
+}
+
 export interface TargetSuggestion {
   /** ritmo medido, kg/semana (negativo = a perder) */
   actualRate: number
@@ -72,8 +123,15 @@ export interface TargetSuggestion {
   capped: boolean
 }
 
-/** Sugestão de ajuste, ou null quando não há dados/divergência que a justifiquem. */
-export function suggestAdjustment(profile: Profile, weights: Weight[]): TargetSuggestion | null {
+/** Sugestão de ajuste, ou null quando não há dados/divergência que a justifiquem.
+ *
+ * Se `intake` chegar e houver dados suficientes, usa a manutenção APRENDIDA dos
+ * teus registos; senão cai no Mifflin (comportamento de sempre). */
+export function suggestAdjustment(
+  profile: Profile,
+  weights: Weight[],
+  intake?: DailyIntake[],
+): TargetSuggestion | null {
   const recent = [...weights].sort((a, b) => a.date.localeCompare(b.date))
   if (recent.length < MIN_WEIGH_INS) return null
 
@@ -85,8 +143,9 @@ export function suggestAdjustment(profile: Profile, weights: Weight[]): TargetSu
   const actualRate = weightRatePerWeek(recent)
   if (actualRate === null) return null
 
-  // ritmo implícito no alvo actual: (alvo − TDEE) kcal/dia → kg/semana
-  const maintenance = tdee(profile.sex, profile.weightKg, profile.heightCm, profile.age, profile.activity)
+  // ritmo implícito no alvo actual: (alvo − manutenção) kcal/dia → kg/semana
+  const learned = intake ? estimateMaintenance(profile, weights, intake) : null
+  const maintenance = learned ?? mifflinTdee(profile)
   const dailyDelta = profile.targets.kcal - maintenance
   const expectedRate = (dailyDelta * 7) / KCAL_PER_KG
 

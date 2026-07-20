@@ -4,7 +4,8 @@ import type { Profile } from '../types'
 import { api, ApiError } from '../lib/api'
 import { clearAnthropicKey, getAnthropicKey, setAnthropicKey } from '../lib/ai'
 import { useAuth } from '../lib/auth'
-import { ACTIVITY_LEVELS, GOALS, bmi, bmr, computeTargets } from '../lib/calc'
+import { ACTIVITY_LEVELS, GOALS, ageFromBirthdate, bmi, bmr, computeTargets } from '../lib/calc'
+import { BODY_FAT_PCT, HEIGHT_CM, inRange } from '../lib/limits'
 import { clearLocalCache } from '../lib/sync'
 import { getPushState, subscribeToPush, unsubscribeFromPush, type PushState } from '../lib/push'
 import { listReminders, saveReminders, REMINDER_META, type Reminder } from '../lib/reminders'
@@ -32,12 +33,15 @@ export default function Perfil({ profile, setProfile }: Props) {
 
   const goalInfo = GOALS.find((g) => g.value === profile.goal)
   const activityInfo = ACTIVITY_LEVELS.find((a) => a.value === profile.activity)
-  const tmb = Math.round(bmr(profile.sex, profile.weightKg, profile.heightCm, profile.age))
+  const effectiveAge = ageFromBirthdate(profile.birthdate, profile.age)
+  const usingKatch = profile.bodyFatPct != null && profile.bodyFatPct > 0
+  const tmb = Math.round(bmr(profile.sex, profile.weightKg, profile.heightCm, effectiveAge, profile.bodyFatPct))
   const imc = bmi(profile.weightKg, profile.heightCm)
 
-  const recompute = (patch: Partial<Pick<Profile, 'weightKg' | 'goal' | 'activity'>>) => {
+  const recompute = (patch: Partial<Profile>) => {
     const next = { ...profile, ...patch }
-    const targets = computeTargets(next.sex, next.weightKg, next.heightCm, next.age, next.activity, next.goal)
+    const age = ageFromBirthdate(next.birthdate, next.age)
+    const targets = computeTargets(next.sex, next.weightKg, next.heightCm, age, next.activity, next.goal, next.bodyFatPct)
     setProfile({ ...next, targets })
     setWaterMl(String(targets.waterMl))
   }
@@ -65,23 +69,10 @@ export default function Perfil({ profile, setProfile }: Props) {
       {/* perfil social */}
       <SocialProfileCard />
 
-      {/* dados base */}
+      {/* dados base — editáveis (recalculam as metas) */}
+      <BodyMetricsCard profile={profile} effectiveAge={effectiveAge} onRecompute={recompute} />
       <Card className="p-5">
-        <div className="grid grid-cols-3 divide-x divide-line text-center">
-          <div>
-            <div className="text-xl font-bold text-carbs">{profile.heightCm}</div>
-            <div className="text-xs uppercase tracking-wide text-muted">Altura</div>
-          </div>
-          <div>
-            <div className="text-xl font-bold text-protein">{profile.sex === 'M' ? 'Homem' : 'Mulher'}</div>
-            <div className="text-xs uppercase tracking-wide text-muted">Género</div>
-          </div>
-          <div>
-            <div className="text-xl font-bold text-good">{profile.age}</div>
-            <div className="text-xs uppercase tracking-wide text-muted">Idade</div>
-          </div>
-        </div>
-        <div className="mt-4 border-t border-line pt-3 text-center">
+        <div className="text-center">
           <div className="font-bold">{activityInfo?.label}</div>
           <div className="text-xs uppercase tracking-wide text-muted">Nível de atividade</div>
         </div>
@@ -128,7 +119,7 @@ export default function Perfil({ profile, setProfile }: Props) {
 
         {/* métricas */}
         <Card className="divide-y divide-line">
-          <MetricRow emoji="🔥" label="TMB (metabolismo basal)" value={`${tmb.toLocaleString('pt-PT')} kcal`} />
+          <MetricRow emoji="🔥" label="TMB (metabolismo basal)" value={`${tmb.toLocaleString('pt-PT')} kcal`} hint={usingKatch ? 'Katch-McArdle' : undefined} />
           <MetricRow emoji="📐" label="IMC" value={imc.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} hint={imcClass(imc)} />
           <div className="flex items-center gap-4 p-4">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>
@@ -218,6 +209,105 @@ export default function Perfil({ profile, setProfile }: Props) {
         />
       )}
     </div>
+  )
+}
+
+/** Métricas do corpo editáveis: altura, sexo, data de nascimento e % de gordura.
+ * Cada alteração recalcula as metas (via onRecompute → setProfile). */
+function BodyMetricsCard({
+  profile,
+  effectiveAge,
+  onRecompute,
+}: {
+  profile: Profile
+  effectiveAge: number
+  onRecompute: (patch: Partial<Profile>) => void
+}) {
+  const [height, setHeight] = useState(String(profile.heightCm))
+  const [bodyFat, setBodyFat] = useState(profile.bodyFatPct != null ? String(profile.bodyFatPct) : '')
+
+  const applyHeight = () => {
+    const h = Number(height)
+    if (!inRange(h, HEIGHT_CM) || h === profile.heightCm) return
+    onRecompute({ heightCm: h })
+  }
+  const applyBodyFat = () => {
+    const raw = bodyFat.trim()
+    const next = raw === '' ? undefined : Number(raw)
+    if (next !== undefined && !inRange(next, BODY_FAT_PCT)) return
+    if (next === profile.bodyFatPct) return
+    onRecompute({ bodyFatPct: next })
+  }
+
+  const inputCls =
+    'w-full rounded-lg bg-bg px-3 py-2 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-accent'
+
+  return (
+    <Card className="space-y-4 p-5">
+      <div className="grid grid-cols-2 gap-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Altura (cm)</span>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              value={height}
+              onChange={(e) => setHeight(e.target.value)}
+              onBlur={applyHeight}
+              className={inputCls}
+              aria-label="Altura em cm"
+            />
+          </div>
+        </label>
+        <div>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Género</span>
+          <div className="flex rounded-lg bg-bg p-1 text-sm font-medium">
+            {(['M', 'F'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => s !== profile.sex && onRecompute({ sex: s })}
+                className={`flex-1 rounded-md py-1.5 transition ${profile.sex === s ? 'bg-surface shadow-sm text-ink' : 'text-muted'}`}
+              >
+                {s === 'M' ? 'Homem' : 'Mulher'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
+            Nascimento
+          </span>
+          <input
+            type="date"
+            value={profile.birthdate ?? ''}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => onRecompute({ birthdate: e.target.value || undefined })}
+            className="w-full rounded-lg bg-bg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent"
+            aria-label="Data de nascimento"
+          />
+          <span className="mt-1 block text-[11px] text-muted">Idade: {effectiveAge} anos</span>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
+            Gordura (%)
+          </span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={bodyFat}
+            placeholder="opcional"
+            onChange={(e) => setBodyFat(e.target.value)}
+            onBlur={applyBodyFat}
+            className={inputCls}
+            aria-label="Percentagem de gordura corporal"
+          />
+          <span className="mt-1 block text-[11px] text-muted">TMB por Katch-McArdle</span>
+        </label>
+      </div>
+    </Card>
   )
 }
 

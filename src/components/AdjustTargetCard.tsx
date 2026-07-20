@@ -5,30 +5,50 @@
  * aparece de todo — ver os guardrails em lib/trend.ts.
  */
 
-import { useEffect, useState } from 'react'
-import type { Profile } from '../types'
+import { useEffect, useMemo, useState } from 'react'
+import type { Diary, Profile } from '../types'
 import { api } from '../lib/api'
-import { splitFromTargets, targetsFromSplit } from '../lib/calc'
+import { splitFromTargets, sumEntries, targetsFromSplit } from '../lib/calc'
 import { haptic } from '../lib/store'
 import { useToast } from '../lib/toast'
-import { formatRate, suggestAdjustment, type TargetSuggestion, type Weight } from '../lib/trend'
+import {
+  estimateMaintenance,
+  formatRate,
+  suggestAdjustment,
+  type DailyIntake,
+  type TargetSuggestion,
+  type Weight,
+} from '../lib/trend'
 import { Card } from './ui'
 
 interface Props {
   profile: Profile
   setProfile: (p: Profile) => void
+  /** diário local — dá o consumo diário para aprender a manutenção real. */
+  diary?: Diary
 }
 
-export default function AdjustTargetCard({ profile, setProfile }: Props) {
+export default function AdjustTargetCard({ profile, setProfile, diary }: Props) {
   const [suggestion, setSuggestion] = useState<TargetSuggestion | null>(null)
+  const [learned, setLearned] = useState<number | null>(null)
   const [dismissed, setDismissed] = useState(false)
   const toast = useToast()
+
+  const intake = useMemo<DailyIntake[]>(
+    () =>
+      diary
+        ? Object.entries(diary).map(([date, entries]) => ({ date, kcal: sumEntries(entries).kcal }))
+        : [],
+    [diary],
+  )
 
   useEffect(() => {
     let alive = true
     api<Weight[]>('/weights')
       .then((weights) => {
-        if (alive) setSuggestion(suggestAdjustment(profile, weights))
+        if (!alive) return
+        setSuggestion(suggestAdjustment(profile, weights, intake))
+        setLearned(estimateMaintenance(profile, weights, intake))
       })
       .catch(() => {
         /* sem pesagens não há sugestão — e isso é um estado válido */
@@ -36,11 +56,21 @@ export default function AdjustTargetCard({ profile, setProfile }: Props) {
     return () => {
       alive = false
     }
-  }, [profile])
+  }, [profile, intake])
 
-  if (!suggestion || dismissed) return null
+  // A manutenção aprendida pode aparecer mesmo sem sugestão de ajuste.
+  const showSuggestion = suggestion && !dismissed
+  if (!showSuggestion && learned == null) return null
 
-  const { actualRate, expectedRate, deltaKcal, newKcal, capped } = suggestion
+  if (!showSuggestion) {
+    return (
+      <Card className="animate-in p-4">
+        <LearnedMaintenance kcal={learned!} />
+      </Card>
+    )
+  }
+
+  const { actualRate, expectedRate, deltaKcal, newKcal, capped } = suggestion!
   const up = deltaKcal > 0
 
   const apply = () => {
@@ -106,10 +136,33 @@ export default function AdjustTargetCard({ profile, setProfile }: Props) {
         </button>
       </div>
 
+      {learned != null && (
+        <div className="mt-3 border-t border-line pt-3">
+          <LearnedMaintenance kcal={learned} />
+        </div>
+      )}
+
       <p className="mt-2 text-[11px] leading-snug text-muted">
         Estimativa a partir do teu peso e do teu alvo, não um conselho clínico. O peso oscila com
         água e sal; se a semana foi atípica, ignora.
       </p>
     </Card>
+  )
+}
+
+/** Manutenção calculada a partir do consumo real e da balança (não da fórmula). */
+function LearnedMaintenance({ kcal }: { kcal: number }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-lg" aria-hidden>📊</span>
+      <div>
+        <div className="text-sm font-semibold">
+          Manutenção estimada pelos teus dados: {kcal.toLocaleString('pt-PT')} kcal
+        </div>
+        <div className="text-[11px] text-muted">
+          Do teu consumo médio e do ritmo da balança — já inclui o que gastas a treinar.
+        </div>
+      </div>
+    </div>
   )
 }

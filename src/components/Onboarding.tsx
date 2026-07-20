@@ -15,21 +15,28 @@ export default function Onboarding({ onDone }: Props) {
   const [weightKg, setWeightKg] = useState('')
   const [activity, setActivity] = useState(1.55)
   const [goal, setGoal] = useState<Goal>('maintain')
+  const [bodyFat, setBodyFat] = useState('')
 
   const ageN = Number(age)
   const heightN = Number(heightCm)
   const weightN = Number(weightKg)
+  const bodyFatN = bodyFat.trim() === '' ? undefined : Number(bodyFat)
+  const bodyFatOk = bodyFatN === undefined || (bodyFatN >= 3 && bodyFatN <= 70)
   const dataOk =
     name.trim().length > 0 &&
     ageN >= 14 && ageN <= 100 &&
     heightN >= 120 && heightN <= 230 &&
-    weightN >= 35 && weightN <= 250
+    weightN >= 35 && weightN <= 250 &&
+    bodyFatOk
 
-  const targets = dataOk ? computeTargets(sex, weightN, heightN, ageN, activity, goal) : null
+  const targets = dataOk ? computeTargets(sex, weightN, heightN, ageN, activity, goal, bodyFatN) : null
 
   const finish = () => {
     if (!targets) return
-    onDone({ name: name.trim(), sex, age: ageN, heightCm: heightN, weightKg: weightN, activity, goal, targets })
+    onDone({
+      name: name.trim(), sex, age: ageN, heightCm: heightN, weightKg: weightN, activity, goal, targets,
+      ...(bodyFatN !== undefined ? { bodyFatPct: bodyFatN } : {}),
+    })
   }
 
   return (
@@ -74,6 +81,11 @@ export default function Onboarding({ onDone }: Props) {
                 <input type="number" inputMode="decimal" value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="70" className={inputCls} />
               </Field>
             </div>
+
+            <Field label="Gordura corporal (%) — opcional">
+              <input type="number" inputMode="decimal" value={bodyFat} onChange={(e) => setBodyFat(e.target.value)} placeholder="deixa vazio se não souberes" className={inputCls} />
+              <span className="mt-1 block text-xs text-muted">Se souberes, a TMB usa Katch-McArdle em vez de Mifflin.</span>
+            </Field>
           </div>
 
           <PrimaryButton className="mt-auto" disabled={!dataOk} onClick={() => setStep(1)}>

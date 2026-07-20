@@ -105,7 +105,7 @@ export default function Progresso({ profile, setProfile, diary, water, exercise 
 
       {/* sugestão de ajuste — só aparece quando a balança justifica */}
       <div className="px-4 pt-3">
-        <AdjustTargetCard profile={profile} setProfile={setProfile} />
+        <AdjustTargetCard profile={profile} setProfile={setProfile} diary={diary} />
       </div>
 
       {/* tiles de estatística */}

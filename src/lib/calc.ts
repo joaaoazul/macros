@@ -1,13 +1,38 @@
 import type { Goal, Sex, Targets, Entry, Profile } from '../types'
+import { AGE } from './limits'
 
-/** BMR (TMB) pela equação de Mifflin-St Jeor. */
-export function bmr(sex: Sex, weightKg: number, heightCm: number, age: number): number {
+/** TMB por Katch-McArdle, a partir da massa magra (precisa de % de gordura).
+ *
+ * Mais fiel que Mifflin quando sabemos a composição corporal: duas pessoas com
+ * o mesmo peso mas gorduras diferentes têm metabolismos diferentes. */
+export function bmrKatch(weightKg: number, bodyFatPct: number): number {
+  const leanMassKg = weightKg * (1 - bodyFatPct / 100)
+  return 370 + 21.6 * leanMassKg
+}
+
+/** BMR (TMB): Katch-McArdle quando há % de gordura, senão Mifflin-St Jeor. */
+export function bmr(sex: Sex, weightKg: number, heightCm: number, age: number, bodyFatPct?: number): number {
+  if (bodyFatPct != null && bodyFatPct > 0) return bmrKatch(weightKg, bodyFatPct)
   const base = 10 * weightKg + 6.25 * heightCm - 5 * age
   return sex === 'M' ? base + 5 : base - 161
 }
 
-export function tdee(sex: Sex, weightKg: number, heightCm: number, age: number, activity: number): number {
-  return bmr(sex, weightKg, heightCm, age) * activity
+export function tdee(sex: Sex, weightKg: number, heightCm: number, age: number, activity: number, bodyFatPct?: number): number {
+  return bmr(sex, weightKg, heightCm, age, bodyFatPct) * activity
+}
+
+/** Idade a partir da data de nascimento (ISO), para não envelhecer preso a um
+ * valor escrito uma vez. Cai no `fallback` guardado se a data faltar ou for
+ * inválida/absurda. */
+export function ageFromBirthdate(birthdate: string | undefined, fallback: number): number {
+  if (!birthdate) return fallback
+  const b = new Date(birthdate)
+  if (Number.isNaN(b.getTime())) return fallback
+  const now = new Date()
+  let age = now.getFullYear() - b.getFullYear()
+  const monthDiff = now.getMonth() - b.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < b.getDate())) age--
+  return age >= AGE.min && age <= AGE.max ? age : fallback
 }
 
 export function bmi(weightKg: number, heightCm: number): number {
@@ -27,8 +52,8 @@ const PROTEIN_PER_KG: Record<Goal, number> = { cut: 2.2, maintain: 1.8, bulk: 2.
  * Alvos diários: calorias a partir do TDEE ajustado ao objetivo,
  * proteína por kg de peso, gordura a 25% das kcal, resto em hidratos.
  */
-export function computeTargets(sex: Sex, weightKg: number, heightCm: number, age: number, activity: number, goal: Goal): Targets {
-  const kcal = Math.round(tdee(sex, weightKg, heightCm, age, activity) * GOAL_FACTOR[goal])
+export function computeTargets(sex: Sex, weightKg: number, heightCm: number, age: number, activity: number, goal: Goal, bodyFatPct?: number): Targets {
+  const kcal = Math.round(tdee(sex, weightKg, heightCm, age, activity, bodyFatPct) * GOAL_FACTOR[goal])
   const protein = Math.round(PROTEIN_PER_KG[goal] * weightKg)
   const fat = Math.round((kcal * 0.25) / 9)
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4))

@@ -19,6 +19,11 @@ export interface Profile {
   activity: number
   goal: Goal
   targets: Targets
+  /** Data de nascimento ISO (YYYY-MM-DD). Quando presente, deriva a idade
+   * automaticamente (ver ageFromBirthdate) em vez do `age` fixo. */
+  birthdate?: string
+  /** % de gordura corporal. Quando presente, a TMB usa Katch-McArdle. */
+  bodyFatPct?: number
 }
 
 /** Uma medida caseira do alimento: 1 <label> equivale a <grams> g/ml. */

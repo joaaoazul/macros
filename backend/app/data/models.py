@@ -23,6 +23,8 @@ class DbProfile(Base, TimestampMixin):
     activity: Mapped[float] = mapped_column(Float, nullable=False)
     goal: Mapped[str] = mapped_column(String(10), nullable=False)  # cut|maintain|bulk
     targets: Mapped[dict] = mapped_column(JSON, nullable=False)  # {kcal,protein,carbs,fat,waterMl}
+    birthdate: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ISO YYYY-MM-DD
+    body_fat_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class DbDiaryEntry(Base):
