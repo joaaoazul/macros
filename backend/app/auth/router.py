@@ -99,6 +99,9 @@ async def register(
         name=body.name.strip(),
         # Without an email provider we cannot verify — auto-verify so the app is usable.
         email_verified=not email_enabled(),
+        # 14 dias (TRIAL_DAYS) de acesso completo antes de precisar de subscrição.
+        trial_ends_at=datetime.now(timezone.utc) + timedelta(days=settings.TRIAL_DAYS),
+        subscription_status="trialing",
     )
     db.add(user)
     await db.flush()

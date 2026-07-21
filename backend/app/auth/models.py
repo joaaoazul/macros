@@ -24,6 +24,14 @@ class User(Base, TimestampMixin):
     email_verified: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     failed_login_attempts: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Billing / acesso. comped=True são convidados (amigos) — acesso vitalício grátis.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    subscription_status: Mapped[str] = mapped_column(
+        String(16), default="none", server_default="none", nullable=False
+    )  # none|trialing|active|past_due|canceled
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    comped: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
     sessions_invalidated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

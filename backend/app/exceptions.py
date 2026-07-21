@@ -40,3 +40,10 @@ class ForbiddenError(HTTPException):
 
     def __init__(self, detail: str = "Access denied") -> None:
         super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+class PaymentRequiredError(HTTPException):
+    """Sem subscrição/trial ativos — 402 para o frontend mostrar o paywall."""
+
+    def __init__(self, detail: str = "A tua subscrição não está ativa.") -> None:
+        super().__init__(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail=detail)

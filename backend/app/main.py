@@ -2,13 +2,15 @@
 
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.admin.router import router as admin_router
 from app.ai.router import router as ai_router
 from app.auth.router import router as auth_router
+from app.billing.dependencies import require_access
+from app.billing.router import router as billing_router
 from app.config import settings
 from app.data.router import router as data_router
 from app.gdpr.router import router as gdpr_router
@@ -88,8 +90,11 @@ async def csrf_header_guard(request: Request, call_next):
 
 
 app.include_router(auth_router)
+app.include_router(billing_router)
 app.include_router(ai_router)
-app.include_router(data_router)
+# require_access tranca os dados da app atrás do trial/subscrição (402 → paywall).
+# auth, billing e gdpr ficam SEMPRE abertos para o utilizador poder pagar/sair.
+app.include_router(data_router, dependencies=[Depends(require_access)])
 app.include_router(gdpr_router)
 app.include_router(social_router)
 app.include_router(messages_router)

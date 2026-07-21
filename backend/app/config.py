@@ -41,6 +41,15 @@ class Settings(BaseSettings):
     # Alertas SOC via ntfy. Vazio = alertas desativados.
     ALERT_NTFY_URL: str = ""
 
+    # Stripe. Chave secreta vazia = billing DESATIVADO (billing_enabled()==False):
+    # toda a gente tem acesso, para dev e self-host não ficarem trancados.
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_MONTHLY: str = ""
+    STRIPE_PRICE_ANNUAL: str = ""
+    # Dias de teste grátis dados a cada conta nova.
+    TRIAL_DAYS: int = 14
+
     DEBUG: bool = False  # true enables /api/docs and /api/redoc
     LOG_LEVEL: str = "INFO"
 
