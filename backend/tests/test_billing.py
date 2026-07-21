@@ -64,3 +64,57 @@ async def test_data_402_when_no_access(client, monkeypatch):
 async def test_billing_status_requires_auth(client):
     resp = await client.get("/api/v1/billing/status")
     assert resp.status_code == 401
+
+
+# ── Stripe: checkout + webhook ──────────────────────────────────────────────
+
+
+async def test_checkout_rejected_when_billing_disabled(client):
+    await register_user(client)
+    resp = await client.post("/api/v1/billing/checkout", json={"plan": "monthly"})
+    assert resp.status_code == 422  # pagamentos ainda não ativos
+
+
+async def test_checkout_returns_url_when_enabled(client, monkeypatch):
+    await register_user(client)
+    monkeypatch.setattr("app.billing.router.billing_enabled", lambda: True)
+
+    async def fake_checkout(user, plan, success_url, cancel_url):
+        assert plan == "annual"
+        return "https://checkout.stripe.test/session"
+
+    monkeypatch.setattr("app.billing.router.create_checkout_session", fake_checkout)
+    resp = await client.post("/api/v1/billing/checkout", json={"plan": "annual"})
+    assert resp.status_code == 200
+    assert resp.json()["url"] == "https://checkout.stripe.test/session"
+
+
+async def test_webhook_activates_then_cancels(client, monkeypatch):
+    user_id = (await register_user(client)).json()["id"]
+
+    completed = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"client_reference_id": str(user_id), "customer": "cus_test"}},
+    }
+    monkeypatch.setattr("app.billing.router.verify_webhook", lambda payload, sig: completed)
+    r = await client.post("/api/v1/billing/webhook", content=b"{}", headers={"stripe-signature": "x"})
+    assert r.status_code == 200
+    assert (await client.get("/api/v1/billing/status")).json()["status"] == "active"
+
+    deleted = {
+        "type": "customer.subscription.deleted",
+        "data": {"object": {"customer": "cus_test", "status": "canceled"}},
+    }
+    monkeypatch.setattr("app.billing.router.verify_webhook", lambda payload, sig: deleted)
+    r2 = await client.post("/api/v1/billing/webhook", content=b"{}", headers={"stripe-signature": "x"})
+    assert r2.status_code == 200
+    assert (await client.get("/api/v1/billing/status")).json()["status"] == "canceled"
+
+
+async def test_webhook_bad_signature_rejected(client, monkeypatch):
+    def boom(payload, sig):
+        raise ValueError("bad signature")
+
+    monkeypatch.setattr("app.billing.router.verify_webhook", boom)
+    r = await client.post("/api/v1/billing/webhook", content=b"{}", headers={"stripe-signature": "x"})
+    assert r.status_code == 422
