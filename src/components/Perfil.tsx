@@ -15,6 +15,7 @@ import {
   type NotificationPrefs,
 } from '../lib/notifications'
 import { BADGES, social, type SocialMe } from '../lib/social'
+import { billing, trialDaysLeft, type BillingStatus } from '../lib/billing'
 import TargetExplainer from './TargetExplainer'
 import PesoDetail from './details/PesoDetail'
 import Avatar from './social/Avatar'
@@ -194,6 +195,9 @@ export default function Perfil({ profile, setProfile }: Props) {
 
         {/* lembretes */}
         <RemindersCard />
+
+        {/* subscrição */}
+        <SubscriptionCard />
 
         {/* chave IA */}
         <ApiKeyCard />
@@ -623,6 +627,69 @@ function SocialProfileCard() {
       {showBadges && me && (
         <BadgeGrid earned={me.badges} earnedDetail={me.badgesDetail} onClose={() => setShowBadges(false)} />
       )}
+    </Card>
+  )
+}
+
+/** Estado da subscrição + gerir (portal Stripe) ou subscrever (checkout). */
+function SubscriptionCard() {
+  const [status, setStatus] = useState<BillingStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    billing.status().then(setStatus).catch(() => setStatus(null))
+  }, [])
+
+  // billing desligado (sem Stripe) → não mostra nada
+  if (!status || !status.billingEnabled) return null
+
+  const hasSub = ['active', 'past_due', 'canceled'].includes(status.status) || !!status.currentPeriodEnd
+  const go = async (action: 'portal' | 'checkout') => {
+    setBusy(true)
+    setError('')
+    try {
+      const { url } = action === 'portal' ? await billing.portal() : await billing.checkout('annual')
+      window.location.href = url
+    } catch {
+      setError('Não foi possível abrir. Tenta novamente.')
+      setBusy(false)
+    }
+  }
+
+  const label: Record<string, string> = {
+    trialing: 'Em teste grátis',
+    active: 'Ativa',
+    past_due: 'Pagamento em atraso',
+    canceled: 'Cancelada',
+    none: 'Sem subscrição',
+  }
+  const days = trialDaysLeft(status)
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-4">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent-soft text-xl" aria-hidden>💳</span>
+        <div className="flex-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Subscrição</div>
+          <div className="font-semibold">
+            {status.comped ? 'Convidado — acesso grátis' : label[status.status] ?? status.status}
+          </div>
+          {status.status === 'trialing' && days > 0 && (
+            <div className="text-xs text-muted">Faltam {days} {days === 1 ? 'dia' : 'dias'}.</div>
+          )}
+        </div>
+      </div>
+      {!status.comped && (
+        <button
+          onClick={() => go(hasSub ? 'portal' : 'checkout')}
+          disabled={busy}
+          className="press mt-3 w-full rounded-xl bg-bg py-2.5 text-sm font-semibold text-accent disabled:opacity-40"
+        >
+          {busy ? 'A abrir…' : hasSub ? 'Gerir subscrição' : 'Ver planos e subscrever'}
+        </button>
+      )}
+      {error && <p role="alert" className="mt-2 text-sm font-medium text-critical">{error}</p>}
     </Card>
   )
 }

@@ -6,9 +6,11 @@ import { api, ApiError } from './lib/api'
 import { entryFromRecipeItem } from './lib/recipes'
 import { todayISO } from './lib/store'
 import { useAuth } from './lib/auth'
+import { useBillingStatus, trialDaysLeft, type BillingStatus } from './lib/billing'
 import { useSyncedData } from './lib/sync'
 import { useSocialSocket } from './lib/ws'
 import Onboarding from './components/Onboarding'
+import Paywall from './components/Paywall'
 import Diario from './components/Diario'
 import Metas from './components/Metas'
 import Progresso from './components/Progresso'
@@ -66,6 +68,8 @@ function readLaunch(): LaunchAction | null {
 export default function App() {
   const { user } = useAuth()
   const data = useSyncedData(user!.id)
+  const billingState = useBillingStatus()
+  const [showPlans, setShowPlans] = useState(false)
   const [tab, setTab] = useState<Tab>('diario')
   const socket = useSocialSocket(true)
   // atalhos do ícone e conteúdo partilhado chegam como parâmetros no URL
@@ -86,12 +90,18 @@ export default function App() {
     setTab('diario')
   }
 
-  if (loading) {
+  if (loading || billingState.loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-bg text-muted">
         <span aria-hidden className="animate-pulse text-3xl">🥗</span>
       </div>
     )
+  }
+
+  // Paywall ANTES do onboarding: um utilizador sem acesso não deve ver o setup.
+  // Fail-open: só bloqueia quando o backend diz explicitamente access=false.
+  if (billingState.data && !billingState.data.access) {
+    return <Paywall status={billingState.data} />
   }
 
   if (migrationAvailable) {
@@ -107,6 +117,9 @@ export default function App() {
     <div className="min-h-dvh bg-bg">
       <div className="mx-auto max-w-md pb-28">
         {user?.email_verified === false && <EmailBanner />}
+        {billingState.data?.billingEnabled && billingState.data.status === 'trialing' && (
+          <TrialBanner status={billingState.data} onSeePlans={() => setShowPlans(true)} />
+        )}
         {tab === 'diario' && (
           <Diario
             profile={profile}
@@ -179,6 +192,32 @@ export default function App() {
           ))}
         </div>
       </nav>
+
+      {showPlans && billingState.data && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-bg">
+          <Paywall status={billingState.data} onClose={() => setShowPlans(false)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Banner de trial a decorrer: dias a contar + atalho para ver os planos. */
+function TrialBanner({ status, onSeePlans }: { status: BillingStatus; onSeePlans: () => void }) {
+  const days = trialDaysLeft(status)
+  return (
+    <div className="mx-4 mt-4 flex items-center gap-3 rounded-xl border border-accent/30 bg-accent-soft p-3 text-sm">
+      <span aria-hidden>✨</span>
+      <span className="flex-1 text-ink-2">
+        {days > 0 ? (
+          <>Teste grátis: faltam <span className="font-semibold text-ink">{days} {days === 1 ? 'dia' : 'dias'}</span>.</>
+        ) : (
+          <>O teu teste termina hoje.</>
+        )}
+      </span>
+      <button onClick={onSeePlans} className="shrink-0 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white">
+        Ver planos
+      </button>
     </div>
   )
 }
