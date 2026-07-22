@@ -22,7 +22,7 @@ async def test_get_creates_defaults_all_disabled(client):
     await register_user(client)
     rows = (await client.get("/api/v1/reminders")).json()
     kinds = {r["kind"] for r in rows}
-    assert kinds == {"water", "breakfast", "lunch", "dinner", "weigh_in"}
+    assert kinds == {"water", "breakfast", "lunch", "dinner", "weigh_in", "expiry"}
     assert all(r["enabled"] is False for r in rows)
 
 

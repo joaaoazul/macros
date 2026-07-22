@@ -21,7 +21,11 @@ DEFAULTS: list[tuple[str, str, bool]] = [
     ("lunch", "13:00", False),
     ("dinner", "20:00", False),
     ("weigh_in", "08:00", False),
+    ("expiry", "09:00", False),
 ]
+
+# Itens de stock a ≤ estes dias da validade entram no aviso diário (igual ao frontend).
+EXPIRY_SOON_DAYS = 3
 _DEFAULT_ORDER = {kind: i for i, (kind, _, _) in enumerate(DEFAULTS)}
 
 # conteúdo do push por tipo de lembrete
@@ -32,6 +36,29 @@ MESSAGES: dict[str, tuple[str, str, str]] = {
     "dinner": ("🌙 Jantar", "Regista o teu jantar.", "/app"),
     "weigh_in": ("⚖️ Pesagem", "Regista o teu peso de hoje.", "/app"),
 }
+
+
+async def _expiring_names(db: AsyncSession, user_id: int, today) -> list[str]:
+    """Nomes dos itens de stock do user que expiram em ≤ EXPIRY_SOON_DAYS (ou já expiraram)."""
+    from datetime import timedelta
+
+    from app.data.models import DbPantryItem
+
+    cutoff = (today + timedelta(days=EXPIRY_SOON_DAYS)).isoformat()
+    rows = list(
+        (
+            await db.execute(
+                select(DbPantryItem).where(
+                    DbPantryItem.user_id == user_id,
+                    DbPantryItem.kind == "stock",
+                    DbPantryItem.expires_on.is_not(None),
+                    DbPantryItem.expires_on <= cutoff,
+                )
+            )
+        ).scalars()
+    )
+    rows.sort(key=lambda p: p.expires_on or "")
+    return [p.name for p in rows]
 
 
 async def get_or_create(db: AsyncSession, user_id: int) -> list[DbReminder]:
@@ -77,6 +104,18 @@ async def _tick(db: AsyncSession) -> int:
     for r in due:
         if r.last_fired_on == today:
             continue  # já enviado neste dia
+        if r.kind == "expiry":
+            # Push agregado com o que está a expirar; sem nada devido, não carimba
+            # last_fired_on — volta a avaliar amanhã à mesma hora.
+            names = await _expiring_names(db, r.user_id, today)
+            if not names:
+                continue
+            shown = ", ".join(names[:4]) + ("…" if len(names) > 4 else "")
+            title = f"🕓 {len(names)} alimento{'s' if len(names) != 1 else ''} a expirar"
+            await send_push(db, r.user_id, title, f"Usa antes que estrague: {shown}", "/app")
+            r.last_fired_on = today
+            sent += 1
+            continue
         title, body, url = MESSAGES.get(r.kind, ("Macros", "Lembrete", "/app"))
         await send_push(db, r.user_id, title, body, url)
         r.last_fired_on = today

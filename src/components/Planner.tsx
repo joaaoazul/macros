@@ -16,6 +16,7 @@ import {
   withExtras,
   type ShoppingItem,
 } from '../lib/shopping'
+import { defaultExpiryFor, daysUntil, expiryStatus, recipesToUseUp, sortByExpiry } from '../lib/pantry'
 import { haptic, uid } from '../lib/store'
 import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
@@ -78,7 +79,7 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
     return <ShoppingListView plan={mealPlan} pantry={pantry} onBack={() => setView('plan')} />
   }
   if (view === 'pantry') {
-    return <PantryView pantry={pantry} setPantry={setPantry} onBack={() => setView('plan')} />
+    return <PantryView pantry={pantry} setPantry={setPantry} recipes={recipes} onBack={() => setView('plan')} />
   }
 
   return (
@@ -623,21 +624,75 @@ function ProductFinder({ item, onClose }: { item: ShoppingItem; onClose: () => v
   )
 }
 
-/** Gestão da despensa: "tenho sempre" (excluir) e recorrentes (juntar sempre). */
+/** Linha de um item em stock: chip de validade + controlo manual de quantidade. */
+function StockRow({
+  item,
+  onChangeQty,
+  onFinish,
+}: {
+  item: PantryItem
+  onChangeQty: (item: PantryItem, delta: number) => void
+  onFinish: (item: PantryItem) => void
+}) {
+  const status = expiryStatus(item)
+  const d = daysUntil(item.expiresOn)
+  const chip =
+    status === 'expired'
+      ? { cls: 'bg-critical/10 text-critical', label: 'expirou' }
+      : status === 'soon'
+        ? { cls: 'bg-fat/10 text-fat', label: d === 0 ? 'hoje' : `${d} d` }
+        : { cls: 'bg-accent-soft text-accent', label: d === null ? 'sem data' : `${d} d` }
+  return (
+    <div className="animate-in flex items-center gap-2.5 p-3.5">
+      <span aria-hidden>{item.emoji}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{item.name}</div>
+        {item.expiresOn && <div className="text-[11px] tabular-nums text-muted">{item.expiresOn}</div>}
+      </div>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${chip.cls}`}>
+        {chip.label}
+      </span>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <button onClick={() => onChangeQty(item, -1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Menos um">−</button>
+        <span className="w-4 text-center text-xs font-semibold tabular-nums">{item.qty ?? 1}</span>
+        <button onClick={() => onChangeQty(item, 1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Mais um">＋</button>
+        <button onClick={() => onFinish(item)} className="press ml-0.5 text-[11px] font-semibold text-muted" aria-label={`${item.name} acabou`}>
+          Acabou
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Gestão da despensa: stock com validades, "tenho sempre" (excluir) e recorrentes (juntar sempre). */
 function PantryView({
   pantry,
   setPantry,
+  recipes,
   onBack,
 }: {
   pantry: PantryItem[]
   setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
+  recipes: Recipe[]
   onBack: () => void
 }) {
-  const [tab, setTab] = useState<'have' | 'recurring'>('have')
+  const [tab, setTab] = useState<'stock' | 'have' | 'recurring'>('stock')
   const [name, setName] = useState('')
   const [grams, setGrams] = useState('')
+  const [qty, setQty] = useState('1')
+  const [expiresOn, setExpiresOn] = useState('')
+  const toast = useToast()
 
-  const items = pantry.filter((p) => p.kind === tab)
+  const items = tab === 'stock' ? sortByExpiry(pantry.filter((p) => p.kind === 'stock')) : pantry.filter((p) => p.kind === tab)
+
+  const expiring = useMemo(
+    () => pantry.filter((p) => p.kind === 'stock' && expiryStatus(p) !== 'ok'),
+    [pantry],
+  )
+  const suggestions = useMemo(
+    () => recipesToUseUp(expiring.map((p) => p.name), recipes, 3),
+    [expiring, recipes],
+  )
 
   const add = () => {
     const n = name.trim()
@@ -646,13 +701,46 @@ function PantryView({
     const item: PantryItem =
       tab === 'have'
         ? { id: uid(), kind: 'have', name: n, emoji: '✅' }
-        : { id: uid(), kind: 'recurring', name: n, emoji: '🔁', grams: Number(grams) > 0 ? Number(grams) : 500, unit: 'g' }
+        : tab === 'recurring'
+          ? { id: uid(), kind: 'recurring', name: n, emoji: '🔁', grams: Number(grams) > 0 ? Number(grams) : 500, unit: 'g' }
+          : {
+              id: uid(), kind: 'stock', name: n, emoji: '🧺',
+              qty: Number(qty) > 0 ? Number(qty) : 1,
+              // sem data escolhida, sugere um prazo típico pelo nome (sempre editável depois de ver)
+              expiresOn: expiresOn || defaultExpiryFor(n),
+            }
     setPantry((p) => [...p, item])
     setName('')
     setGrams('')
+    setQty('1')
+    setExpiresOn('')
   }
 
   const remove = (id: string) => setPantry((p) => p.filter((x) => x.id !== id))
+
+  const changeQty = (it: PantryItem, delta: number) => {
+    haptic(10)
+    const next = Math.max(0, (it.qty ?? 1) + delta)
+    if (next === 0) return finish(it)
+    setPantry((p) => p.map((x) => (x.id === it.id ? { ...x, qty: next } : x)))
+  }
+
+  /** "Acabou": sai do stock e, se quiseres, volta já para a lista de compras. */
+  const finish = (it: PantryItem) => {
+    haptic(15)
+    remove(it.id)
+    if (confirm(`Juntar "${it.name}" à lista de compras?`)) {
+      try {
+        const extras = JSON.parse(localStorage.getItem(EXTRAS_KEY) || '[]') as string[]
+        if (!extras.some((e) => e.toLowerCase() === it.name.toLowerCase())) {
+          localStorage.setItem(EXTRAS_KEY, JSON.stringify([...extras, it.name]))
+        }
+        toast('Na lista de compras')
+      } catch {
+        /* cache opcional */
+      }
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg">
@@ -664,26 +752,48 @@ function PantryView({
       <div className="mx-auto w-full max-w-md flex-1 space-y-4 overflow-y-auto px-4 py-4 scroll-contain">
         <div className="relative flex rounded-xl bg-surface p-1">
           <div
-            className="absolute inset-y-1 w-[calc((100%-0.5rem)/2)] rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
-            style={{ transform: `translateX(${tab === 'have' ? 0 : 100}%)` }}
+            className="absolute inset-y-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+            style={{ transform: `translateX(${tab === 'stock' ? 0 : tab === 'have' ? 100 : 200}%)` }}
             aria-hidden
           />
-          {(['have', 'recurring'] as const).map((k) => (
+          {(['stock', 'have', 'recurring'] as const).map((k) => (
             <button
               key={k}
               onClick={() => setTab(k)}
               className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${tab === k ? 'text-accent' : 'text-muted'}`}
             >
-              {k === 'have' ? 'Tenho sempre' : 'Recorrentes'}
+              {k === 'stock' ? 'Em stock' : k === 'have' ? 'Tenho sempre' : 'Recorrentes'}
             </button>
           ))}
         </div>
 
         <p className="px-1 text-sm text-ink-2">
-          {tab === 'have'
-            ? 'Coisas que tens sempre em casa (sal, azeite…). Nunca entram na lista de compras.'
-            : 'Compras de todas as semanas fora do plano (aveia, ovos, fruta…). Juntam-se sempre à lista.'}
+          {tab === 'stock'
+            ? 'O que tens em casa agora, com validade. Avisamos antes que estrague — e sugerimos receitas para usar.'
+            : tab === 'have'
+              ? 'Coisas que tens sempre em casa (sal, azeite…). Nunca entram na lista de compras.'
+              : 'Compras de todas as semanas fora do plano (aveia, ovos, fruta…). Juntam-se sempre à lista.'}
         </p>
+
+        {tab === 'stock' && suggestions.length > 0 && (
+          <Card className="animate-in space-y-2 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+              🍳 Cozinha isto antes que estrague
+            </div>
+            {suggestions.map((r) => {
+              const label = r.name ?? r.items.map((i) => i.foodName).join(' + ')
+              return (
+                <div key={r.id} className="flex items-center gap-2.5 text-sm">
+                  <span aria-hidden>{r.emoji}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+                </div>
+              )
+            })}
+            <p className="text-xs text-muted">
+              Usam {expiring.map((p) => p.name).slice(0, 3).join(', ')}{expiring.length > 3 ? '…' : ''} — regista-as nas Receitas.
+            </p>
+          </Card>
+        )}
 
         <Card className="p-3">
           <div className="flex items-center gap-2">
@@ -691,7 +801,7 @@ function PantryView({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && add()}
-              placeholder={tab === 'have' ? 'ex.: Azeite' : 'ex.: Aveia'}
+              placeholder={tab === 'have' ? 'ex.: Azeite' : tab === 'recurring' ? 'ex.: Aveia' : 'ex.: Frango'}
               className="min-w-0 flex-1 rounded-xl bg-bg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
             {tab === 'recurring' && (
@@ -703,24 +813,50 @@ function PantryView({
                 <span className="text-xs text-muted">g</span>
               </div>
             )}
+            {tab === 'stock' && (
+              <input
+                type="number" inputMode="numeric" min={1} value={qty} onChange={(e) => setQty(e.target.value)}
+                aria-label="Quantidade"
+                className="w-14 rounded-xl bg-bg px-2 py-2.5 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            )}
             <button onClick={add} disabled={!name.trim()} className="press shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
               Juntar
             </button>
           </div>
+          {tab === 'stock' && (
+            <label className="mt-2 flex items-center gap-2 px-0.5">
+              <span className="text-xs text-muted">Validade</span>
+              <input
+                type="date"
+                value={expiresOn}
+                onChange={(e) => setExpiresOn(e.target.value)}
+                aria-label="Data de validade"
+                className="flex-1 rounded-xl bg-bg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+              {!expiresOn && name.trim() && (
+                <span className="text-xs text-muted">sugestão: {defaultExpiryFor(name.trim()).slice(5)}</span>
+              )}
+            </label>
+          )}
         </Card>
 
         {items.length > 0 ? (
           <Card className="divide-y divide-line">
-            {items.map((it) => (
-              <div key={it.id} className="animate-in flex items-center gap-3 p-3.5">
-                <span aria-hidden>{it.emoji}</span>
-                <div className="min-w-0 flex-1 truncate text-sm font-medium">{it.name}</div>
-                {it.kind === 'recurring' && it.grams != null && (
-                  <span className="shrink-0 text-xs text-muted">{formatQuantity(it.grams, it.unit || 'g')}</span>
-                )}
-                <button onClick={() => remove(it.id)} className="press text-muted" aria-label={`Remover ${it.name}`}>✕</button>
-              </div>
-            ))}
+            {items.map((it) =>
+              it.kind === 'stock' ? (
+                <StockRow key={it.id} item={it} onChangeQty={changeQty} onFinish={finish} />
+              ) : (
+                <div key={it.id} className="animate-in flex items-center gap-3 p-3.5">
+                  <span aria-hidden>{it.emoji}</span>
+                  <div className="min-w-0 flex-1 truncate text-sm font-medium">{it.name}</div>
+                  {it.kind === 'recurring' && it.grams != null && (
+                    <span className="shrink-0 text-xs text-muted">{formatQuantity(it.grams, it.unit || 'g')}</span>
+                  )}
+                  <button onClick={() => remove(it.id)} className="press text-muted" aria-label={`Remover ${it.name}`}>✕</button>
+                </div>
+              ),
+            )}
           </Card>
         ) : (
           <p className="px-1 py-6 text-center text-sm text-muted">Ainda nada aqui.</p>

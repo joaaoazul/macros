@@ -107,11 +107,13 @@ class MealPlanEntry(BaseModel):
 
 class PantryItem(BaseModel):
     id: str = Field(max_length=40)
-    kind: Literal["have", "recurring"]
+    kind: Literal["have", "recurring", "stock"]
     name: str = Field(max_length=120)
     emoji: str = Field(default="", max_length=16)
     grams: float | None = Field(default=None, ge=0, le=100000)
     unit: Unit | None = None
+    qty: float | None = Field(default=None, ge=0, le=100000)
+    expiresOn: str | None = Field(default=None, max_length=10)
 
 
 class AllData(BaseModel):

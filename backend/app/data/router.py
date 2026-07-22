@@ -130,12 +130,15 @@ def _plan_out(m: DbMealPlanEntry) -> MealPlanEntry:
 def _pantry_row(user_id: int, p: PantryItem) -> DbPantryItem:
     return DbPantryItem(
         user_id=user_id, item_id=p.id, kind=p.kind, name=p.name, emoji=p.emoji,
-        grams=p.grams, unit=p.unit,
+        grams=p.grams, unit=p.unit, qty=p.qty, expires_on=p.expiresOn,
     )
 
 
 def _pantry_out(p: DbPantryItem) -> PantryItem:
-    return PantryItem(id=p.item_id, kind=p.kind, name=p.name, emoji=p.emoji, grams=p.grams, unit=p.unit)
+    return PantryItem(
+        id=p.item_id, kind=p.kind, name=p.name, emoji=p.emoji, grams=p.grams, unit=p.unit,
+        qty=p.qty, expiresOn=p.expires_on,
+    )
 
 
 async def _load_all(db: AsyncSession, user_id: int) -> AllData:

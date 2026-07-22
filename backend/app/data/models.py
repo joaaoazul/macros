@@ -133,6 +133,8 @@ class DbPantryItem(Base):
     emoji: Mapped[str] = mapped_column(String(16), nullable=False, default="", server_default="")
     grams: Mapped[float | None] = mapped_column(Float, nullable=True)  # p/ recorrentes
     unit: Mapped[str | None] = mapped_column(String(2), nullable=True)  # g|ml
+    qty: Mapped[float | None] = mapped_column(Float, nullable=True)  # nº de unidades (kind='stock')
+    expires_on: Mapped[str | None] = mapped_column(String(10), nullable=True)  # ISO YYYY-MM-DD
 
 
 class DbCustomFood(Base):

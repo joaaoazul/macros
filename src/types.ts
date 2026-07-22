@@ -134,14 +134,19 @@ export interface MealPlanEntry {
   items: RecipeItem[]
 }
 
-/** Despensa: 'have' = tenho sempre (excluir da lista); 'recurring' = juntar sempre. */
+/** Despensa: 'have' = tenho sempre (excluir da lista); 'recurring' = juntar sempre;
+ * 'stock' = tenho em casa com quantidade e validade (rastreio do que expira). */
 export interface PantryItem {
   id: string
-  kind: 'have' | 'recurring'
+  kind: 'have' | 'recurring' | 'stock'
   name: string
   emoji: string
   grams?: number | null
   unit?: 'g' | 'ml' | null
+  /** quantidade em stock (nº de unidades), para o kind 'stock'. */
+  qty?: number | null
+  /** data de validade ISO (YYYY-MM-DD), para o kind 'stock'. */
+  expiresOn?: string | null
 }
 
 /** Diário: chave é a data em ISO (YYYY-MM-DD). */
