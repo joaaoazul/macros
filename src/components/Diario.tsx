@@ -133,6 +133,20 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
     })
   }
 
+  /** Apanha (ou larga) todos os alimentos de uma refeição de uma vez. */
+  const toggleMeal = (mealEntries: Entry[]) => {
+    haptic(8)
+    setSelection((prev) => {
+      const next = new Set(prev ?? [])
+      const allIn = mealEntries.every((e) => next.has(e.id))
+      for (const e of mealEntries) {
+        if (allIn) next.delete(e.id)
+        else next.add(e.id)
+      }
+      return next
+    })
+  }
+
   /** Move ou copia a selecção para outra refeição; em ambos os casos sai do modo. */
   const applyToSelection = (meal: MealId, mode: 'move' | 'copy') => {
     const ids = new Set(selected.map((e) => e.id))
@@ -374,13 +388,27 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
                 <h2 className="truncate text-[17px] font-semibold">{meal.label}</h2>
                 <div className="flex shrink-0 items-baseline gap-2.5">
                   {t.kcal > 0 && <span className="text-[13px] tabular-nums text-muted">{Math.round(t.kcal)} kcal</span>}
-                  <button
-                    onClick={() => setCopyTo(meal.id)}
-                    className="press text-[13px] font-semibold text-accent"
-                    aria-label={`Copiar alimentos para ${meal.label}`}
-                  >
-                    ⧉
-                  </button>
+                  {selection ? (
+                    // em modo de selecção o ⧉ dá lugar a apanhar a refeição toda
+                    // de uma vez — senão guardar um almoço como receita seria
+                    // tocar em cada alimento
+                    mealEntries.length > 0 && (
+                      <button
+                        onClick={() => toggleMeal(mealEntries)}
+                        className="press text-[13px] font-semibold text-accent"
+                      >
+                        {mealEntries.every((e) => selection.has(e.id)) ? 'Nenhum' : 'Tudo'}
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      onClick={() => setCopyTo(meal.id)}
+                      className="press text-[13px] font-semibold text-accent"
+                      aria-label={`Copiar alimentos para ${meal.label}`}
+                    >
+                      ⧉
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -450,28 +478,6 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
                 ＋ Adicionar alimento
               </button>
 
-              {!selection && mealEntries.length >= 1 && (
-                <div className="flex divide-x divide-line border-t border-line">
-                  <button
-                    onClick={() => setNamingItems(mealEntries.map(recipeItemFromEntry))}
-                    className="press flex-1 py-2.5 text-center text-[13px] font-semibold text-accent"
-                  >
-                    Guardar como receita
-                  </button>
-                  <button
-                    onClick={() =>
-                      setPlanning({
-                        name: meal.label,
-                        emoji: meal.emoji,
-                        items: mealEntries.map(recipeItemFromEntry),
-                      })
-                    }
-                    className="press flex-1 py-2.5 text-center text-[13px] font-semibold text-accent"
-                  >
-                    Planear
-                  </button>
-                </div>
-              )}
             </Card>
           )
         })}
