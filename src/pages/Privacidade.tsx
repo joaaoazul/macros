@@ -2,7 +2,7 @@ import { LegalPage, LegalSection } from './legalShared'
 
 export default function Privacidade() {
   return (
-    <LegalPage title="Política de Privacidade" updated="11 de julho de 2026">
+    <LegalPage title="Política de Privacidade" updated="22 de julho de 2026">
       <LegalSection title="1. Quem somos">
         O Macros (macros.joaoazul.dev) é operado por João Azul (joaoazul74@gmail.com), que atua como
         responsável pelo tratamento dos dados nos termos do RGPD.
@@ -13,6 +13,8 @@ export default function Privacidade() {
           <li><strong>Perfil:</strong> sexo, idade, altura, peso, nível de atividade, objetivo e metas.</li>
           <li><strong>Registos:</strong> alimentos, água e exercício que registas, por dia.</li>
           <li><strong>Segurança:</strong> registos de acesso (data, ação e endereço IP) para proteger a tua conta.</li>
+          <li><strong>Subscrição:</strong> estado da subscrição e identificador de cliente Stripe. Os dados do
+            cartão são tratados apenas pela Stripe — nunca passam pelos nossos servidores.</li>
         </ul>
       </LegalSection>
       <LegalSection title="3. Para que usamos os dados">
@@ -29,6 +31,8 @@ export default function Privacidade() {
         <ul className="list-disc space-y-1 pl-5">
           <li><strong>Hetzner Online GmbH</strong> (Alemanha) — alojamento do servidor.</li>
           <li><strong>Resend</strong> — envio de emails de confirmação e reposição de password (recebe apenas o teu email).</li>
+          <li><strong>Stripe</strong> (Irlanda/UE) — processamento de pagamentos da subscrição (recebe email e
+            dados de pagamento que introduzes diretamente no checkout da Stripe).</li>
           <li><strong>Open Food Facts</strong> — a pesquisa de alimentos é feita diretamente do teu dispositivo para
             pt.openfoodfacts.org; nós não enviamos dados teus a este serviço.</li>
         </ul>

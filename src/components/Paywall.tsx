@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { billing, trialDaysLeft, type BillingStatus, type Plan } from '../lib/billing'
 import { useAuth } from '../lib/auth'
 
@@ -80,6 +81,9 @@ export default function Paywall({ status, onClose }: { status: BillingStatus; on
         )}
         <p className="text-center text-[11px] leading-snug text-muted">
           Pagamento seguro via Stripe. Podes gerir ou cancelar a subscrição a qualquer momento no teu perfil.
+          Ao subscrever aceitas os{' '}
+          <Link to="/termos" className="underline">Termos</Link> e a{' '}
+          <Link to="/privacidade" className="underline">Privacidade</Link>.
         </p>
       </div>
     </div>

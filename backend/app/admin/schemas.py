@@ -36,6 +36,20 @@ class SecuritySummary(BaseModel):
     topFailingIps: list[TopIp]
 
 
+class InviteCreateIn(BaseModel):
+    maxUses: int = 1
+    expiresInDays: int | None = None
+
+
+class InviteRow(BaseModel):
+    id: int
+    code: str
+    maxUses: int
+    usedCount: int
+    expiresAt: datetime | None
+    createdAt: datetime
+
+
 class AuditRow(BaseModel):
     id: int
     userId: int | None

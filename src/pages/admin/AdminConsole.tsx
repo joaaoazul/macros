@@ -6,14 +6,16 @@ import Dashboard from './Dashboard'
 import AuditView from './AuditView'
 import UsersView from './UsersView'
 import IpsView from './IpsView'
+import InvitesView from './InvitesView'
 
-type View = 'dashboard' | 'audit' | 'users' | 'ips'
+type View = 'dashboard' | 'audit' | 'users' | 'ips' | 'invites'
 
 const NAV: { id: View; label: string; code: string }[] = [
   { id: 'dashboard', label: 'Dashboard', code: 'OVW' },
   { id: 'audit', label: 'Audit log', code: 'LOG' },
   { id: 'users', label: 'Utilizadores', code: 'USR' },
   { id: 'ips', label: 'IP intel', code: 'NET' },
+  { id: 'invites', label: 'Convites', code: 'INV' },
 ]
 
 export default function AdminConsole() {
@@ -81,6 +83,7 @@ export default function AdminConsole() {
           {view === 'audit' && <AuditView />}
           {view === 'users' && <UsersView />}
           {view === 'ips' && <IpsView />}
+          {view === 'invites' && <InvitesView />}
         </div>
       </main>
     </div>

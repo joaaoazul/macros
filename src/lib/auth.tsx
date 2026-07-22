@@ -16,7 +16,7 @@ interface AuthContextValue {
   /** true enquanto o bootstrap inicial (GET /auth/me) não terminou */
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, name: string) => Promise<void>
+  register: (email: string, password: string, name: string, inviteCode?: string) => Promise<void>
   logout: () => Promise<void>
   /** limpa a sessão localmente (ex.: conta eliminada) */
   clearSession: () => void
@@ -41,10 +41,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(u)
   }, [])
 
-  const register = useCallback(async (email: string, password: string, name: string) => {
+  const register = useCallback(async (email: string, password: string, name: string, inviteCode?: string) => {
     const u = await api<AuthUser>('/auth/register', {
       method: 'POST',
-      body: { email, password, name },
+      body: { email, password, name, invite_code: inviteCode?.trim() || undefined },
       skipRefresh: true,
     })
     setUser(u)

@@ -10,6 +10,7 @@ export default function Registo() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -20,7 +21,7 @@ export default function Registo() {
     setError('')
     setBusy(true)
     try {
-      await register(email, password, name.trim())
+      await register(email, password, name.trim(), inviteCode.trim() || undefined)
       navigate('/app', { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível criar a conta. Tenta novamente.')
@@ -69,6 +70,16 @@ export default function Registo() {
         {password.length > 0 && !passwordOk && (
           <p className="text-sm text-muted">A password deve ter pelo menos 10 caracteres e não pode ser só números.</p>
         )}
+        <Field label="Código de convite (opcional)">
+          <input
+            autoComplete="off"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+            placeholder="Se alguém te convidou, cola-o aqui"
+            className={inputCls}
+            spellCheck={false}
+          />
+        </Field>
         <ErrorNote message={error} />
         <div className="mt-auto flex flex-col gap-3 pt-6">
           <p className="text-center text-xs text-muted">

@@ -2,7 +2,7 @@ import { LegalPage, LegalSection } from './legalShared'
 
 export default function Termos() {
   return (
-    <LegalPage title="Termos de Serviço" updated="11 de julho de 2026">
+    <LegalPage title="Termos de Serviço" updated="22 de julho de 2026">
       <LegalSection title="1. O serviço">
         O Macros ("a app", disponível em macros.joaoazul.dev) é uma aplicação de registo de nutrição e
         macronutrientes. Permite calcular metas calóricas, registar refeições, água e exercício, e acompanhar o
@@ -23,28 +23,38 @@ export default function Termos() {
         A pesquisa de produtos usa a base de dados aberta Open Food Facts. Os valores nutricionais são
         fornecidos pela comunidade e podem conter erros — confirma sempre no rótulo do produto.
       </LegalSection>
-      <LegalSection title="5. Utilização aceitável">
+      <LegalSection title="5. Subscrição e pagamentos">
+        A app inclui um período de teste gratuito de 14 dias a partir do registo. Depois disso, o acesso
+        requer uma subscrição paga (mensal ou anual), processada de forma segura pela Stripe — não guardamos
+        dados de cartões nos nossos servidores. A subscrição renova-se automaticamente até ser cancelada, o
+        que podes fazer a qualquer momento no Perfil; após o cancelamento manténs o acesso até ao fim do
+        período já pago. Nos termos da lei do consumidor da UE tens 14 dias para desistir de uma compra; ao
+        usares o serviço nesse período consentes o fornecimento imediato do conteúdo digital. Contas criadas
+        com código de convite podem ter acesso gratuito por cortesia, sem direito adquirido à sua
+        continuidade.
+      </LegalSection>
+      <LegalSection title="6. Utilização aceitável">
         Não podes usar a app para fins ilegais, tentar aceder a contas de terceiros, sobrecarregar ou
         interferir com o serviço, nem fazer engenharia inversa com fins maliciosos.
       </LegalSection>
-      <LegalSection title="6. Disponibilidade e alterações">
+      <LegalSection title="7. Disponibilidade e alterações">
         A app é fornecida "tal como está", sem garantias de disponibilidade contínua. Podemos alterar,
         suspender ou descontinuar funcionalidades. Faremos um esforço razoável para avisar com antecedência
         de alterações relevantes.
       </LegalSection>
-      <LegalSection title="7. Eliminação de conta">
+      <LegalSection title="8. Eliminação de conta">
         Podes eliminar a tua conta a qualquer momento no Perfil. A eliminação remove permanentemente todos
         os teus dados dos nossos servidores.
       </LegalSection>
-      <LegalSection title="8. Limitação de responsabilidade">
+      <LegalSection title="9. Limitação de responsabilidade">
         Na medida máxima permitida por lei, não somos responsáveis por danos indiretos resultantes do uso
         da app, incluindo decisões alimentares tomadas com base nas estimativas apresentadas.
       </LegalSection>
-      <LegalSection title="9. Lei aplicável">
+      <LegalSection title="10. Lei aplicável">
         Estes termos regem-se pela lei portuguesa. Qualquer litígio será submetido aos tribunais
         portugueses competentes.
       </LegalSection>
-      <LegalSection title="10. Contacto">
+      <LegalSection title="11. Contacto">
         Questões sobre estes termos: joaoazul74@gmail.com.
       </LegalSection>
     </LegalPage>

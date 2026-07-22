@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import write_audit_log
 from app.auth.cookies import REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
 from app.auth.dependencies import get_current_user
-from app.auth.models import EmailToken, User
+from app.auth.models import EmailToken, InviteCode, User
 from app.auth.rate_limit import auth_rate_limit, forgot_rate_limit
 from app.auth.schemas import (
     ForgotPasswordRequest,
@@ -77,6 +77,28 @@ async def _consume_email_token(db: AsyncSession, raw: str, purpose: str) -> Emai
     return token
 
 
+async def _redeem_invite(db: AsyncSession, raw_code: str) -> bool:
+    """Consome um uso do código de convite. True se válido; ValidationError se não.
+
+    O incremento é um UPDATE condicional (used_count < max_uses no WHERE) para
+    não haver over-redemption com registos concorrentes.
+    """
+    code = raw_code.strip().upper()
+    now = datetime.now(timezone.utc)
+    result = await db.execute(
+        update(InviteCode)
+        .where(
+            InviteCode.code == code,
+            InviteCode.used_count < InviteCode.max_uses,
+            (InviteCode.expires_at.is_(None)) | (InviteCode.expires_at > now),
+        )
+        .values(used_count=InviteCode.used_count + 1)
+    )
+    if result.rowcount == 0:
+        raise ValidationError("Código de convite inválido ou já usado.")
+    return True
+
+
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
@@ -93,6 +115,8 @@ async def register(
     if existing.scalar_one_or_none():
         raise ConflictError("Já existe uma conta com este email.")
 
+    comped = bool(body.invite_code and await _redeem_invite(db, body.invite_code))
+
     user = User(
         email=email,
         hashed_password=hash_password(body.password),
@@ -100,8 +124,10 @@ async def register(
         # Without an email provider we cannot verify — auto-verify so the app is usable.
         email_verified=not email_enabled(),
         # 14 dias (TRIAL_DAYS) de acesso completo antes de precisar de subscrição.
+        # Convidados (invite code válido) ficam comped — nunca veem o paywall.
         trial_ends_at=datetime.now(timezone.utc) + timedelta(days=settings.TRIAL_DAYS),
         subscription_status="trialing",
+        comped=comped,
     )
     db.add(user)
     await db.flush()

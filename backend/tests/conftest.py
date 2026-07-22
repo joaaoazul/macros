@@ -19,7 +19,7 @@ from app.models_base import Base
 
 # Register all models with Base.metadata
 from app.audit import AuditLog  # noqa: F401
-from app.auth.models import EmailToken, RevokedToken, User  # noqa: F401
+from app.auth.models import EmailToken, InviteCode, RevokedToken, User  # noqa: F401
 from app.data.models import (  # noqa: F401
     DbCustomFood,
     DbDiaryEntry,

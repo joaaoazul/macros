@@ -19,6 +19,8 @@ from app.admin.schemas import (
     BlocklistRow,
     BlockIpIn,
     DailyPoint,
+    InviteCreateIn,
+    InviteRow,
     IpInfo,
     SecuritySummary,
     TopIp,
@@ -26,7 +28,7 @@ from app.admin.schemas import (
 from app.admin.service import _mark_blocked, _unmark_blocked, geo_for_ip, load_blocklist
 from app.audit import AuditLog, write_audit_log
 from app.auth.dependencies import require_admin
-from app.auth.models import User
+from app.auth.models import InviteCode, User
 from app.database import get_db
 from app.exceptions import NotFoundError, ValidationError
 from app.net import client_ip
@@ -259,6 +261,50 @@ async def enable_user(
     u.is_active = True
     await _audit_admin(db, request, admin, "admin_enable_user", f"user={user_id}")
     return _user_out(u)
+
+
+# ---------------------------------------------------------------- Convites
+def _invite_out(c: InviteCode) -> InviteRow:
+    return InviteRow(
+        id=c.id, code=c.code, maxUses=c.max_uses, usedCount=c.used_count,
+        expiresAt=c.expires_at, createdAt=c.created_at,
+    )
+
+
+@router.post("/invites", response_model=InviteRow, status_code=201)
+async def create_invite(
+    body: InviteCreateIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> InviteRow:
+    if not (1 <= body.maxUses <= 100):
+        raise ValidationError("maxUses tem de estar entre 1 e 100.")
+    # Sem 0/O/1/I para o código ser fácil de ditar; secrets p/ não ser adivinhável.
+    import secrets
+
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    code = "-".join(
+        "".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(2)
+    )
+    expires_at = (
+        _now() + timedelta(days=body.expiresInDays) if body.expiresInDays else None
+    )
+    row = InviteCode(code=code, created_by=admin.id, max_uses=body.maxUses, expires_at=expires_at)
+    db.add(row)
+    await db.flush()
+    await _audit_admin(db, request, admin, "admin_invite_create", f"code={code} maxUses={body.maxUses}")
+    return _invite_out(row)
+
+
+@router.get("/invites", response_model=list[InviteRow])
+async def list_invites(
+    db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+) -> list[InviteRow]:
+    rows = (
+        await db.execute(select(InviteCode).order_by(InviteCode.id.desc()).limit(100))
+    ).scalars().all()
+    return [_invite_out(c) for c in rows]
 
 
 # ---------------------------------------------------------------- IP intel + blocklist

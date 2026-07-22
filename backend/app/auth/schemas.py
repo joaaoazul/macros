@@ -7,6 +7,8 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
     name: str = Field(default="", max_length=120)
+    # Código de convite opcional — válido dá conta comped (grátis); vazio dá trial normal.
+    invite_code: str | None = Field(default=None, max_length=24)
 
 
 class LoginRequest(BaseModel):

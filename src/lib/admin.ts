@@ -71,6 +71,15 @@ export interface BlocklistRow {
   createdAt: string
 }
 
+export interface InviteRow {
+  id: number
+  code: string
+  maxUses: number
+  usedCount: number
+  expiresAt: string | null
+  createdAt: string
+}
+
 export interface LiveEvent {
   action: string
   severity: string
@@ -98,6 +107,9 @@ export const admin = {
   blockIp: (ip: string, reason: string) =>
     api<BlocklistRow>('/admin/blocklist', { method: 'POST', body: { ip, reason } }),
   unblockIp: (ip: string) => api<void>(`/admin/blocklist/${encodeURIComponent(ip)}`, { method: 'DELETE' }),
+  invites: () => api<InviteRow[]>('/admin/invites'),
+  createInvite: (maxUses: number, expiresInDays?: number) =>
+    api<InviteRow>('/admin/invites', { method: 'POST', body: { maxUses, expiresInDays } }),
 }
 
 /** Abre o feed SSE. Devolve uma função de cleanup. */
