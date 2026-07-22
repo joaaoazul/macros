@@ -21,6 +21,7 @@ import { defaultExpiryFor, daysUntil, expiryStatus, recipesCookableFrom, recipes
 import { haptic, uid } from '../lib/store'
 import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
+import PantryPhotoSheet from './PantryPhotoSheet'
 import { Card } from './ui'
 
 interface Props {
@@ -812,6 +813,7 @@ function PantryView({
   const [grams, setGrams] = useState('')
   const [qty, setQty] = useState('1')
   const [expiresOn, setExpiresOn] = useState('')
+  const [photoSheet, setPhotoSheet] = useState(false)
   const toast = useToast()
 
   const items = tab === 'stock' ? sortByExpiry(pantry.filter((p) => p.kind === 'stock')) : pantry.filter((p) => p.kind === tab)
@@ -858,6 +860,32 @@ function PantryView({
   }
 
   const remove = (id: string) => setPantry((p) => p.filter((x) => x.id !== id))
+
+  /** Junta itens vindos da foto. Fotografar o frigorífico outra vez não deve
+   * duplicar linhas: o que já lá está soma quantidade e fica com a validade
+   * mais curta das duas (a que interessa avisar). */
+  const addStock = (items: PantryItem[]) =>
+    setPantry((p) => {
+      const next = [...p]
+      for (const it of items) {
+        const i = next.findIndex(
+          (x) => x.kind === 'stock' && x.name.toLowerCase() === it.name.toLowerCase(),
+        )
+        if (i === -1) {
+          next.push(it)
+          continue
+        }
+        const cur = next[i]
+        const earliest =
+          cur.expiresOn && it.expiresOn
+            ? cur.expiresOn < it.expiresOn
+              ? cur.expiresOn
+              : it.expiresOn
+            : cur.expiresOn || it.expiresOn
+        next[i] = { ...cur, qty: (cur.qty ?? 1) + (it.qty ?? 1), expiresOn: earliest }
+      }
+      return next
+    })
 
   const changeQty = (it: PantryItem, delta: number) => {
     haptic(10)
@@ -907,6 +935,19 @@ function PantryView({
             </button>
           ))}
         </div>
+
+        {tab === 'stock' && (
+          <button
+            onClick={() => { haptic(10); setPhotoSheet(true) }}
+            className="press flex w-full items-center gap-3 rounded-2xl bg-accent-soft px-4 py-3 text-left"
+          >
+            <span className="text-xl" aria-hidden>📸</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-accent">Encher com uma foto</span>
+              <span className="block text-xs text-muted">Fotografa o frigorífico e enchemos a lista</span>
+            </span>
+          </button>
+        )}
 
         <p className="px-1 text-sm text-ink-2">
           {tab === 'stock'
@@ -1036,6 +1077,17 @@ function PantryView({
           <p className="px-1 py-6 text-center text-sm text-muted">Ainda nada aqui.</p>
         )}
       </div>
+
+      {photoSheet && (
+        <PantryPhotoSheet
+          onAdd={(items) => {
+            addStock(items)
+            setPhotoSheet(false)
+            toast(`${items.length} ${items.length === 1 ? 'item' : 'itens'} na despensa`)
+          }}
+          onClose={() => setPhotoSheet(false)}
+        />
+      )}
     </div>
   )
 }

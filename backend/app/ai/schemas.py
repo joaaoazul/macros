@@ -1,5 +1,7 @@
 """AI meal-analysis schemas — BYOK: a chave Anthropic vem no request, nunca é persistida."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 # ~4MB de imagem em base64 (downscaled no cliente para <=1024px JPEG)
@@ -9,6 +11,10 @@ MAX_IMAGE_B64_CHARS = 6_000_000
 class AnalyzeMealRequest(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     imageBase64: str | None = Field(default=None, max_length=MAX_IMAGE_B64_CHARS)
+    # "buffet": prato servido por ti num self-service, onde não há embalagem nem
+    # peças contáveis — pede-se ao modelo um INTERVALO honesto em vez de um número
+    # exato que só parece preciso.
+    mode: Literal["meal", "buffet"] = "meal"
     apiKey: str = Field(min_length=20, max_length=512, repr=False)
 
     @model_validator(mode="after")
@@ -30,10 +36,40 @@ class AnalyzedFood(BaseModel):
     protein: float
     carbs: float
     fat: float
+    # só no modo buffet: extremos plausíveis da estimativa (kcal é o meio)
+    kcalMin: float | None = None
+    kcalMax: float | None = None
 
 
 class AnalyzeMealResponse(BaseModel):
     foods: list[AnalyzedFood]
+    notes: str | None = None
+
+
+class AnalyzePantryRequest(BaseModel):
+    """Foto do frigorífico/despensa → itens a pôr em stock (sem macros)."""
+
+    imageBase64: str = Field(max_length=MAX_IMAGE_B64_CHARS)
+    apiKey: str = Field(min_length=20, max_length=512, repr=False)
+
+    @model_validator(mode="after")
+    def _strip_data_url(self) -> "AnalyzePantryRequest":
+        if self.imageBase64.startswith("data:"):
+            self.imageBase64 = self.imageBase64.split(",", 1)[-1]
+        return self
+
+
+class PantryCandidate(BaseModel):
+    name: str
+    emoji: str
+    qty: int = 1
+    # dias de conservação estimados; o cliente converte em data (e tem a sua
+    # própria tabela como rede de segurança quando vier a faltar)
+    shelfLifeDays: int | None = None
+
+
+class AnalyzePantryResponse(BaseModel):
+    items: list[PantryCandidate]
     notes: str | None = None
 
 

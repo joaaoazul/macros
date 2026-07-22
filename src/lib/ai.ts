@@ -25,6 +25,9 @@ export interface AnalyzedFood {
   protein: number
   carbs: number
   fat: number
+  /** modo buffet: extremos plausíveis; kcal é o ponto médio */
+  kcalMin?: number | null
+  kcalMax?: number | null
 }
 
 export interface AnalyzeMealResult {
@@ -32,12 +35,38 @@ export interface AnalyzeMealResult {
   notes?: string | null
 }
 
-export async function analyzeMeal(input: { description?: string; imageBase64?: string }): Promise<AnalyzeMealResult> {
+export async function analyzeMeal(input: {
+  description?: string
+  imageBase64?: string
+  mode?: 'meal' | 'buffet'
+}): Promise<AnalyzeMealResult> {
   const apiKey = getAnthropicKey()
   if (!apiKey) throw new Error('Configura a tua chave Anthropic no Perfil.')
   return api<AnalyzeMealResult>('/ai/analyze-meal', {
     method: 'POST',
     body: { ...input, apiKey },
+  })
+}
+
+export interface PantryCandidate {
+  name: string
+  emoji: string
+  qty: number
+  shelfLifeDays?: number | null
+}
+
+export interface AnalyzePantryResult {
+  items: PantryCandidate[]
+  notes?: string | null
+}
+
+/** Foto do frigorífico/despensa → itens para pôr em stock. */
+export async function analyzePantry(imageBase64: string): Promise<AnalyzePantryResult> {
+  const apiKey = getAnthropicKey()
+  if (!apiKey) throw new Error('Configura a tua chave Anthropic no Perfil.')
+  return api<AnalyzePantryResult>('/ai/analyze-pantry', {
+    method: 'POST',
+    body: { imageBase64, apiKey },
   })
 }
 

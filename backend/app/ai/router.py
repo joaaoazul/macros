@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.ai.schemas import (
     AnalyzeMealRequest,
     AnalyzeMealResponse,
+    AnalyzePantryRequest,
+    AnalyzePantryResponse,
     FoodTipsRequest,
     FoodTipsResponse,
 )
@@ -53,12 +55,37 @@ FOODS_SCHEMA = {
     "additionalProperties": False,
 }
 
+
+def _buffet_schema() -> dict:
+    """FOODS_SCHEMA com kcalMin/kcalMax obrigatórios (modo buffet)."""
+    schema = json.loads(json.dumps(FOODS_SCHEMA))  # cópia profunda: o base é partilhado
+    item = schema["properties"]["foods"]["items"]
+    item["properties"]["kcalMin"] = {"type": "number"}
+    item["properties"]["kcalMax"] = {"type": "number"}
+    item["required"] = [*item["required"], "kcalMin", "kcalMax"]
+    return schema
+
+
+BUFFET_SCHEMA = _buffet_schema()
+
 SYSTEM_PROMPT = (
     "És um nutricionista que analisa refeições. Identifica cada alimento presente, "
     "estima a porção em gramas (ou ml para líquidos) e as macros ABSOLUTAS dessa porção "
     "(não por 100g): kcal, proteína, hidratos de carbono e gordura, em gramas. "
     "Usa nomes em português de Portugal e um emoji adequado por alimento. "
     "Se algo for incerto, faz a melhor estimativa e menciona-o em notes."
+)
+
+BUFFET_SYSTEM_PROMPT = (
+    "És um nutricionista a estimar um prato de buffet/self-service, onde não há "
+    "embalagem nem peças contáveis e o molho e o óleo são invisíveis. Identifica cada "
+    "componente do prato e, para cada um, dá um INTERVALO honesto de calorias: "
+    "'kcalMin' e 'kcalMax' são os extremos plausíveis e 'kcal' é o ponto médio. "
+    "As macros (proteína, hidratos, gordura) correspondem ao ponto médio. "
+    "NÃO finjas precisão: se o prato tiver molho, fritura ou fontes de gordura que não "
+    "consegues ver, o intervalo tem de ser largo o suficiente para as incluir. "
+    "Usa nomes em português de Portugal e um emoji por componente. "
+    "Em 'notes', diz numa frase o que mais influencia o intervalo (ex.: o molho)."
 )
 
 
@@ -106,7 +133,12 @@ async def analyze_meal(
                 },
             }
         )
-    prompt = "Analisa esta refeição e devolve os alimentos com macros."
+    buffet = body.mode == "buffet"
+    prompt = (
+        "Estima este prato de buffet e devolve cada componente com o intervalo de calorias."
+        if buffet
+        else "Analisa esta refeição e devolve os alimentos com macros."
+    )
     if body.description and body.description.strip():
         prompt += f"\n\nDescrição do utilizador: {body.description.strip()}"
     content.append({"type": "text", "text": prompt})
@@ -117,8 +149,13 @@ async def analyze_meal(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             thinking={"type": "adaptive"},
-            system=SYSTEM_PROMPT,
-            output_config={"format": {"type": "json_schema", "schema": FOODS_SCHEMA}},
+            system=BUFFET_SYSTEM_PROMPT if buffet else SYSTEM_PROMPT,
+            output_config={
+                "format": {
+                    "type": "json_schema",
+                    "schema": BUFFET_SCHEMA if buffet else FOODS_SCHEMA,
+                }
+            },
             messages=[{"role": "user", "content": content}],
         )
     except anthropic.AuthenticationError:
@@ -142,6 +179,96 @@ async def analyze_meal(
     except ValueError:
         raise HTTPException(status_code=502, detail="A análise devolveu um formato inesperado.")
     return AnalyzeMealResponse(**data)
+
+
+PANTRY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "emoji": {"type": "string"},
+                    "qty": {"type": "integer"},
+                    "shelfLifeDays": {"type": "integer"},
+                },
+                "required": ["name", "emoji", "qty", "shelfLifeDays"],
+                "additionalProperties": False,
+            },
+        },
+        "notes": {"type": "string"},
+    },
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
+PANTRY_SYSTEM_PROMPT = (
+    "Vês uma foto de um frigorífico, congelador ou despensa. Lista os alimentos que "
+    "consegues identificar com confiança, para entrarem num inventário de casa. "
+    "Para cada um: 'name' curto em português de Portugal (o alimento, não a marca, "
+    "salvo se a marca for o que se lê), 'emoji' adequado, 'qty' as unidades/embalagens "
+    "que vês, e 'shelfLifeDays' os dias que costuma durar a partir de hoje bem "
+    "conservado (peixe fresco 2, frango 2, carne 4, leite aberto 7, iogurte 14, "
+    "ovos 28, queijo curado 21, fruta e legumes 4 a 21, enlatados e secos 365+). "
+    "NÃO inventes o que não consegues ver: se estiver tapado ou ilegível, deixa de fora. "
+    "Ignora temperos, condimentos e coisas que nunca acabam. "
+    "Em 'notes', diz numa frase se ficou algo por identificar."
+)
+
+
+@router.post("/analyze-pantry", response_model=AnalyzePantryResponse)
+async def analyze_pantry(
+    body: AnalyzePantryRequest,
+    user: User = Depends(get_current_user),
+) -> AnalyzePantryResponse:
+    ai_rate_limit.check(user.id)
+
+    client = anthropic.AsyncAnthropic(api_key=body.apiKey, timeout=TIMEOUT_SECONDS, max_retries=0)
+    try:
+        response = await client.messages.create(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            thinking={"type": "adaptive"},
+            system=PANTRY_SYSTEM_PROMPT,
+            output_config={"format": {"type": "json_schema", "schema": PANTRY_SCHEMA}},
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": body.imageBase64,
+                            },
+                        },
+                        {"type": "text", "text": "O que está aqui guardado?"},
+                    ],
+                }
+            ],
+        )
+    except anthropic.AuthenticationError:
+        raise HTTPException(status_code=401, detail="Chave Anthropic inválida.")
+    except anthropic.RateLimitError:
+        raise HTTPException(
+            status_code=429, detail="Limite da Anthropic atingido. Tenta daqui a pouco."
+        )
+    except (anthropic.APIStatusError, anthropic.APIConnectionError):
+        raise HTTPException(status_code=502, detail="A análise falhou. Tenta novamente.")
+    finally:
+        await client.close()
+
+    text = next((b.text for b in response.content if b.type == "text"), None)
+    if not text:
+        raise HTTPException(status_code=502, detail="A análise não devolveu resultados.")
+    try:
+        data = json.loads(text)
+    except ValueError:
+        raise HTTPException(status_code=502, detail="A análise devolveu um formato inesperado.")
+    return AnalyzePantryResponse(**data)
 
 
 TIPS_SCHEMA = {
