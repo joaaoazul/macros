@@ -676,7 +676,7 @@ function SubscriptionCard() {
         <div className="flex-1">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted">Subscrição</div>
           <div className="font-semibold">
-            {status.comped ? 'Convidado — acesso grátis' : label[status.status] ?? status.status}
+            {status.comped ? 'Founder — acesso vitalício' : label[status.status] ?? status.status}
           </div>
           {status.status === 'trialing' && days > 0 && (
             <div className="text-xs text-muted">Faltam {days} {days === 1 ? 'dia' : 'dias'}.</div>

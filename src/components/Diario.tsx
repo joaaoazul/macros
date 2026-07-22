@@ -1,16 +1,21 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { LaunchAction } from '../App'
-import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, MealPlanEntry, Profile, Recipe, WaterLog } from '../types'
+import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, MealPlanEntry, Profile, Recipe, RecipeItem, WaterLog } from '../types'
 import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
 import { buildMealUsageIndex, buildUsageIndex } from '../lib/foods'
-import { entryFromRecipeItem } from '../lib/recipes'
+import { placeInSlots } from '../lib/planner'
+import { entryFromRecipeItem, recipeItemFromEntry, saveAsNamed } from '../lib/recipes'
 import { todayWeekday } from '../lib/shopping'
 import { formatDatePT, haptic, mealForNow, shiftDate, todayISO, uid } from '../lib/store'
+import { useToast } from '../lib/toast'
 import AddFoodSheet from './AddFoodSheet'
+import EntryActionsSheet from './EntryActionsSheet'
 import LogPortionSheet from './LogPortionSheet'
+import PlanTargetSheet from './PlanTargetSheet'
 
 const CopyDaySheet = lazy(() => import('./CopyDaySheet'))
+const CopyMealSheet = lazy(() => import('./CopyMealSheet'))
 import AguaDetail from './details/AguaDetail'
 import Rings from './Rings'
 import { Card, Chevron, CircleButton, LargeTitle, Z } from './ui'
@@ -30,18 +35,33 @@ interface Props {
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
   /** plano semanal — para perguntar "comeste o que planeaste?" depois da refeição */
   mealPlan: MealPlanEntry[]
+  /** para mandar uma refeição registada para o planeador da semana */
+  setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   /** acção vinda de um atalho do ícone ou de uma partilha */
   launch?: LaunchAction | null
   onLaunchHandled?: () => void
 }
 
-export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes, mealPlan, launch, onLaunchHandled }: Props) {
+export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes, mealPlan, setMealPlan, launch, onLaunchHandled }: Props) {
   const [date, setDate] = useState(todayISO)
   const [addingTo, setAddingTo] = useState<MealId | null>(null)
   const [addingExercise, setAddingExercise] = useState(false)
   const [showAgua, setShowAgua] = useState(false)
   const [showCopy, setShowCopy] = useState(false)
   const [customWater, setCustomWater] = useState('')
+  // copiar de outra refeição → refeição de destino
+  const [copyTo, setCopyTo] = useState<MealId | null>(null)
+  // editar/mover/duplicar uma entrada já registada
+  const [editing, setEditing] = useState<Entry | null>(null)
+  // selecção múltipla: ids escolhidos (null = modo desligado)
+  const [selection, setSelection] = useState<Set<string> | null>(null)
+  // qual a acção à espera de escolher refeição de destino
+  const [selectionAction, setSelectionAction] = useState<'move' | 'copy' | null>(null)
+  // mandar itens para o planeador da semana
+  const [planning, setPlanning] = useState<{ name: string; emoji: string; items: RecipeItem[] } | null>(null)
+  // guardar uma escolha de itens como receita nomeada
+  const [namingItems, setNamingItems] = useState<RecipeItem[] | null>(null)
+  const toast = useToast()
   // pré-preenchimento vindo de uma partilha (link ou foto)
   const [sheetQuery, setSheetQuery] = useState('')
   const [sheetPhoto, setSheetPhoto] = useState<File | null>(null)
@@ -75,6 +95,73 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
   const copyEntries = (cloned: Entry[]) => {
     setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), ...cloned] }))
     setShowCopy(false)
+  }
+
+  /** Junta entradas já clonadas (vindas de outra refeição/dia) ao dia atual. */
+  const copyIntoMeal = (cloned: Entry[]) => {
+    setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), ...cloned] }))
+    setCopyTo(null)
+    haptic(20)
+    toast(`${cloned.length} ${cloned.length === 1 ? 'alimento copiado' : 'alimentos copiados'}`)
+  }
+
+  /** Substitui uma entrada (quantidade nova e/ou refeição nova). */
+  const updateEntry = (updated: Entry) => {
+    setDiary((d) => ({ ...d, [date]: (d[date] ?? []).map((e) => (e.id === updated.id ? updated : e)) }))
+    setEditing(null)
+  }
+
+  const duplicateEntry = (e: Entry) => {
+    setDiary((d) => ({ ...d, [date]: [...(d[date] ?? []), { ...e, id: uid() }] }))
+    setEditing(null)
+    toast('Duplicado')
+  }
+
+  // ── Selecção múltipla ─────────────────────────────────────────────────────
+  const selected = useMemo(
+    () => (selection ? entries.filter((e) => selection.has(e.id)) : []),
+    [entries, selection],
+  )
+
+  const toggleSelected = (id: string) => {
+    haptic(8)
+    setSelection((prev) => {
+      const next = new Set(prev ?? [])
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  /** Move ou copia a selecção para outra refeição; em ambos os casos sai do modo. */
+  const applyToSelection = (meal: MealId, mode: 'move' | 'copy') => {
+    const ids = new Set(selected.map((e) => e.id))
+    setDiary((d) => {
+      const day = d[date] ?? []
+      const next =
+        mode === 'move'
+          ? day.map((e) => (ids.has(e.id) ? { ...e, meal } : e))
+          : [...day, ...day.filter((e) => ids.has(e.id)).map((e) => ({ ...e, id: uid(), meal }))]
+      return { ...d, [date]: next }
+    })
+    haptic(20)
+    setSelection(null)
+    toast(mode === 'move' ? `Movido para ${mealName(meal).toLowerCase()}` : `Copiado para ${mealName(meal).toLowerCase()}`)
+  }
+
+  const deleteSelection = () => {
+    const ids = new Set(selected.map((e) => e.id))
+    setDiary((d) => ({ ...d, [date]: (d[date] ?? []).filter((e) => !ids.has(e.id)) }))
+    haptic(20)
+    toast(`${ids.size} ${ids.size === 1 ? 'alimento removido' : 'alimentos removidos'}`)
+    setSelection(null)
+  }
+
+  /** "Repetir ontem": copia a mesma refeição do dia anterior, tal e qual. */
+  const repeatYesterday = (meal: MealId) => {
+    const source = (diary[shiftDate(date, -1)] ?? []).filter((e) => e.meal === meal)
+    if (source.length === 0) return
+    copyIntoMeal(source.map((e) => ({ ...e, id: uid(), meal })))
   }
   const addWater = (ml: number) => {
     setWater((w) => ({ ...w, [date]: Math.max(0, (w[date] ?? 0) + ml) }))
@@ -198,6 +285,14 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
         <button onClick={() => setShowCopy(true)} className="text-sm font-semibold text-accent">
           ⧉ Copiar dia
         </button>
+        {entries.length > 0 && (
+          <button
+            onClick={() => { haptic(8); setSelection((s) => (s ? null : new Set())) }}
+            className="text-sm font-semibold text-accent"
+          >
+            {selection ? 'Cancelar' : '☑ Selecionar'}
+          </button>
+        )}
       </div>
 
       <div className="space-y-3.5 px-4 pt-2">
@@ -272,47 +367,111 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
         {MEALS.map((meal) => {
           const mealEntries = entries.filter((e) => e.meal === meal.id)
           const t = sumEntries(mealEntries)
+          const yesterday = (diary[shiftDate(date, -1)] ?? []).filter((e) => e.meal === meal.id)
           return (
             <Card key={meal.id} className="overflow-hidden">
               <div className="flex items-baseline justify-between gap-3 px-5 pt-4">
                 <h2 className="truncate text-[17px] font-semibold">{meal.label}</h2>
-                {t.kcal > 0 && <span className="shrink-0 text-[13px] tabular-nums text-muted">{Math.round(t.kcal)} kcal</span>}
+                <div className="flex shrink-0 items-baseline gap-2.5">
+                  {t.kcal > 0 && <span className="text-[13px] tabular-nums text-muted">{Math.round(t.kcal)} kcal</span>}
+                  <button
+                    onClick={() => setCopyTo(meal.id)}
+                    className="press text-[13px] font-semibold text-accent"
+                    aria-label={`Copiar alimentos para ${meal.label}`}
+                  >
+                    ⧉
+                  </button>
+                </div>
               </div>
 
               {mealEntries.length > 0 && (
                 <ul className="mt-3 divide-y divide-line border-t border-line">
-                  {mealEntries.map((e) => (
-                    <li key={e.id} className="flex items-center gap-3 py-2.5 pl-5 pr-3">
-                      <span className="text-lg" aria-hidden>
-                        {e.emoji}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[15px] font-medium">{e.foodName}</div>
-                        <div className="text-[12px] text-muted">
-                          {e.grams} {e.unit} · H {Math.round(e.carbs)} · P {Math.round(e.protein)} · G {Math.round(e.fat)}
-                        </div>
-                      </div>
-                      <span className="text-[15px] font-semibold tabular-nums">{Math.round(e.kcal)}</span>
-                      <button
-                        onClick={() => removeEntry(e.id)}
-                        className="rounded-full px-2 py-1 text-muted transition-colors hover:text-critical"
-                        aria-label={`Remover ${e.foodName}`}
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  ))}
+                  {mealEntries.map((e) => {
+                    const picked = selection?.has(e.id) ?? false
+                    return (
+                      <li key={e.id} className="flex items-center gap-3 py-2.5 pl-5 pr-3">
+                        {selection && (
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                              picked ? 'bg-accent text-white' : 'bg-surface text-muted'
+                            }`}
+                            aria-hidden
+                          >
+                            {picked ? '✓' : ''}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => (selection ? toggleSelected(e.id) : setEditing(e))}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          aria-label={selection ? `Selecionar ${e.foodName}` : `Editar ${e.foodName}`}
+                          aria-pressed={selection ? picked : undefined}
+                        >
+                          <span className="text-lg" aria-hidden>
+                            {e.emoji}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[15px] font-medium">{e.foodName}</span>
+                            <span className="block text-[12px] text-muted">
+                              {e.grams} {e.unit} · H {Math.round(e.carbs)} · P {Math.round(e.protein)} · G {Math.round(e.fat)}
+                            </span>
+                          </span>
+                          <span className="text-[15px] font-semibold tabular-nums">{Math.round(e.kcal)}</span>
+                        </button>
+                        {!selection && (
+                          <button
+                            onClick={() => removeEntry(e.id)}
+                            className="rounded-full px-2 py-1 text-muted transition-colors hover:text-critical"
+                            aria-label={`Remover ${e.foodName}`}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
+              )}
+
+              {/* repetir a mesma refeição de ontem — um toque, sem folha nenhuma */}
+              {!selection && mealEntries.length === 0 && yesterday.length > 0 && (
+                <button
+                  onClick={() => repeatYesterday(meal.id)}
+                  className="press mt-3 block w-full border-t border-line px-5 py-2.5 text-left text-[13px] text-muted"
+                >
+                  ↺ Repetir ontem ·{' '}
+                  <span className="text-ink-2">{yesterday.map((e) => e.foodName).join(' + ')}</span>
+                </button>
               )}
 
               <button
                 onClick={() => setAddingTo(meal.id)}
-                className={`mt-3 block w-full border-t border-line py-3 text-center text-[15px] font-semibold text-accent transition-colors hover:bg-accent-soft ${
-                  mealEntries.length > 0 ? '' : ''
-                }`}
+                className="mt-3 block w-full border-t border-line py-3 text-center text-[15px] font-semibold text-accent transition-colors hover:bg-accent-soft"
               >
                 ＋ Adicionar alimento
               </button>
+
+              {!selection && mealEntries.length >= 1 && (
+                <div className="flex divide-x divide-line border-t border-line">
+                  <button
+                    onClick={() => setNamingItems(mealEntries.map(recipeItemFromEntry))}
+                    className="press flex-1 py-2.5 text-center text-[13px] font-semibold text-accent"
+                  >
+                    Guardar como receita
+                  </button>
+                  <button
+                    onClick={() =>
+                      setPlanning({
+                        name: meal.label,
+                        emoji: meal.emoji,
+                        items: mealEntries.map(recipeItemFromEntry),
+                      })
+                    }
+                    className="press flex-1 py-2.5 text-center text-[13px] font-semibold text-accent"
+                  >
+                    Planear
+                  </button>
+                </div>
+              )}
             </Card>
           )
         })}
@@ -445,6 +604,118 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
           onClose={() => setPlanLogging(null)}
         />
       )}
+      {/* barra de acções da selecção múltipla, por cima da tab bar */}
+      {selection && selected.length > 0 && (
+        <div
+          className={`fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] ${Z.sheet} px-3`}
+          role="toolbar"
+          aria-label="Acções sobre a selecção"
+        >
+          <div className="mx-auto max-w-md rounded-2xl bg-surface p-2.5 shadow-lg">
+            <div className="px-1 pb-2 text-[12px] font-semibold text-muted">
+              {selected.length} {selected.length === 1 ? 'selecionado' : 'selecionados'} ·{' '}
+              {Math.round(sumEntries(selected).kcal)} kcal
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <SelBtn onClick={() => setSelectionAction('move')}>Mover</SelBtn>
+              <SelBtn onClick={() => setSelectionAction('copy')}>Copiar</SelBtn>
+              <SelBtn onClick={() => setNamingItems(selected.map(recipeItemFromEntry))}>Receita</SelBtn>
+              <SelBtn
+                onClick={() =>
+                  setPlanning({ name: 'Refeição', emoji: '🍽️', items: selected.map(recipeItemFromEntry) })
+                }
+              >
+                Planear
+              </SelBtn>
+              <SelBtn danger onClick={deleteSelection}>Apagar</SelBtn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* destino do mover/copiar da selecção */}
+      {selectionAction && (
+        <div className={`fixed inset-0 ${Z.modal} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={() => setSelectionAction(null)}>
+          <div
+            className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={selectionAction === 'move' ? 'Mover para' : 'Copiar para'}
+          >
+            <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" aria-hidden />
+            <h2 className="text-lg font-bold">
+              {selectionAction === 'move' ? 'Mover' : 'Copiar'} {selected.length}{' '}
+              {selected.length === 1 ? 'alimento' : 'alimentos'} para…
+            </h2>
+            <div className="mt-4 space-y-1.5">
+              {MEALS.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    applyToSelection(m.id, selectionAction)
+                    setSelectionAction(null)
+                  }}
+                  className="press flex w-full items-center gap-3 rounded-xl bg-surface px-4 py-3 text-left"
+                >
+                  <span className="text-xl" aria-hidden>{m.emoji}</span>
+                  <span className="font-medium">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {copyTo && (
+        <Suspense fallback={null}>
+          <CopyMealSheet
+            diary={diary}
+            currentDate={date}
+            target={copyTo}
+            onCopy={copyIntoMeal}
+            onClose={() => setCopyTo(null)}
+          />
+        </Suspense>
+      )}
+
+      {editing && (
+        <EntryActionsSheet
+          entry={editing}
+          onSave={updateEntry}
+          onDuplicate={duplicateEntry}
+          onDelete={(id) => { removeEntry(id); setEditing(null) }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {namingItems && (
+        <NameRecipeSheet
+          onSave={(name) => {
+            setRecipes((rs) => saveAsNamed(rs, namingItems, name))
+            setNamingItems(null)
+            setSelection(null)
+            toast('Guardado na Cozinha')
+          }}
+          onCancel={() => setNamingItems(null)}
+        />
+      )}
+
+      {planning && (
+        <PlanTargetSheet
+          title={planning.name}
+          emoji={planning.emoji}
+          occupied={(d, m) => mealPlan.some((e) => e.day === d && e.meal === m)}
+          onClose={() => setPlanning(null)}
+          onConfirm={(targets) => {
+            setMealPlan((plan) => placeInSlots(plan, planning, targets, uid))
+            toast(targets.length === 1 ? 'Planeado para 1 refeição' : `Planeado para ${targets.length} refeições`)
+            setPlanning(null)
+            setSelection(null)
+          }}
+        />
+      )}
+
       {showAgua && <AguaDetail profile={profile} setProfile={setProfile} water={water} onClose={() => setShowAgua(false)} />}
       {showCopy && (
         <Suspense fallback={null}>
@@ -456,6 +727,55 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
 }
 
 const waterBtnCls = 'rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent transition-opacity active:opacity-70'
+
+const mealName = (id: MealId) => MEALS.find((m) => m.id === id)?.label ?? ''
+
+function SelBtn({ children, onClick, danger }: { children: React.ReactNode; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`press flex-1 rounded-xl bg-bg px-3 py-2 text-[13px] font-semibold ${danger ? 'text-critical' : 'text-accent'}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** Pede um nome para guardar uma combinação de alimentos como receita. */
+function NameRecipeSheet({ onSave, onCancel }: { onSave: (name: string) => void; onCancel: () => void }) {
+  const [name, setName] = useState('')
+  return (
+    <div className={`fixed inset-0 ${Z.modal} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onCancel}>
+      <div
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Guardar como receita"
+      >
+        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" aria-hidden />
+        <h2 className="text-lg font-bold">Guardar como receita</h2>
+        <p className="mt-1 text-sm text-muted">Fica na Cozinha e passa a dar para registar de uma vez.</p>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && name.trim() && onSave(name.trim())}
+          placeholder="Ex.: Sandes mista"
+          maxLength={120}
+          className="mt-4 w-full rounded-xl bg-surface px-4 py-3 focus:outline-none focus:ring-2 focus:ring-accent"
+          autoFocus
+        />
+        <button
+          onClick={() => name.trim() && onSave(name.trim())}
+          disabled={!name.trim()}
+          className="press mt-4 w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white disabled:opacity-40"
+        >
+          Guardar
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function StatRow({ label, value, target, unit, colorVar }: { label: string; value: number; target: number; unit: string; colorVar: string }) {
   return (

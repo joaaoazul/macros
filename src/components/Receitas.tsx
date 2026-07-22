@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { Diary, Food, LibraryRecipe, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem, ScrapedRecipe } from '../types'
-import { FOOD_DB, searchFoods } from '../lib/foods'
+import { FOOD_DB } from '../lib/foods'
 import { recipeFromLibrary, recipeFromScraped, recipeKcal, saveAsNamed } from '../lib/recipes'
 import { placeInSlots, recipeLabel } from '../lib/planner'
 import type { ShoppingList } from '../lib/sync'
 import { foodScraper } from '../lib/social'
-import { uid } from '../lib/store'
+import { mealForNow, uid } from '../lib/store'
 import { useToast } from '../lib/toast'
+import AddFoodSheet from './AddFoodSheet'
 import LogPortionSheet from './LogPortionSheet'
 import Planner from './Planner'
 import RecipeLibrary from './RecipeLibrary'
@@ -21,6 +22,7 @@ interface Props {
   recipes: Recipe[]
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
   customFoods: Food[]
+  setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
   /** só de leitura: alimenta as sugestões "do costume" do planeador */
   diary: Diary
   mealPlan: MealPlanEntry[]
@@ -40,7 +42,7 @@ const SEGMENTS = [
   { id: 'planner' as const, label: 'Planeador' },
 ]
 
-export default function Receitas({ recipes, setRecipes, customFoods, diary, mealPlan, setMealPlan, pantry, setPantry, shoppingList, setShoppingList, onLog }: Props) {
+export default function Receitas({ recipes, setRecipes, customFoods, setCustomFoods, diary, mealPlan, setMealPlan, pantry, setPantry, shoppingList, setShoppingList, onLog }: Props) {
   const [building, setBuilding] = useState<Recipe | 'new' | null>(null)
   const [mealFor, setMealFor] = useState<Recipe | null>(null)
   const [sharing, setSharing] = useState<Recipe | null>(null)
@@ -49,12 +51,30 @@ export default function Receitas({ recipes, setRecipes, customFoods, diary, meal
   const [planning, setPlanning] = useState<Recipe | null>(null)
   const [importing, setImporting] = useState(false)
   const [importDraft, setImportDraft] = useState<Recipe | null>(null)
+  // cópia de uma receita existente, ainda por guardar (id novo, não está em recipes)
+  const [duplicating, setDuplicating] = useState<Recipe | null>(null)
   const toast = useToast()
 
   const named = recipes.filter((r) => !r.auto)
   const autos = recipes.filter((r) => r.auto)
 
   const remove = (r: Recipe) => setRecipes((rs) => rs.filter((x) => x.id !== r.id))
+
+  /** Duplica uma receita (ou promove um combo automático a receita nomeada) e
+   * abre logo o construtor para ajustares a cópia. Nada é guardado até Guardar. */
+  const duplicate = (r: Recipe) => {
+    if (recipes.length >= MAX_RECIPES) {
+      toast('Atingiste o limite de receitas.', 'error')
+      return
+    }
+    setDuplicating({
+      ...r,
+      id: uid(),
+      name: `${recipeLabel(r)} (cópia)`.slice(0, 120),
+      auto: false,
+      items: r.items.map((i) => ({ ...i })),
+    })
+  }
 
   /** Adiciona uma receita da biblioteca às do utilizador. Devolve false (e avisa)
    * se já existir uma com o mesmo nome ou se o limite estiver atingido. */
@@ -92,20 +112,30 @@ export default function Receitas({ recipes, setRecipes, customFoods, diary, meal
 
   // Editar uma receita existente OU rever uma importada (draft ainda não guardado).
   const editing = building && building !== 'new' ? building : null
-  if (building || importDraft) {
+  if (building || importDraft || duplicating) {
     return (
       <RecipeBuilder
-        initial={editing ?? importDraft}
+        initial={editing ?? duplicating ?? importDraft}
         customFoods={customFoods}
+        setCustomFoods={setCustomFoods}
+        recipes={recipes}
+        setRecipes={setRecipes}
         onCancel={() => {
           setBuilding(null)
           setImportDraft(null)
+          setDuplicating(null)
         }}
         onSave={(name, emoji, items) => {
           setRecipes((rs) => {
-            // se estava a editar uma existente, substitui; senão guarda nova nomeada
+            // se estava a editar uma existente, substitui
             if (editing) {
               return rs.map((x) => (x.id === editing.id ? { ...x, name, emoji, auto: false, items } : x))
+            }
+            // cópia: entra sempre como receita nova. Não passa por saveAsNamed
+            // porque os itens são iguais aos do original — seria renomeá-lo em vez
+            // de duplicar.
+            if (duplicating) {
+              return [{ id: duplicating.id, name, emoji, auto: false, items }, ...rs]
             }
             return saveAsNamed(rs, items, name).map((x) =>
               x.name === name && x.items === items ? { ...x, emoji } : x,
@@ -113,6 +143,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, diary, meal
           })
           setBuilding(null)
           setImportDraft(null)
+          setDuplicating(null)
         }}
       />
     )
@@ -173,6 +204,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, diary, meal
                 recipe={r}
                 onLog={() => setMealFor(r)}
                 onEdit={() => setBuilding(r)}
+                onDuplicate={() => duplicate(r)}
                 onDelete={() => remove(r)}
                 onShare={() => setSharing(r)}
                 onPlan={() => setPlanning(r)}
@@ -190,6 +222,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, diary, meal
                 recipe={r}
                 onLog={() => setMealFor(r)}
                 onEdit={() => setBuilding(r)}
+                onDuplicate={() => duplicate(r)}
                 onDelete={() => remove(r)}
                 onShare={() => setSharing(r)}
                 onPlan={() => setPlanning(r)}
@@ -324,6 +357,7 @@ function RecipeItemRow({
   recipe,
   onLog,
   onEdit,
+  onDuplicate,
   onDelete,
   onShare,
   onPlan,
@@ -331,6 +365,7 @@ function RecipeItemRow({
   recipe: Recipe
   onLog: () => void
   onEdit: () => void
+  onDuplicate: () => void
   onDelete: () => void
   onShare: () => void
   onPlan: () => void
@@ -375,6 +410,9 @@ function RecipeItemRow({
             <button onClick={onEdit} className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-accent">
               Editar
             </button>
+            <button onClick={onDuplicate} className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-accent">
+              Duplicar
+            </button>
             <button onClick={onShare} className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-accent">
               Partilhar
             </button>
@@ -388,15 +426,25 @@ function RecipeItemRow({
   )
 }
 
-/** Construtor de receita: nome, emoji e ingredientes (procura + gramas). */
+/** Construtor de receita: nome, emoji e ingredientes.
+ *
+ * Os ingredientes vêm do mesmo AddFoodSheet do diário (modo 'pick'), por isso
+ * aqui também há Open Food Facts, código de barras, análise por IA, importar de
+ * link e criar alimento personalizado. */
 function RecipeBuilder({
   initial,
   customFoods,
+  setCustomFoods,
+  recipes,
+  setRecipes,
   onCancel,
   onSave,
 }: {
   initial: Recipe | null
   customFoods: Food[]
+  setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
+  recipes: Recipe[]
+  setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
   onCancel: () => void
   onSave: (name: string, emoji: string, items: RecipeItem[]) => void
 }) {
@@ -476,131 +524,17 @@ function RecipeBuilder({
       </div>
 
       {adding && (
-        <IngredientPicker
+        <AddFoodSheet
+          mode="pick"
+          meal={mealForNow()}
           customFoods={customFoods}
-          onAdd={(item) => {
-            setItems((its) => [...its, item])
-            setAdding(false)
-          }}
+          setCustomFoods={setCustomFoods}
+          recipes={recipes}
+          setRecipes={setRecipes}
+          onPickItems={(picked) => setItems((its) => [...its, ...picked])}
           onClose={() => setAdding(false)}
         />
       )}
-    </div>
-  )
-}
-
-/** Procura de alimento + gramas → devolve um RecipeItem. */
-function IngredientPicker({
-  customFoods,
-  onAdd,
-  onClose,
-}: {
-  customFoods: Food[]
-  onAdd: (item: RecipeItem) => void
-  onClose: () => void
-}) {
-  const [query, setQuery] = useState('')
-  const [selected, setSelected] = useState<Food | null>(null)
-  const [grams, setGrams] = useState('100')
-
-  const foods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
-  const results = useMemo(() => searchFoods(foods, query).slice(0, 40), [foods, query])
-
-  const gramsN = Number(grams)
-  const factor = gramsN > 0 ? gramsN / 100 : 0
-
-  const confirm = () => {
-    if (!selected || factor <= 0) return
-    onAdd({
-      foodName: selected.brand ? `${selected.name} (${selected.brand})` : selected.name,
-      emoji: selected.emoji,
-      grams: gramsN,
-      unit: selected.unit,
-      kcal: selected.kcal * factor,
-      protein: selected.protein * factor,
-      carbs: selected.carbs * factor,
-      fat: selected.fat * factor,
-    })
-  }
-
-  return (
-    <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
-      <div
-        className="sheet-panel flex h-[80dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Adicionar ingrediente"
-      >
-        {!selected ? (
-          <>
-            <div className="px-5 pt-3">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Procurar alimento…"
-                className="w-full rounded-xl bg-surface px-4 py-3 focus:outline-none focus:ring-2 focus:ring-accent"
-                autoFocus
-              />
-            </div>
-            <ul className="scroll-contain mt-3 flex-1 overflow-y-auto px-5 pb-5">
-              {results.map((f) => (
-                <li key={f.id}>
-                  <button
-                    onClick={() => {
-                      setSelected(f)
-                      setGrams('100')
-                    }}
-                    className="row-press flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
-                  >
-                    <span className="text-xl" aria-hidden>{f.emoji}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{f.name}</div>
-                      <div className="text-xs text-muted">
-                        {f.kcal} kcal (100 {f.unit})
-                      </div>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col px-5 pt-4">
-            <button onClick={() => setSelected(null)} className="self-start text-sm font-medium text-accent">
-              ‹ Voltar
-            </button>
-            <div className="mt-3 flex items-center gap-3">
-              <span className="text-3xl" aria-hidden>{selected.emoji}</span>
-              <div className="font-semibold">{selected.name}</div>
-            </div>
-            <label className="mt-5 block">
-              <span className="mb-1.5 block text-sm font-medium text-ink-2">Quantidade ({selected.unit})</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={grams}
-                onChange={(e) => setGrams(e.target.value)}
-                className="w-full rounded-xl bg-surface px-4 py-3 text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-accent"
-                autoFocus
-              />
-            </label>
-            <div className="mt-3 grid grid-cols-4 gap-2 rounded-2xl bg-surface p-4 text-center text-sm">
-              <div><div className="font-bold tabular-nums">{Math.round(selected.carbs * factor)}</div><div className="text-[10px] text-muted">Hidratos</div></div>
-              <div><div className="font-bold tabular-nums">{Math.round(selected.protein * factor)}</div><div className="text-[10px] text-muted">Proteína</div></div>
-              <div><div className="font-bold tabular-nums">{Math.round(selected.fat * factor)}</div><div className="text-[10px] text-muted">Gordura</div></div>
-              <div><div className="font-bold tabular-nums">{Math.round(selected.kcal * factor)}</div><div className="text-[10px] text-muted">kcal</div></div>
-            </div>
-            <button
-              onClick={confirm}
-              disabled={factor <= 0}
-              className="mt-auto mb-6 rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition active:scale-[0.98] disabled:opacity-40"
-            >
-              Juntar à receita
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

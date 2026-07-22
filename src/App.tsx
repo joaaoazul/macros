@@ -136,6 +136,7 @@ export default function App() {
             recipes={recipes}
             setRecipes={setRecipes}
             mealPlan={mealPlan}
+            setMealPlan={setMealPlan}
             launch={launch}
             onLaunchHandled={() => setLaunch(null)}
           />
@@ -149,6 +150,7 @@ export default function App() {
             recipes={recipes}
             setRecipes={setRecipes}
             customFoods={customFoods}
+            setCustomFoods={setCustomFoods}
             diary={diary}
             mealPlan={mealPlan}
             setMealPlan={setMealPlan}

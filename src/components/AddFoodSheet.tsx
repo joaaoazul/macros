@@ -7,6 +7,7 @@ import {
   entryFromRecipeItem,
   findByItems,
   itemsFromScraped,
+  recipeItemFromEntry,
   recipeKcal,
   rememberCombo,
   saveAsNamed,
@@ -35,14 +36,22 @@ interface Props {
   initialQuery?: string
   /** foto partilhada de outra app: abre logo a análise por IA */
   initialPhoto?: File | null
-  onAdd: (entry: Entry) => void
+  /** 'log' (predefinição) regista no diário; 'pick' devolve ingredientes a quem
+   * chama — é assim que o construtor de receitas ganha o Open Food Facts, o
+   * scanner, a IA e a importação de links sem duplicar nada. */
+  mode?: 'log' | 'pick'
+  onAdd?: (entry: Entry) => void
+  /** só em modo 'pick' */
+  onPickItems?: (items: RecipeItem[]) => void
   onClose: () => void
 }
 
 type OffState = { status: 'idle' | 'loading' | 'done' | 'error'; results: Food[] }
 type QtyMode = 'unit' | 'portion'
 
-export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, usage, mealUsage, initialQuery = '', initialPhoto = null, onAdd, onClose }: Props) {
+export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipes, setRecipes, usage, mealUsage, initialQuery = '', initialPhoto = null, mode: sheetMode = 'log', onAdd, onPickItems, onClose }: Props) {
+  // `mode` interno já existe para gramas/porção — daí o nome distinto
+  const picking = sheetMode === 'pick'
   const [query, setQuery] = useState(initialQuery)
   const [selected, setSelected] = useState<Food | null>(null)
   const [qty, setQty] = useState('100')
@@ -170,11 +179,17 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
     setQuery('')
   }
 
-  /** Regista todos os itens dados como entradas; se ≥2, lembra o combo. Fecha o sheet. */
+  /** Entrega os itens: em modo 'pick' devolve-os a quem chama; em modo 'log'
+   * regista-os como entradas e, se forem ≥2, lembra o combo. Fecha o sheet. */
   const logItems = (items: RecipeItem[]) => {
     if (items.length === 0) return
     navigator.vibrate?.(30)
-    for (const item of items) onAdd(entryFromRecipeItem(item, meal))
+    if (picking) {
+      onPickItems?.(items)
+      onClose()
+      return
+    }
+    for (const item of items) onAdd?.(entryFromRecipeItem(item, meal))
     if (items.length >= 2) setRecipes((rs) => rememberCombo(rs, items))
     onClose()
   }
@@ -203,11 +218,11 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label={`Adicionar alimento ao ${mealLabel}`}
+        aria-label={picking ? 'Adicionar ingrediente' : `Adicionar alimento ao ${mealLabel}`}
       >
 
         <header className="flex items-center justify-between px-5 pt-3">
-          <h2 className="text-lg font-bold">Adicionar ao {mealLabel}</h2>
+          <h2 className="text-lg font-bold">{picking ? 'Adicionar ingrediente' : `Adicionar ao ${mealLabel}`}</h2>
           <button onClick={onClose} className="rounded-full px-2 py-1 text-muted" aria-label="Fechar">
             ✕
           </button>
@@ -357,9 +372,9 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
                     onClick={() => logItems(cart)}
                     className="flex-1 rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-white transition active:scale-[0.98]"
                   >
-                    Registar {cart.length} {cart.length === 1 ? 'item' : 'itens'}
+                    {picking ? 'Juntar' : 'Registar'} {cart.length} {cart.length === 1 ? 'item' : 'itens'}
                   </button>
-                  {cart.length >= 2 && !cartAlreadySaved && (
+                  {!picking && cart.length >= 2 && !cartAlreadySaved && (
                     <button
                       onClick={() => setNaming(true)}
                       className="rounded-full bg-accent-soft px-4 py-2.5 text-sm font-semibold text-accent transition active:scale-95"
@@ -577,7 +592,15 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
 
         {analyzing && (
           <Suspense fallback={null}>
-            <AiMealAnalysis meal={meal} initialPhoto={initialPhoto} onAdd={onAdd} onDone={onClose} onCancel={() => setAnalyzing(false)} />
+            <AiMealAnalysis
+              meal={meal}
+              initialPhoto={initialPhoto}
+              // em modo 'pick' a IA enche o cesto de ingredientes em vez de
+              // escrever no diário; o utilizador ainda revê tudo antes de guardar
+              onAdd={(e) => (picking ? setCart((c) => [...c, recipeItemFromEntry(e)]) : onAdd?.(e))}
+              onDone={picking ? () => setAnalyzing(false) : onClose}
+              onCancel={() => setAnalyzing(false)}
+            />
           </Suspense>
         )}
 
