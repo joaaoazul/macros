@@ -4,7 +4,7 @@ import { MEALS } from './types'
 import { withWaterTarget } from './lib/calc'
 import { api, ApiError } from './lib/api'
 import { entryFromRecipeItem } from './lib/recipes'
-import { todayISO } from './lib/store'
+import { haptic, todayISO } from './lib/store'
 import { useAuth } from './lib/auth'
 import { useBillingStatus, trialDaysLeft, type BillingStatus } from './lib/billing'
 import { useSyncedData } from './lib/sync'
@@ -167,19 +167,22 @@ export default function App() {
         {tab === 'perfil' && <Perfil profile={profile} setProfile={setProfile} />}
       </div>
 
-      {/* tab bar translúcida ao estilo iOS */}
-      <nav className="fixed inset-x-0 bottom-0 border-t border-line/70 bg-surface/80 backdrop-blur-xl">
+      {/* tab bar de vidro ao estilo iOS */}
+      <nav className="bar-blur hairline-t fixed inset-x-0 bottom-0 z-20">
         <div className="mx-auto flex max-w-md">
           {TABS.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                if (tab !== t.id) haptic(8)
+                setTab(t.id)
+              }}
               aria-current={tab === t.id ? 'page' : undefined}
               className={`relative flex flex-1 flex-col items-center gap-0.5 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-[11px] font-medium transition-colors ${
                 tab === t.id ? 'text-accent' : 'text-muted'
               }`}
             >
-              <span className={`transition-transform duration-200 ${tab === t.id ? 'scale-110' : ''}`}>{t.icon}</span>
+              <span key={String(tab === t.id)} className={tab === t.id ? 'animate-tab-bounce' : undefined}>{t.icon}</span>
               {t.label}
               {t.id === 'social' && socket.unread + socket.notifUnread > 0 && (
                 <span

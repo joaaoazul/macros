@@ -1,14 +1,40 @@
 /** Peças partilhadas do estilo iOS: large title, cartões e ícones da tab bar. */
 
+import { useEffect, useRef, useState } from 'react'
+
+/** Large title que colapsa como uma UINavigationBar: ao passar o título no
+ * scroll, aparece uma barra de vidro fixa com o título centrado a 17px. */
 export function LargeTitle({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
+  const sentinel = useRef<HTMLDivElement>(null)
+  const [collapsed, setCollapsed] = useState(false)
+  useEffect(() => {
+    const el = sentinel.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(([e]) => setCollapsed(!e.isIntersecting), {
+      rootMargin: '-1px 0px 0px 0px',
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
   return (
-    <header className="flex items-end justify-between px-5 pb-2 pt-[max(1.75rem,env(safe-area-inset-top))]">
-      <div>
-        {subtitle && <div className="text-[13px] font-semibold uppercase tracking-wide text-muted">{subtitle}</div>}
-        <h1 className="text-[2.125rem] font-bold leading-tight tracking-tight">{title}</h1>
-      </div>
-      {right}
-    </header>
+    <>
+      <header className="flex items-end justify-between px-5 pb-2 pt-[max(1.75rem,env(safe-area-inset-top))]">
+        <div>
+          {subtitle && <div className="text-[13px] font-semibold uppercase tracking-wide text-muted">{subtitle}</div>}
+          <h1 className="text-[2.125rem] font-bold leading-tight tracking-tight">{title}</h1>
+        </div>
+        {right}
+      </header>
+      <div ref={sentinel} aria-hidden />
+      {collapsed && (
+        <div
+          aria-hidden
+          className={`bar-blur hairline-b animate-fade fixed inset-x-0 top-0 ${Z.bar} pt-[env(safe-area-inset-top)]`}
+        >
+          <div className="py-2.5 text-center text-[17px] font-semibold">{title}</div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -124,11 +150,11 @@ export function SegmentedControl<T extends string>({
 }) {
   const idx = Math.max(0, options.findIndex((o) => o.id === value))
   return (
-    <div className={`relative flex rounded-xl bg-surface p-1 ${className}`} role="tablist">
+    <div className={`relative flex rounded-[10px] bg-ink/[0.06] p-0.5 ${className}`} role="tablist">
       <div
-        className="absolute inset-y-1 rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+        className="absolute inset-y-0.5 rounded-lg bg-white shadow-[0_1px_4px_rgba(0,0,0,0.12),0_0_1px_rgba(0,0,0,0.08)] transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] dark:bg-[#636366]"
         style={{
-          width: `calc((100% - 0.5rem) / ${options.length})`,
+          width: `calc((100% - 0.25rem) / ${options.length})`,
           transform: `translateX(${idx * 100}%)`,
         }}
         aria-hidden
@@ -139,8 +165,8 @@ export function SegmentedControl<T extends string>({
           role="tab"
           aria-selected={value === o.id}
           onClick={() => onChange(o.id)}
-          className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${
-            value === o.id ? 'text-accent' : 'text-muted'
+          className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] transition-colors ${
+            value === o.id ? 'font-semibold text-ink' : 'font-medium text-ink-2'
           }`}
         >
           {o.label}
