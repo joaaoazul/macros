@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
-import type { Food, LibraryRecipe, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem, ScrapedRecipe } from '../types'
+import type { Diary, Food, LibraryRecipe, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem, ScrapedRecipe } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { recipeFromLibrary, recipeFromScraped, recipeKcal, saveAsNamed } from '../lib/recipes'
+import { placeInSlots, recipeLabel } from '../lib/planner'
 import { foodScraper } from '../lib/social'
+import { uid } from '../lib/store'
 import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
 import Planner from './Planner'
 import RecipeLibrary from './RecipeLibrary'
+import PlanTargetSheet from './PlanTargetSheet'
 import ShareSheet, { recipeShare } from './social/ShareSheet'
 import { Card, LargeTitle, SegmentedControl } from './ui'
 
@@ -17,6 +20,8 @@ interface Props {
   recipes: Recipe[]
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
   customFoods: Food[]
+  /** só de leitura: alimenta as sugestões "do costume" do planeador */
+  diary: Diary
   mealPlan: MealPlanEntry[]
   setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   pantry: PantryItem[]
@@ -32,12 +37,13 @@ const SEGMENTS = [
   { id: 'planner' as const, label: 'Planeador' },
 ]
 
-export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
+export default function Receitas({ recipes, setRecipes, customFoods, diary, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
   const [building, setBuilding] = useState<Recipe | 'new' | null>(null)
   const [mealFor, setMealFor] = useState<Recipe | null>(null)
   const [sharing, setSharing] = useState<Recipe | null>(null)
   const [segment, setSegment] = useState<'recipes' | 'planner'>('recipes')
   const [library, setLibrary] = useState(false)
+  const [planning, setPlanning] = useState<Recipe | null>(null)
   const [importing, setImporting] = useState(false)
   const [importDraft, setImportDraft] = useState<Recipe | null>(null)
   const toast = useToast()
@@ -122,6 +128,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
         <Planner
           recipes={recipes}
           customFoods={customFoods}
+          diary={diary}
           mealPlan={mealPlan}
           setMealPlan={setMealPlan}
           pantry={pantry}
@@ -163,6 +170,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
                 onEdit={() => setBuilding(r)}
                 onDelete={() => remove(r)}
                 onShare={() => setSharing(r)}
+                onPlan={() => setPlanning(r)}
               />
             ))}
           </Card>
@@ -179,6 +187,7 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
                 onEdit={() => setBuilding(r)}
                 onDelete={() => remove(r)}
                 onShare={() => setSharing(r)}
+                onPlan={() => setPlanning(r)}
               />
             ))}
           </Card>
@@ -191,6 +200,22 @@ export default function Receitas({ recipes, setRecipes, customFoods, mealPlan, s
           </Card>
         )}
       </div>
+      )}
+
+      {planning && (
+        <PlanTargetSheet
+          title={recipeLabel(planning)}
+          emoji={planning.emoji}
+          occupied={(d, m) => mealPlan.some((e) => e.day === d && e.meal === m)}
+          onClose={() => setPlanning(null)}
+          onConfirm={(targets) => {
+            setMealPlan((plan) =>
+              placeInSlots(plan, { name: recipeLabel(planning), emoji: planning.emoji, items: planning.items }, targets, uid),
+            )
+            toast(targets.length === 1 ? 'Planeado para 1 refeição' : `Planeado para ${targets.length} refeições`)
+            setPlanning(null)
+          }}
+        />
       )}
 
       {mealFor && (
@@ -296,12 +321,14 @@ function RecipeItemRow({
   onEdit,
   onDelete,
   onShare,
+  onPlan,
 }: {
   recipe: Recipe
   onLog: () => void
   onEdit: () => void
   onDelete: () => void
   onShare: () => void
+  onPlan: () => void
 }) {
   const [open, setOpen] = useState(false)
   const label = recipe.name ?? recipe.items.map((i) => i.foodName).join(' + ')
@@ -336,7 +363,10 @@ function RecipeItemRow({
               </li>
             ))}
           </ul>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={onPlan} className="rounded-full bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent">
+              Planear
+            </button>
             <button onClick={onEdit} className="rounded-full bg-surface px-3 py-1.5 text-sm font-medium text-accent">
               Editar
             </button>

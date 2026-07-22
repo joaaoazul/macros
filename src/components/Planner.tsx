@@ -1,7 +1,7 @@
 /** Planeador semanal (almoço + jantar) → lista de compras derivada + despensa. */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { Food, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
+import type { Diary, Food, MealId, MealPlanEntry, PantryItem, Recipe, RecipeItem } from '../types'
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { searchOpenFoodFacts } from '../lib/off'
 import {
@@ -13,6 +13,7 @@ import {
   shoppingListText,
   todayWeekday,
   WEEKDAYS,
+  WEEKDAYS_SHORT,
   withExtras,
   type ShoppingItem,
 } from '../lib/shopping'
@@ -20,13 +21,17 @@ import { analyzeMeal } from '../lib/ai'
 import { defaultExpiryFor, daysUntil, expiryStatus, recipesCookableFrom, recipesToUseUp, sortByExpiry } from '../lib/pantry'
 import { haptic, uid } from '../lib/store'
 import { useToast } from '../lib/toast'
+import { placeInSlots, recipeLabel, suggestedForMeal, type PlanMeal, type SlotTarget } from '../lib/planner'
 import LogPortionSheet from './LogPortionSheet'
 import PantryPhotoSheet from './PantryPhotoSheet'
-import { Card, ScreenHeader, SegmentedControl, Z } from './ui'
+import PlanTargetSheet from './PlanTargetSheet'
+import { Button, Card, ScreenHeader, SegmentedControl, Stepper, Z } from './ui'
 
 interface Props {
   recipes: Recipe[]
   customFoods: Food[]
+  /** só de leitura: alimenta as sugestões "do costume" do picker */
+  diary: Diary
   mealPlan: MealPlanEntry[]
   setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   pantry: PantryItem[]
@@ -35,13 +40,14 @@ interface Props {
   onLog: (items: RecipeItem[], meal: MealId) => void
 }
 
-type SlotTarget = { day: number; meal: 'lunch' | 'dinner' }
-
-export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
+export default function Planner({ recipes, customFoods, diary, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
   const [slot, setSlot] = useState<SlotTarget | null>(null)
   const [logging, setLogging] = useState<{ entry: MealPlanEntry; meal: MealId } | null>(null)
+  const [editing, setEditing] = useState<{ entry: MealPlanEntry; meal: PlanMeal } | null>(null)
+  const [copying, setCopying] = useState<{ entry: MealPlanEntry; meal: PlanMeal } | null>(null)
   const [view, setView] = useState<'plan' | 'list' | 'pantry'>('plan')
   const today = todayWeekday()
+  const toast = useToast()
 
   const notes = useMemo(() => analyzePlan(mealPlan), [mealPlan])
   const entryAt = (day: number, meal: string) => mealPlan.find((e) => e.day === day && e.meal === meal)
@@ -97,18 +103,8 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
 
       {/* ações */}
       <div className="grid grid-cols-2 gap-2.5">
-        <button
-          onClick={() => { haptic(10); setView('list') }}
-          className="press flex items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3 font-semibold text-white"
-        >
-          🛒 Lista de compras
-        </button>
-        <button
-          onClick={() => setView('pantry')}
-          className="press flex items-center justify-center gap-2 rounded-2xl bg-surface px-4 py-3 font-semibold text-ink-2"
-        >
-          🧺 Despensa
-        </button>
+        <Button onClick={() => { haptic(10); setView('list') }}>🛒 Lista de compras</Button>
+        <Button variant="ghost" onClick={() => setView('pantry')}>🧺 Despensa</Button>
       </div>
 
       {plannedCount > 0 && (
@@ -127,64 +123,48 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
         </Card>
       )}
 
-      {/* grelha da semana (por dia) */}
-      {WEEKDAYS.map((label, day) => (
-        <Card key={day} className={`animate-in overflow-hidden ${day === today ? 'ring-1 ring-accent-soft' : ''}`} >
-          <div className="flex items-center justify-between px-4 pt-3">
-            <span className="text-sm font-semibold">
+      {/* semana compacta: os 7 dias de relance, sem scroll */}
+      <Card className="animate-in overflow-hidden">
+        {WEEKDAYS_SHORT.map((label, day) => (
+          <div
+            key={day}
+            className={`hairline-b flex items-center gap-1.5 px-3 py-1.5 last:border-b-0 ${
+              day === today ? 'bg-accent-soft/40' : ''
+            }`}
+          >
+            <span className={`w-9 shrink-0 text-[13px] font-semibold ${day === today ? 'text-accent' : 'text-ink-2'}`}>
               {label}
-              {day === today && (
-                <span className="ml-2 text-[11px] font-semibold uppercase tracking-wide text-accent">Hoje</span>
-              )}
             </span>
-            {dayKcal(day) > 0 && (
-              <span className="text-[11px] tabular-nums text-muted">{dayKcal(day)} kcal planeadas</span>
-            )}
-          </div>
-          <div className="mt-1 divide-y divide-line">
             {PLAN_MEALS.map((m) => {
               const entry = entryAt(day, m.id)
-              return (
-                <div key={m.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="w-16 shrink-0 text-xs text-muted">{m.emoji} {m.label}</span>
-                  {entry ? (
-                    <>
-                      <button
-                        onClick={() => setSlot({ day, meal: m.id })}
-                        className="min-w-0 flex-1 truncate text-left text-sm font-medium"
-                      >
-                        {entry.emoji} {entry.name}
-                      </button>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {day === today && (
-                          <button
-                            onClick={() => { haptic(8); setLogging({ entry, meal: m.id }) }}
-                            className="press mr-0.5 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent"
-                            aria-label={`Registar ${m.label.toLowerCase()} planeado no diário`}
-                          >
-                            Registar
-                          </button>
-                        )}
-                        <button onClick={() => changeServings(entry, -1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Menos doses">−</button>
-                        <span className="w-4 text-center text-xs font-semibold tabular-nums" aria-label={`${entry.servings} doses`}>{entry.servings}</span>
-                        <button onClick={() => changeServings(entry, 1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Mais doses">＋</button>
-                        <button onClick={() => setEntry(day, m.id, null)} className="press ml-0.5 text-muted" aria-label="Remover">✕</button>
-                      </div>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => { haptic(8); setSlot({ day, meal: m.id }) }}
-                      className="press flex-1 text-left text-sm text-accent"
-                    >
-                      ＋ Adicionar
-                    </button>
-                  )}
-                </div>
+              return entry ? (
+                <button
+                  key={m.id}
+                  onClick={() => { haptic(8); setEditing({ entry, meal: m.id }) }}
+                  className="row-press min-w-0 flex-1 truncate rounded-lg px-1.5 py-1.5 text-left text-[13px] font-medium"
+                  aria-label={`${m.label} de ${WEEKDAYS[day]}: ${entry.name}`}
+                >
+                  <span aria-hidden>{entry.emoji} </span>
+                  {entry.name}
+                  {entry.servings > 1 && <span className="text-muted"> ×{entry.servings}</span>}
+                </button>
+              ) : (
+                <button
+                  key={m.id}
+                  onClick={() => { haptic(8); setSlot({ day, meal: m.id }) }}
+                  className="row-press min-w-0 flex-1 rounded-lg px-1.5 py-1.5 text-left text-[13px] text-muted"
+                  aria-label={`Planear ${m.label.toLowerCase()} de ${WEEKDAYS[day]}`}
+                >
+                  ＋ <span className="text-[11px]">{m.label}</span>
+                </button>
               )
             })}
+            <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-muted">
+              {dayKcal(day) > 0 ? dayKcal(day) : ''}
+            </span>
           </div>
-        </Card>
-      ))}
+        ))}
+      </Card>
 
       {logging && (
         <LogPortionSheet
@@ -204,6 +184,7 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
         <SlotPicker
           recipes={recipes}
           customFoods={customFoods}
+          suggested={suggestedForMeal(recipes, mealPlan, diary, slot.meal)}
           onClose={() => setSlot(null)}
           onPick={(name, emoji, items) => {
             const existing = entryAt(slot.day, slot.meal)
@@ -218,6 +199,36 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
             })
             haptic(20)
             setSlot(null)
+          }}
+        />
+      )}
+
+      {editing && (
+        <EntrySheet
+          entry={editing.entry}
+          meal={editing.meal}
+          isToday={editing.entry.day === today}
+          onServings={(delta) => changeServings(editing.entry, delta)}
+          onLog={() => { setLogging({ entry: editing.entry, meal: editing.meal }); setEditing(null) }}
+          onCopy={() => { setCopying(editing); setEditing(null) }}
+          onSwap={() => { setSlot({ day: editing.entry.day, meal: editing.meal }); setEditing(null) }}
+          onRemove={() => { setEntry(editing.entry.day, editing.meal, null); setEditing(null) }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {copying && (
+        <PlanTargetSheet
+          title={copying.entry.name}
+          emoji={copying.entry.emoji}
+          exclude={{ day: copying.entry.day, meal: copying.meal }}
+          occupied={(d, m) => entryAt(d, m) !== undefined}
+          onClose={() => setCopying(null)}
+          onConfirm={(targets) => {
+            setMealPlan((plan) => placeInSlots(plan, copying.entry, targets, uid))
+            haptic(20)
+            toast(targets.length === 1 ? 'Copiado para 1 dia' : `Copiado para ${targets.length} refeições`)
+            setCopying(null)
           }}
         />
       )}
@@ -243,13 +254,87 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
   )
 }
 
+/** Ações de uma refeição já planeada.
+ *
+ * Antes viviam espremidas na linha da grelha (registar + doses + remover em
+ * ~30 px), o que impedia a semana de caber num ecrã. Agora a linha só mostra
+ * o prato e as ações abrem aqui, com espaço para o "copiar para outros dias". */
+function EntrySheet({
+  entry,
+  meal,
+  isToday,
+  onServings,
+  onLog,
+  onCopy,
+  onSwap,
+  onRemove,
+  onClose,
+}: {
+  entry: MealPlanEntry
+  meal: PlanMeal
+  isToday: boolean
+  onServings: (delta: number) => void
+  onLog: () => void
+  onCopy: () => void
+  onSwap: () => void
+  onRemove: () => void
+  onClose: () => void
+}) {
+  const mealLabel = PLAN_MEALS.find((m) => m.id === meal)?.label ?? ''
+  const kcal = Math.round(entry.items.reduce((s, i) => s + i.kcal, 0) * (entry.servings || 1))
+  return (
+    <div className={`fixed inset-0 ${Z.modal} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
+      <div
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Ações de ${entry.name}`}
+      >
+        <h2 className="truncate text-lg font-bold">
+          <span aria-hidden>{entry.emoji} </span>
+          {entry.name}
+        </h2>
+        <p className="text-sm text-muted">
+          {WEEKDAYS[entry.day]} · {mealLabel} · {kcal} kcal
+        </p>
+
+        <div className="mt-4 flex items-center justify-between rounded-card bg-surface px-4 py-3">
+          <span className="text-sm font-medium">Doses a cozinhar</span>
+          <Stepper value={entry.servings} onChange={onServings} label="doses" />
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {isToday && (
+            <Button full size="lg" onClick={onLog}>
+              Registar no diário
+            </Button>
+          )}
+          <Button full size="lg" variant="secondary" onClick={onCopy}>
+            Copiar para outros dias
+          </Button>
+          <Button full size="lg" variant="ghost" onClick={onSwap}>
+            Trocar de prato
+          </Button>
+          <Button full size="lg" variant="danger" onClick={onRemove}>
+            Remover do plano
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Escolher receita OU alimento (com gramas) para preencher um slot. */
 function SlotPicker({
   recipes,
   customFoods,
+  suggested,
   onPick,
   onClose,
 }: {
+  /** receitas que costumas usar nesta refeição, mostradas com a pesquisa vazia */
+  suggested: Recipe[]
   recipes: Recipe[]
   customFoods: Food[]
   onPick: (name: string, emoji: string, items: RecipeItem[]) => void
@@ -367,6 +452,21 @@ function SlotPicker({
                     </span>
                   </button>
                   {aiErr && <p className="mb-2 px-1 text-xs font-medium text-critical">{aiErr}</p>}
+                </>
+              )}
+              {!q && suggested.length > 0 && (
+                <>
+                  <div className="pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-muted">Do costume</div>
+                  {suggested.map((r) => (
+                    <button
+                      key={`sug-${r.id}`}
+                      onClick={() => onPick(recipeLabel(r), r.emoji, r.items)}
+                      className="row-press flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
+                    >
+                      <span className="text-xl" aria-hidden>{r.emoji}</span>
+                      <div className="min-w-0 flex-1 truncate text-sm font-medium">{recipeLabel(r)}</div>
+                    </button>
+                  ))}
                 </>
               )}
               {matchedRecipes.length > 0 && (
@@ -790,14 +890,10 @@ function StockRow({
       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${chip.cls}`}>
         {chip.label}
       </span>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <button onClick={() => onChangeQty(item, -1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Menos um">−</button>
-        <span className="w-4 text-center text-xs font-semibold tabular-nums">{item.qty ?? 1}</span>
-        <button onClick={() => onChangeQty(item, 1)} className="press flex h-6 w-6 items-center justify-center rounded-full bg-bg text-sm" aria-label="Mais um">＋</button>
-        <button onClick={() => onFinish(item)} className="press ml-0.5 text-[11px] font-semibold text-muted" aria-label={`${item.name} acabou`}>
-          Acabou
-        </button>
-      </div>
+      <Stepper value={item.qty ?? 1} onChange={(d) => onChangeQty(item, d)} label={`de ${item.name}`} />
+      <button onClick={() => onFinish(item)} className="press ml-0.5 shrink-0 text-[11px] font-semibold text-muted" aria-label={`${item.name} acabou`}>
+        Acabou
+      </button>
     </div>
   )
 }

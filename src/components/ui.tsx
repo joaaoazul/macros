@@ -210,6 +210,47 @@ export function SegmentedControl<T extends string>({
   )
 }
 
+/** Contador −/valor/＋. Estava escrito três vezes (doses, stock, foto da
+ * despensa), com fundos diferentes em cada cópia. */
+export function Stepper({
+  value,
+  onChange,
+  label,
+  min = 1,
+  max = 99,
+}: {
+  value: number
+  onChange: (delta: number) => void
+  /** nome do que se está a contar, para os leitores de ecrã */
+  label: string
+  min?: number
+  max?: number
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <button
+        onClick={() => onChange(-1)}
+        disabled={value <= min}
+        className="press flex h-7 w-7 items-center justify-center rounded-full bg-bg text-sm disabled:opacity-30"
+        aria-label={`Menos ${label}`}
+      >
+        −
+      </button>
+      <span className="w-5 text-center text-sm font-semibold tabular-nums" aria-label={`${value} ${label}`}>
+        {value}
+      </span>
+      <button
+        onClick={() => onChange(1)}
+        disabled={value >= max}
+        className="press flex h-7 w-7 items-center justify-center rounded-full bg-bg text-sm disabled:opacity-30"
+        aria-label={`Mais ${label}`}
+      >
+        ＋
+      </button>
+    </div>
+  )
+}
+
 /** Botão circular "ghost" (ex.: setas de navegação de dias). */
 export function CircleButton({ onClick, disabled, label, children }: { onClick: () => void; disabled?: boolean; label: string; children: React.ReactNode }) {
   return (

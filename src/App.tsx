@@ -148,6 +148,7 @@ export default function App() {
             recipes={recipes}
             setRecipes={setRecipes}
             customFoods={customFoods}
+            diary={diary}
             mealPlan={mealPlan}
             setMealPlan={setMealPlan}
             pantry={pantry}

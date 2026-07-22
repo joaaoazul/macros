@@ -84,7 +84,7 @@ export function defaultExpiryFor(name: string, today = todayISODate()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function norm(s: string): string {
+export function norm(s: string): string {
   // NFD + remover marcas diacríticas combinadas (U+0300–U+036F) → "brócolo" == "brocolo"
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
 }
