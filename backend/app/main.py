@@ -90,20 +90,22 @@ async def csrf_header_guard(request: Request, call_next):
     return await call_next(request)
 
 
+# require_access tranca as funcionalidades atrás do trial/subscrição (402 → paywall).
+# auth, billing e gdpr ficam SEMPRE abertos para o utilizador poder pagar/sair;
+# ws faz o seu próprio origin-check e o admin tem gate próprio.
+_gated = {"dependencies": [Depends(require_access)]}
 app.include_router(auth_router)
 app.include_router(billing_router)
-app.include_router(ai_router)
-# require_access tranca os dados da app atrás do trial/subscrição (402 → paywall).
-# auth, billing e gdpr ficam SEMPRE abertos para o utilizador poder pagar/sair.
-app.include_router(data_router, dependencies=[Depends(require_access)])
+app.include_router(ai_router, **_gated)
+app.include_router(data_router, **_gated)
 app.include_router(gdpr_router)
-app.include_router(social_router)
-app.include_router(messages_router)
+app.include_router(social_router, **_gated)
+app.include_router(messages_router, **_gated)
 app.include_router(ws_router)
-app.include_router(push_router)
-app.include_router(reminders_router)
-app.include_router(scraper_router)
-app.include_router(notifications_router)
+app.include_router(push_router, **_gated)
+app.include_router(reminders_router, **_gated)
+app.include_router(scraper_router, **_gated)
+app.include_router(notifications_router, **_gated)
 app.include_router(admin_router)
 
 

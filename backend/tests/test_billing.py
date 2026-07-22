@@ -31,7 +31,10 @@ def test_has_access_matrix_when_billing_enabled(monkeypatch):
     assert has_access(_user(trial_ends_at=NOW + timedelta(days=1)), NOW) is True
     assert has_access(_user(trial_ends_at=NOW - timedelta(days=1)), NOW) is False
     assert has_access(_user(subscription_status="active"), NOW) is True
-    assert has_access(_user(subscription_status="trialing"), NOW) is True
+    # o caso real pós-registo: status fica "trialing" para sempre, quem manda é o trial_ends_at
+    assert has_access(_user(subscription_status="trialing", trial_ends_at=NOW + timedelta(days=1)), NOW) is True
+    assert has_access(_user(subscription_status="trialing", trial_ends_at=NOW - timedelta(days=1)), NOW) is False
+    assert has_access(_user(subscription_status="trialing"), NOW) is False
     assert has_access(_user(subscription_status="canceled"), NOW) is False
     assert has_access(_user(subscription_status="past_due"), NOW) is False
     assert has_access(_user(), NOW) is False

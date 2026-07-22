@@ -15,7 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.models import User
 from app.config import settings
 
-ACTIVE_STATUSES = frozenset({"active", "trialing"})
+# "trialing" fica de fora de propósito: o trial da app é governado por
+# trial_ends_at (o status fica "trialing" para sempre — não há webhook do
+# Stripe para o expirar, e com ele aqui o acesso nunca fechava).
+ACTIVE_STATUSES = frozenset({"active"})
 
 
 def billing_enabled() -> bool:
