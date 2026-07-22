@@ -34,7 +34,7 @@ export default function IpsView() {
     <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
       <section className="soc-panel">
         <div className="soc-eyebrow border-b soc-line p-3">atividade por IP · 7d</div>
-        <div className="max-h-[70vh] overflow-y-auto">
+        <div className="max-h-[70vh] overflow-auto">
           <table className="soc-table">
             <thead>
               <tr>

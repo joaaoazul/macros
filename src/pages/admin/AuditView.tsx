@@ -56,7 +56,7 @@ export default function AuditView() {
           <button className="soc-btn" onClick={load}>↻</button>
           <span className="soc-mono ml-auto text-[11px] text-[#5b6b7b]">{total} eventos</span>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto">
+        <div className="max-h-[70vh] overflow-auto">
           <table className="soc-table">
             <thead>
               <tr>

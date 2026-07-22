@@ -73,7 +73,7 @@ export default function InvitesView() {
 
       <section className="soc-panel">
         <div className="soc-eyebrow border-b soc-line p-3">convites · {rows.length}</div>
-        <div className="max-h-[70vh] overflow-y-auto">
+        <div className="max-h-[70vh] overflow-auto">
           <table className="soc-table">
             <thead>
               <tr>
