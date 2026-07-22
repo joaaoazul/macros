@@ -22,7 +22,9 @@ async def test_get_creates_defaults_all_disabled(client):
     await register_user(client)
     rows = (await client.get("/api/v1/reminders")).json()
     kinds = {r["kind"] for r in rows}
-    assert kinds == {"water", "breakfast", "lunch", "dinner", "weigh_in", "expiry"}
+    assert kinds == {
+        "water", "breakfast", "lunch", "dinner", "weigh_in", "expiry", "plan_lunch", "plan_dinner",
+    }
     assert all(r["enabled"] is False for r in rows)
 
 
@@ -107,6 +109,56 @@ async def test_scheduler_skips_when_disabled_or_wrong_time(client, db_engine, mo
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as db:
         assert await service._tick(db) == 0
+
+
+async def test_plan_check_fires_only_when_planned_and_unlogged(client, db_engine, monkeypatch):
+    """plan_lunch: com plano p/ hoje e almoço vazio → push; depois de registar → nada."""
+    from sqlalchemy import select as _select
+
+    await register_user(client)
+    await client.get("/api/v1/reminders")
+    await client.put("/api/v1/reminders", json=[{"kind": "plan_lunch", "hhmm": "14:00", "enabled": True}])
+
+    sent: list[str] = []
+
+    async def fake_send(db, user_id, title, body, url="/"):
+        sent.append(body)
+
+    monkeypatch.setattr("app.push.service.push_enabled", lambda: True)
+    monkeypatch.setattr("app.push.service.send_push", fake_send)
+    _freeze(monkeypatch, "14:00")  # 2026-07-13 é segunda → weekday 0
+
+    plan_item = {
+        "id": "p1", "day": 0, "meal": "lunch", "name": "Frango com arroz", "emoji": "🍗",
+        "servings": 1,
+        "items": [{"foodName": "Frango", "emoji": "🍗", "grams": 150, "unit": "g",
+                   "kcal": 248, "protein": 46.5, "carbs": 0, "fat": 5.4}],
+    }
+    resp = await client.put("/api/v1/meal-plan", json=[plan_item])
+    assert resp.status_code == 200, resp.text
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    async with factory() as db:
+        assert await service._tick(db) == 1
+        await db.commit()
+    assert sent and "Frango com arroz" in sent[0]
+
+    # dia seguinte não testável aqui; mas com o almoço registado o push não sai
+    async with factory() as db:
+        row = (await db.execute(_select(DbReminder).where(DbReminder.kind == "plan_lunch"))).scalar_one()
+        row.last_fired_on = None  # simula um novo dia
+        await db.commit()
+    day = {
+        "entries": [{"id": "e1", "meal": "lunch", "foodName": "Frango", "emoji": "🍗",
+                     "grams": 150, "unit": "g", "kcal": 248, "protein": 46.5, "carbs": 0, "fat": 5.4}],
+    }
+    resp = await client.put("/api/v1/days/2026-07-13", json=day)
+    assert resp.status_code == 200, resp.text
+    async with factory() as db:
+        assert await service._tick(db) == 0
+    assert len(sent) == 1
 
 
 async def test_scheduler_noop_when_push_disabled(client, db_engine, monkeypatch):

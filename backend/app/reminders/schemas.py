@@ -5,7 +5,7 @@ import re
 from pydantic import BaseModel, Field, field_validator
 
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-_KINDS = {"water", "weigh_in", "breakfast", "lunch", "dinner", "expiry"}
+_KINDS = {"water", "weigh_in", "breakfast", "lunch", "dinner", "expiry", "plan_lunch", "plan_dinner"}
 
 
 class ReminderOut(BaseModel):

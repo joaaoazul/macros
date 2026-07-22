@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Profile } from '../../types'
 import { api, ApiError } from '../../lib/api'
 import { shiftDate, todayISO } from '../../lib/store'
+import { formatRate, weightRatePerWeek } from '../../lib/trend'
 import { LineChart } from '../charts'
 import { Card } from '../ui'
 
@@ -57,6 +58,18 @@ export default function PesoDetail({ profile, onWeightToday, onClose }: Props) {
   const monthAgo = shiftDate(today, -30)
   const baseline = weights.filter((w) => w.date <= monthAgo).pop() ?? (weights.length > 1 ? weights[0] : null)
   const delta30 = current && baseline && baseline.date !== current.date ? current.kg - baseline.kg : null
+  // ritmo pela regressão linear das últimas semanas (mesma matemática do AdjustTargetCard)
+  const rate = useMemo(() => weightRatePerWeek(weights), [weights])
+
+  const exportCsv = () => {
+    const csv = ['date,kg', ...weights.map((w) => `${w.date},${w.kg}`)].join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'peso.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const registerToday = async () => {
     const kg = Number(input)
@@ -99,7 +112,7 @@ export default function PesoDetail({ profile, onWeightToday, onClose }: Props) {
             value={delta30 !== null ? `${delta30 > 0 ? '+' : ''}${delta30.toLocaleString('pt-PT', { maximumFractionDigits: 1 })} kg` : '—'}
             label="últimos 30 dias"
           />
-          <StatTile value={String(weights.length)} label="registos" />
+          <StatTile value={rate !== null ? `${formatRate(rate)}/sem` : '—'} label="ritmo" />
         </div>
 
         {/* registar hoje */}
@@ -141,6 +154,15 @@ export default function PesoDetail({ profile, onWeightToday, onClose }: Props) {
           )}
           {points.length > 0 && <LineChart points={points} ariaLabel="Evolução do peso" suffix=" kg" />}
         </Card>
+
+        {weights.length > 1 && (
+          <button
+            onClick={exportCsv}
+            className="mt-3 w-full rounded-full bg-surface px-4 py-2.5 text-sm font-semibold text-ink-2"
+          >
+            ⬇️ Exportar histórico (CSV)
+          </button>
+        )}
 
         {/* lista */}
         {weights.length > 0 && (

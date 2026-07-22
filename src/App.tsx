@@ -134,6 +134,7 @@ export default function App() {
             setCustomFoods={setCustomFoods}
             recipes={recipes}
             setRecipes={setRecipes}
+            mealPlan={mealPlan}
             launch={launch}
             onLaunchHandled={() => setLaunch(null)}
           />

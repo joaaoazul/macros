@@ -22,6 +22,10 @@ DEFAULTS: list[tuple[str, str, bool]] = [
     ("dinner", "20:00", False),
     ("weigh_in", "08:00", False),
     ("expiry", "09:00", False),
+    # check-in do plano: depois da refeição, se estava planeada e nada foi
+    # registado nessa refeição, pergunta se comeste
+    ("plan_lunch", "14:00", False),
+    ("plan_dinner", "21:00", False),
 ]
 
 # Itens de stock a ≤ estes dias da validade entram no aviso diário (igual ao frontend).
@@ -76,6 +80,33 @@ async def get_or_create(db: AsyncSession, user_id: int) -> list[DbReminder]:
     return rows
 
 
+async def _plan_check(db: AsyncSession, user_id: int, meal: str, today) -> str | None:
+    """Prato planeado para hoje nesta refeição, se o diário dessa refeição está vazio."""
+    from app.data.models import DbDiaryEntry, DbMealPlanEntry
+
+    plan = (
+        await db.execute(
+            select(DbMealPlanEntry).where(
+                DbMealPlanEntry.user_id == user_id,
+                DbMealPlanEntry.day == today.weekday(),  # 0=segunda, igual ao frontend
+                DbMealPlanEntry.meal == meal,
+            )
+        )
+    ).scalars().first()
+    if plan is None:
+        return None
+    logged = (
+        await db.execute(
+            select(DbDiaryEntry.id).where(
+                DbDiaryEntry.user_id == user_id,
+                DbDiaryEntry.date == today,
+                DbDiaryEntry.meal == meal,
+            ).limit(1)
+        )
+    ).first()
+    return None if logged else plan.name
+
+
 async def _tick(db: AsyncSession) -> int:
     """Envia os lembretes cujo horário == agora (Lisboa) e ainda não dispararam hoje.
 
@@ -104,6 +135,23 @@ async def _tick(db: AsyncSession) -> int:
     for r in due:
         if r.last_fired_on == today:
             continue  # já enviado neste dia
+        if r.kind in ("plan_lunch", "plan_dinner"):
+            # Só dispara se havia plano para hoje E a refeição continua vazia;
+            # caso contrário não carimba — volta a avaliar amanhã.
+            meal = "lunch" if r.kind == "plan_lunch" else "dinner"
+            dish = await _plan_check(db, r.user_id, meal, today)
+            if dish is None:
+                continue
+            label = "almoço" if meal == "lunch" else "jantar"
+            await send_push(
+                db, r.user_id,
+                "🍽️ Comeste o que planeaste?",
+                f"Tinhas {dish} no plano para o {label} — um toque e fica no diário.",
+                "/app",
+            )
+            r.last_fired_on = today
+            sent += 1
+            continue
         if r.kind == "expiry":
             # Push agregado com o que está a expirar; sem nada devido, não carimba
             # last_fired_on — volta a avaliar amanhã à mesma hora.

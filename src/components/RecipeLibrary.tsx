@@ -12,6 +12,17 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 const kcalPerServing = (r: LibraryRecipe) =>
   Math.round(r.items.reduce((s, i) => s + i.kcal, 0) / Math.max(1, r.servings))
 
+const proteinPerServing = (r: LibraryRecipe) =>
+  Math.round(r.items.reduce((s, i) => s + i.protein, 0) / Math.max(1, r.servings))
+
+type Sort = 'default' | 'protein' | 'kcal' | 'light'
+const SORTS: { id: Sort; label: string }[] = [
+  { id: 'default', label: 'Padrão' },
+  { id: 'protein', label: '+ proteína' },
+  { id: 'kcal', label: '− kcal' },
+  { id: 'light', label: '< 500 kcal' },
+]
+
 export default function RecipeLibrary({
   onAdd,
   onClose,
@@ -23,6 +34,7 @@ export default function RecipeLibrary({
   const [tags, setTags] = useState<string[]>([])
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState<string | null>(null)
+  const [sort, setSort] = useState<Sort>('default')
   const [added, setAdded] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -40,8 +52,9 @@ export default function RecipeLibrary({
   const results = useMemo(() => {
     if (!all) return []
     const q = norm(query.trim())
-    return all.filter((r) => {
+    const filtered = all.filter((r) => {
       if (tag && !r.tags.includes(tag)) return false
+      if (sort === 'light' && kcalPerServing(r) >= 500) return false
       if (!q) return true
       return (
         norm(r.name).includes(q) ||
@@ -49,7 +62,10 @@ export default function RecipeLibrary({
         r.items.some((i) => norm(i.foodName).includes(q))
       )
     })
-  }, [all, query, tag])
+    if (sort === 'protein') return [...filtered].sort((a, b) => proteinPerServing(b) - proteinPerServing(a))
+    if (sort === 'kcal' || sort === 'light') return [...filtered].sort((a, b) => kcalPerServing(a) - kcalPerServing(b))
+    return filtered
+  }, [all, query, tag, sort])
 
   const add = (r: LibraryRecipe) => {
     haptic()
@@ -83,6 +99,11 @@ export default function RecipeLibrary({
             ))}
           </div>
         )}
+        <div className="scroll-contain -mx-4 mt-1.5 flex gap-2 overflow-x-auto px-4 pb-1">
+          {SORTS.map((s) => (
+            <TagChip key={s.id} label={s.label} active={sort === s.id} onClick={() => setSort(sort === s.id && s.id !== 'default' ? 'default' : s.id)} />
+          ))}
+        </div>
       </div>
 
       <div className="scroll-contain flex-1 space-y-2.5 overflow-y-auto px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -98,7 +119,8 @@ export default function RecipeLibrary({
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold">{r.name}</div>
                   <div className="mt-0.5 text-xs text-muted">
-                    {kcalPerServing(r)} kcal/dose · {r.servings} {r.servings === 1 ? 'dose' : 'doses'}
+                    {kcalPerServing(r)} kcal · {proteinPerServing(r)} g prot/dose · {r.servings}{' '}
+                    {r.servings === 1 ? 'dose' : 'doses'}
                     {r.minutes ? ` · ${r.minutes} min` : ''}
                   </div>
                   <div className="mt-1.5 flex flex-wrap gap-1">

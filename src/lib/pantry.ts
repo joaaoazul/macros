@@ -87,6 +87,27 @@ function norm(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
 }
 
+/** Receitas "cozinháveis" com o que está em stock: ordenadas pela fração de
+ * ingredientes cobertos; só entra quem tem ≥2 ingredientes presentes ou ≥60%
+ * da receita coberta (senão qualquer receita com sal aparecia). */
+export function recipesCookableFrom<R extends { items: { foodName: string }[] }>(
+  stockNames: string[],
+  recipes: R[],
+  limit = 5,
+): { recipe: R; have: number; total: number }[] {
+  const needles = stockNames.map(norm).filter((s) => s.length >= 3)
+  if (needles.length === 0) return []
+  return recipes
+    .map((recipe) => {
+      const hay = recipe.items.map((i) => norm(i.foodName))
+      const have = hay.filter((h) => needles.some((n) => h.includes(n) || n.includes(h))).length
+      return { recipe, have, total: hay.length }
+    })
+    .filter((x) => x.total > 0 && (x.have >= 2 || x.have / x.total >= 0.6))
+    .sort((a, b) => b.have / b.total - a.have / a.total || b.have - a.have)
+    .slice(0, limit)
+}
+
 /** Receitas do utilizador que usam os alimentos a expirar, do que usa mais para
  * menos. Correspondência por nome normalizado (substring nos dois sentidos). */
 export function recipesToUseUp(expiringNames: string[], recipes: Recipe[], limit = 5): Recipe[] {

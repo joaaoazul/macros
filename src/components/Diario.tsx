@@ -1,11 +1,14 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { LaunchAction } from '../App'
-import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, Profile, Recipe, WaterLog } from '../types'
+import type { Diary, Entry, Exercise, ExerciseLog, Food, MealId, MealPlanEntry, Profile, Recipe, WaterLog } from '../types'
 import { MEALS } from '../types'
 import { sumEntries } from '../lib/calc'
 import { buildMealUsageIndex, buildUsageIndex } from '../lib/foods'
+import { entryFromRecipeItem } from '../lib/recipes'
+import { todayWeekday } from '../lib/shopping'
 import { formatDatePT, haptic, mealForNow, shiftDate, todayISO, uid } from '../lib/store'
 import AddFoodSheet from './AddFoodSheet'
+import LogPortionSheet from './LogPortionSheet'
 
 const CopyDaySheet = lazy(() => import('./CopyDaySheet'))
 import AguaDetail from './details/AguaDetail'
@@ -25,12 +28,14 @@ interface Props {
   setCustomFoods: React.Dispatch<React.SetStateAction<Food[]>>
   recipes: Recipe[]
   setRecipes: React.Dispatch<React.SetStateAction<Recipe[]>>
+  /** plano semanal — para perguntar "comeste o que planeaste?" depois da refeição */
+  mealPlan: MealPlanEntry[]
   /** acção vinda de um atalho do ícone ou de uma partilha */
   launch?: LaunchAction | null
   onLaunchHandled?: () => void
 }
 
-export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes, launch, onLaunchHandled }: Props) {
+export default function Diario({ profile, setProfile, diary, setDiary, water, setWater, exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes, mealPlan, launch, onLaunchHandled }: Props) {
   const [date, setDate] = useState(todayISO)
   const [addingTo, setAddingTo] = useState<MealId | null>(null)
   const [addingExercise, setAddingExercise] = useState(false)
@@ -74,6 +79,57 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
   const addWater = (ml: number) => {
     setWater((w) => ({ ...w, [date]: Math.max(0, (w[date] ?? 0) + ml) }))
   }
+
+  // ── Check-in do planeado: depois da hora da refeição, se o plano de hoje
+  // tinha almoço/jantar e essa refeição ainda está vazia, pergunta se comeste.
+  const [planLogging, setPlanLogging] = useState<{ entry: MealPlanEntry; meal: MealId } | null>(null)
+  const [planDismissTick, setPlanDismissTick] = useState(0)
+  const planDue = useMemo(() => {
+    if (date !== todayISO()) return []
+    void planDismissTick // recalcula ao ignorar
+    const wd = todayWeekday()
+    const hour = new Date().getHours()
+    const windows = [
+      { meal: 'lunch' as MealId, after: 14, label: 'ao almoço' },
+      { meal: 'dinner' as MealId, after: 21, label: 'ao jantar' },
+    ]
+    return windows.flatMap(({ meal, after, label }) => {
+      if (hour < after) return []
+      const entry = mealPlan.find((p) => p.day === wd && p.meal === meal)
+      if (!entry) return []
+      if (entries.some((e) => e.meal === meal)) return [] // já registaste algo
+      if (localStorage.getItem(`macros.planCheck.${date}.${meal}`)) return []
+      return [{ entry, meal, label }]
+    })
+  }, [date, mealPlan, entries, planDismissTick])
+
+  const dismissPlanCheck = (meal: MealId) => {
+    try {
+      localStorage.setItem(`macros.planCheck.${date}.${meal}`, '1')
+    } catch {
+      /* cache opcional */
+    }
+    setPlanDismissTick((t) => t + 1)
+  }
+
+  // ── Resumo dos últimos 7 dias (só em hoje): médias vs metas + dias na meta.
+  const week = useMemo(() => {
+    if (date !== todayISO()) return null
+    const days: { kcal: number; protein: number }[] = []
+    let onTarget = 0
+    for (let i = 6; i >= 0; i--) {
+      const d = shiftDate(date, -i)
+      const dayEntries = diary[d] ?? []
+      if (dayEntries.length === 0) continue
+      const t = sumEntries(dayEntries)
+      days.push({ kcal: t.kcal, protein: t.protein })
+      if (Math.abs(t.kcal - targets.kcal) <= targets.kcal * 0.1) onTarget++
+    }
+    if (days.length < 3) return null // poucos dados para médias honestas
+    const avg = (f: (d: { kcal: number; protein: number }) => number) =>
+      Math.round(days.reduce((s, d) => s + f(d), 0) / days.length)
+    return { days: days.length, onTarget, kcal: avg((d) => d.kcal), protein: avg((d) => d.protein) }
+  }, [date, diary, targets])
 
   /** Aplica uma vez o atalho/partilha com que a app foi aberta. */
   useEffect(() => {
@@ -172,6 +228,45 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
             <span className="font-semibold text-ink-2">{net.toLocaleString('pt-PT')}</span> / {targets.kcal.toLocaleString('pt-PT')} kcal
           </p>
         </Card>
+
+        {/* check-in do planeado: comeste o que estava no plano? */}
+        {planDue.map(({ entry, meal, label }) => (
+          <Card key={meal} className="animate-in flex items-center gap-3 p-4">
+            <span className="text-2xl" aria-hidden>{entry.emoji}</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold">Planeaste {entry.name} {label}</div>
+              <div className="text-xs text-muted">Comeste? Um toque e fica no diário.</div>
+            </div>
+            <button
+              onClick={() => { haptic(10); setPlanLogging({ entry, meal }) }}
+              className="press shrink-0 rounded-full bg-accent px-3.5 py-1.5 text-sm font-semibold text-white"
+            >
+              Registar
+            </button>
+            <button
+              onClick={() => dismissPlanCheck(meal)}
+              className="press shrink-0 text-muted"
+              aria-label="Ignorar sugestão do plano"
+            >
+              ✕
+            </button>
+          </Card>
+        ))}
+
+        {/* média da semana vs metas */}
+        {week && (
+          <Card className="animate-in p-4">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted">Últimos 7 dias</span>
+              <span className="text-[11px] tabular-nums text-muted">{week.onTarget}/{week.days} dias na meta</span>
+            </div>
+            <p className="mt-1.5 text-sm text-ink-2">
+              Média <span className="font-semibold text-ink">{week.kcal.toLocaleString('pt-PT')} kcal</span> /{' '}
+              {targets.kcal.toLocaleString('pt-PT')} ·{' '}
+              <span className="font-semibold text-ink">{week.protein} g</span> / {targets.protein} g proteína
+            </p>
+          </Card>
+        )}
 
         {/* refeições */}
         {MEALS.map((meal) => {
@@ -336,6 +431,20 @@ export default function Diario({ profile, setProfile, diary, setDiary, water, se
         />
       )}
       {addingExercise && <AddExerciseSheet onAdd={addExercise} onClose={() => setAddingExercise(false)} />}
+      {planLogging && (
+        <LogPortionSheet
+          title={planLogging.entry.name}
+          emoji={planLogging.entry.emoji}
+          items={planLogging.entry.items}
+          meal={planLogging.meal}
+          onLog={(items, meal) => {
+            for (const item of items) addEntry(entryFromRecipeItem(item, meal))
+            haptic(20)
+            setPlanLogging(null)
+          }}
+          onClose={() => setPlanLogging(null)}
+        />
+      )}
       {showAgua && <AguaDetail profile={profile} setProfile={setProfile} water={water} onClose={() => setShowAgua(false)} />}
       {showCopy && (
         <Suspense fallback={null}>

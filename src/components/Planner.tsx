@@ -16,7 +16,7 @@ import {
   withExtras,
   type ShoppingItem,
 } from '../lib/shopping'
-import { defaultExpiryFor, daysUntil, expiryStatus, recipesToUseUp, sortByExpiry } from '../lib/pantry'
+import { defaultExpiryFor, daysUntil, expiryStatus, recipesCookableFrom, recipesToUseUp, sortByExpiry } from '../lib/pantry'
 import { haptic, uid } from '../lib/store'
 import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
@@ -693,6 +693,15 @@ function PantryView({
     () => recipesToUseUp(expiring.map((p) => p.name), recipes, 3),
     [expiring, recipes],
   )
+  const cookable = useMemo(
+    () =>
+      recipesCookableFrom(
+        pantry.filter((p) => p.kind === 'stock').map((p) => p.name),
+        recipes,
+        3,
+      ),
+    [pantry, recipes],
+  )
 
   const add = () => {
     const n = name.trim()
@@ -792,6 +801,26 @@ function PantryView({
             <p className="text-xs text-muted">
               Usam {expiring.map((p) => p.name).slice(0, 3).join(', ')}{expiring.length > 3 ? '…' : ''} — regista-as nas Receitas.
             </p>
+          </Card>
+        )}
+
+        {tab === 'stock' && cookable.length > 0 && (
+          <Card className="animate-in space-y-2 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted">
+              🥘 Podes cozinhar com o que tens
+            </div>
+            {cookable.map(({ recipe: r, have, total }) => {
+              const label = r.name ?? r.items.map((i) => i.foodName).join(' + ')
+              return (
+                <div key={r.id} className="flex items-center gap-2.5 text-sm">
+                  <span aria-hidden>{r.emoji}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+                  <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold tabular-nums text-accent">
+                    {have}/{total}
+                  </span>
+                </div>
+              )
+            })}
           </Card>
         )}
 

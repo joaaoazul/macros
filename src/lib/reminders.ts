@@ -2,7 +2,15 @@
 
 import { api } from './api'
 
-export type ReminderKind = 'water' | 'breakfast' | 'lunch' | 'dinner' | 'weigh_in' | 'expiry'
+export type ReminderKind =
+  | 'water'
+  | 'breakfast'
+  | 'lunch'
+  | 'dinner'
+  | 'weigh_in'
+  | 'expiry'
+  | 'plan_lunch'
+  | 'plan_dinner'
 
 export interface Reminder {
   kind: ReminderKind
@@ -17,6 +25,8 @@ export const REMINDER_META: Record<ReminderKind, { label: string; emoji: string 
   dinner: { label: 'Jantar', emoji: '🌙' },
   weigh_in: { label: 'Pesagem', emoji: '⚖️' },
   expiry: { label: 'Validades da despensa', emoji: '🕓' },
+  plan_lunch: { label: 'Comeste o almoço planeado?', emoji: '🍽️' },
+  plan_dinner: { label: 'Comeste o jantar planeado?', emoji: '🌙' },
 }
 
 export function listReminders(): Promise<Reminder[]> {
