@@ -241,21 +241,29 @@ a,
   }
 }
 
-/* entrada suave; usa style={{ animationDelay }} para escalonar listas */
+/* Entrada suave; usa style={{ animationDelay }} para escalonar listas.
+ *
+ * `backwards` e NÃO `both`: o `forwards` mantinha a opacidade/transform em
+ * efeito para sempre, o que cria um contexto de empilhamento permanente e
+ * prendia lá dentro qualquer sheet `fixed` (o botão do sheet do planeador
+ * desaparecia por baixo da tab bar). Todos estes keyframes acabam no estado
+ * natural do elemento, portanto largar o `forwards` não muda nada visualmente;
+ * o `backwards` é a metade que segura o primeiro fotograma durante o delay,
+ * que é o que as listas escalonadas precisam. */
 .animate-in {
-  animation: fade-in-up 340ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: fade-in-up 340ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
 }
 .animate-pop {
-  animation: pop-in 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: pop-in 280ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 .animate-tapback {
-  animation: tapback 300ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: tapback 300ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 .animate-toast {
-  animation: toast-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: toast-in 320ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
 }
 .animate-fade {
-  animation: fade-in 220ms ease-out both;
+  animation: fade-in 220ms ease-out backwards;
 }
 .animate-tab-bounce {
   animation: tab-bounce 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
