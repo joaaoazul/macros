@@ -10,7 +10,7 @@ import { ApiError } from '../lib/api'
 import { analyzePantry, downscaleImage, getAnthropicKey, type PantryCandidate } from '../lib/ai'
 import { defaultExpiryFor, todayISODate } from '../lib/pantry'
 import { haptic, uid } from '../lib/store'
-import { Button, Card } from './ui'
+import { Button, Card, Z } from './ui'
 
 interface Props {
   onAdd: (items: PantryItem[]) => void
@@ -84,7 +84,7 @@ export default function PantryPhotoSheet({ onAdd, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.modal} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div
         className="sheet-panel flex h-[85dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}

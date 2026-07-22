@@ -22,7 +22,7 @@ import { haptic, uid } from '../lib/store'
 import { useToast } from '../lib/toast'
 import LogPortionSheet from './LogPortionSheet'
 import PantryPhotoSheet from './PantryPhotoSheet'
-import { Card } from './ui'
+import { Card, ScreenHeader, SegmentedControl, Z } from './ui'
 
 interface Props {
   recipes: Recipe[]
@@ -77,13 +77,9 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
     setMealPlan((plan) => plan.map((e) => (e.id === entry.id ? { ...e, servings: next } : e)))
   }
 
-  if (view === 'list') {
-    return <ShoppingListView plan={mealPlan} pantry={pantry} customFoods={customFoods} onBack={() => setView('plan')} />
-  }
-  if (view === 'pantry') {
-    return <PantryView pantry={pantry} setPantry={setPantry} recipes={recipes} customFoods={customFoods} onBack={() => setView('plan')} />
-  }
-
+  // A lista e a despensa são ecrãs cheios renderizados como IRMÃOS da grelha,
+  // não early-returns: assim a semana continua montada por baixo e a posição do
+  // scroll sobrevive à ida e volta ao supermercado.
   return (
     <div className="animate-fade space-y-3.5 px-4 pt-1">
       {/* barra de equilíbrio */}
@@ -225,6 +221,24 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
           }}
         />
       )}
+
+      {view === 'list' && (
+        <ShoppingListView
+          plan={mealPlan}
+          pantry={pantry}
+          customFoods={customFoods}
+          onBack={() => setView('plan')}
+        />
+      )}
+      {view === 'pantry' && (
+        <PantryView
+          pantry={pantry}
+          setPantry={setPantry}
+          recipes={recipes}
+          customFoods={customFoods}
+          onBack={() => setView('plan')}
+        />
+      )}
     </div>
   )
 }
@@ -294,7 +308,7 @@ function SlotPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.sheet} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div
         className="sheet-panel flex h-[80dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}
@@ -302,7 +316,6 @@ function SlotPicker({
         aria-modal="true"
         aria-label="Planear refeição"
       >
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
         {foodSel ? (
           <div className="flex flex-1 flex-col px-5 pt-4">
             <button onClick={() => setFoodSel(null)} className="self-start text-sm font-medium text-accent">‹ Voltar</button>
@@ -328,7 +341,7 @@ function SlotPicker({
           </div>
         ) : (
           <>
-            <div className="px-5 pt-3">
+            <div className="px-5 pt-4">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -583,26 +596,23 @@ function ShoppingListView({ plan, pantry, customFoods, onBack }: { plan: MealPla
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-bg">
-      <header className="flex items-center justify-between border-b border-line/70 bg-surface/80 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
-        <button onClick={onBack} className="press text-accent">‹ <span className="text-sm font-medium">Planeador</span></button>
-        <div className="text-center">
-          <div className="font-semibold leading-tight">Lista de compras</div>
-          {total > 0 && (
-            <div className="text-[11px] tabular-nums text-muted">{doneCount} de {total} na cesta</div>
-          )}
-        </div>
-        {total > 0 ? (
-          <button onClick={() => void share()} aria-label="Partilhar lista" className="press text-accent">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 16V4M8 8l4-4 4 4" />
-              <path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" />
-            </svg>
-          </button>
-        ) : (
-          <span className="w-6" />
-        )}
-      </header>
+    <div className={`fixed inset-0 ${Z.screen} flex flex-col bg-bg`}>
+      <ScreenHeader
+        backLabel="Planeador"
+        onBack={onBack}
+        title="Lista de compras"
+        subtitle={total > 0 ? `${doneCount} de ${total} na cesta` : undefined}
+        right={
+          total > 0 ? (
+            <button onClick={() => void share()} aria-label="Partilhar lista" className="press text-accent">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 16V4M8 8l4-4 4 4" />
+                <path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" />
+              </svg>
+            </button>
+          ) : undefined
+        }
+      />
 
       {total > 0 && (
         <div className="h-0.5 bg-line">
@@ -717,10 +727,9 @@ function ProductFinder({ item, onClose }: { item: ShoppingItem; onClose: () => v
   }, [item.name])
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.modal} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div className="sheet-panel flex h-[75dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
-        <div className="px-5 pt-3">
+        <div className="px-5 pt-4">
           <h2 className="text-lg font-bold">{item.emoji} {item.name}</h2>
           <p className="text-sm text-muted">Precisas de {formatQuantity(item.grams, item.unit)} · produtos à venda em Portugal</p>
         </div>
@@ -912,29 +921,19 @@ function PantryView({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-bg">
-      <header className="flex items-center gap-3 border-b border-line/70 bg-surface/80 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
-        <button onClick={onBack} className="press text-accent">‹ <span className="text-sm font-medium">Planeador</span></button>
-        <div className="font-semibold">Despensa</div>
-      </header>
+    <div className={`fixed inset-0 ${Z.screen} flex flex-col bg-bg`}>
+      <ScreenHeader backLabel="Planeador" onBack={onBack} title="Despensa" />
 
       <div className="mx-auto w-full max-w-md flex-1 space-y-4 overflow-y-auto px-4 py-4 scroll-contain">
-        <div className="relative flex rounded-xl bg-surface p-1">
-          <div
-            className="absolute inset-y-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-accent-soft transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
-            style={{ transform: `translateX(${tab === 'stock' ? 0 : tab === 'have' ? 100 : 200}%)` }}
-            aria-hidden
-          />
-          {(['stock', 'have', 'recurring'] as const).map((k) => (
-            <button
-              key={k}
-              onClick={() => setTab(k)}
-              className={`relative z-10 flex-1 rounded-lg py-1.5 text-[13px] font-semibold transition-colors ${tab === k ? 'text-accent' : 'text-muted'}`}
-            >
-              {k === 'stock' ? 'Em stock' : k === 'have' ? 'Tenho sempre' : 'Recorrentes'}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          options={[
+            { id: 'stock' as const, label: 'Em stock' },
+            { id: 'have' as const, label: 'Tenho sempre' },
+            { id: 'recurring' as const, label: 'Recorrentes' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
         {tab === 'stock' && (
           <button

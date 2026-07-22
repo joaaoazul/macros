@@ -526,7 +526,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
         {cameraMenu && (
           <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40" onClick={() => setCameraMenu(false)}>
             <div
-              className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
+              className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-4"
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-modal="true"
@@ -701,7 +701,7 @@ function NameRecipeSheet({ onCancel, onSave }: { onCancel: () => void; onSave: (
   return (
     <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40" onClick={onCancel}>
       <div
-        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-4"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

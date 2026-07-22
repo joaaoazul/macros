@@ -256,7 +256,7 @@ function ImportRecipeSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
       <div
-        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-4"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -497,7 +497,6 @@ function IngredientPicker({
         aria-modal="true"
         aria-label="Adicionar ingrediente"
       >
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
         {!selected ? (
           <>
             <div className="px-5 pt-3">

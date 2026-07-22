@@ -38,6 +38,40 @@ export function LargeTitle({ title, subtitle, right }: { title: string; subtitle
   )
 }
 
+/** Barra de topo de um ecrã cheio: voltar à esquerda, título ao centro.
+ *
+ * Existiam quatro cópias à mão, uma delas alinhada à esquerda e as outras
+ * centradas — dois ecrãs irmãos (lista de compras e despensa) não podiam ter
+ * cabeçalhos diferentes. O `right` ocupa sempre espaço, mesmo vazio, para o
+ * título ficar mesmo ao centro. */
+export function ScreenHeader({
+  backLabel,
+  onBack,
+  title,
+  subtitle,
+  right,
+}: {
+  backLabel: string
+  onBack: () => void
+  title: string
+  subtitle?: React.ReactNode
+  right?: React.ReactNode
+}) {
+  return (
+    <header className="bar-blur hairline-b flex items-center gap-2 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
+      <button onClick={onBack} className="press flex w-20 shrink-0 items-center text-accent">
+        <Chevron dir="left" />
+        <span className="truncate text-sm font-medium">{backLabel}</span>
+      </button>
+      <div className="min-w-0 flex-1 text-center">
+        <div className="truncate font-semibold leading-tight">{title}</div>
+        {subtitle && <div className="text-[11px] tabular-nums text-muted">{subtitle}</div>}
+      </div>
+      <div className="flex w-20 shrink-0 justify-end">{right}</div>
+    </header>
+  )
+}
+
 export function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <section className={`rounded-card bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>{children}</section>
 }

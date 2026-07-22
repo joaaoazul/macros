@@ -48,7 +48,7 @@ export default function LogPortionSheet({ title, emoji, items, meal, onLog, onCl
   return (
     <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div
-        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-3"
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-4"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
