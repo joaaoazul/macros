@@ -83,6 +83,7 @@ async def csrf_header_guard(request: Request, call_next):
     if (
         request.method not in _SAFE_METHODS
         and request.url.path.startswith("/api/")
+        and request.url.path != "/api/v1/billing/webhook"  # autenticado por assinatura Stripe, sem cookies
         and request.headers.get("X-Requested-With") != "fetch"
     ):
         return JSONResponse({"detail": "Missing X-Requested-With header"}, status_code=403)

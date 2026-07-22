@@ -111,6 +111,22 @@ async def test_webhook_activates_then_cancels(client, monkeypatch):
     assert (await client.get("/api/v1/billing/status")).json()["status"] == "canceled"
 
 
+async def test_webhook_without_csrf_header(client, monkeypatch):
+    """O Stripe não envia X-Requested-With — o webhook não pode cair no guard CSRF."""
+    user_id = (await register_user(client)).json()["id"]
+    completed = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"client_reference_id": str(user_id), "customer": "cus_csrf"}},
+    }
+    monkeypatch.setattr("app.billing.router.verify_webhook", lambda payload, sig: completed)
+    r = await client.post(
+        "/api/v1/billing/webhook",
+        content=b"{}",
+        headers={"stripe-signature": "x", "X-Requested-With": ""},
+    )
+    assert r.status_code == 200
+
+
 async def test_webhook_bad_signature_rejected(client, monkeypatch):
     def boom(payload, sig):
         raise ValueError("bad signature")
