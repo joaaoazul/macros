@@ -3,6 +3,7 @@ import type { Diary, Food, LibraryRecipe, MealId, MealPlanEntry, PantryItem, Rec
 import { FOOD_DB, searchFoods } from '../lib/foods'
 import { recipeFromLibrary, recipeFromScraped, recipeKcal, saveAsNamed } from '../lib/recipes'
 import { placeInSlots, recipeLabel } from '../lib/planner'
+import type { ShoppingList } from '../lib/sync'
 import { foodScraper } from '../lib/social'
 import { uid } from '../lib/store'
 import { useToast } from '../lib/toast'
@@ -26,6 +27,8 @@ interface Props {
   setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   pantry: PantryItem[]
   setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
+  shoppingList: ShoppingList
+  setShoppingList: React.Dispatch<React.SetStateAction<ShoppingList>>
   /** regista os itens na refeição escolhida (hoje) */
   onLog: (items: RecipeItem[], meal: MealId) => void
 }
@@ -37,7 +40,7 @@ const SEGMENTS = [
   { id: 'planner' as const, label: 'Planeador' },
 ]
 
-export default function Receitas({ recipes, setRecipes, customFoods, diary, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
+export default function Receitas({ recipes, setRecipes, customFoods, diary, mealPlan, setMealPlan, pantry, setPantry, shoppingList, setShoppingList, onLog }: Props) {
   const [building, setBuilding] = useState<Recipe | 'new' | null>(null)
   const [mealFor, setMealFor] = useState<Recipe | null>(null)
   const [sharing, setSharing] = useState<Recipe | null>(null)
@@ -133,6 +136,8 @@ export default function Receitas({ recipes, setRecipes, customFoods, diary, meal
           setMealPlan={setMealPlan}
           pantry={pantry}
           setPantry={setPantry}
+          shoppingList={shoppingList}
+          setShoppingList={setShoppingList}
           onLog={onLog}
         />
       ) : (

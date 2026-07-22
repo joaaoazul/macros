@@ -16,6 +16,18 @@ import type {
 } from '../types'
 import { api } from './api'
 
+export interface ShoppingList {
+  /** itens escritos à mão */
+  extras: string[]
+  /** chaves dos itens já na cesta */
+  checked: string[]
+}
+
+const EMPTY_SHOPPING: ShoppingList = { extras: [], checked: [] }
+
+/** chaves antigas, de quando a lista só vivia neste dispositivo */
+const LEGACY_SHOP = { extras: 'macros.shopExtra', checked: 'macros.shopChecked', done: 'macros.shopMigrated' }
+
 interface AllData {
   profile: Profile | null
   diary: Diary
@@ -25,6 +37,7 @@ interface AllData {
   recipes: Recipe[]
   mealPlan: MealPlanEntry[]
   pantry: PantryItem[]
+  shoppingList: ShoppingList
 }
 
 interface DayPatch {
@@ -42,7 +55,38 @@ const KEYS = {
   recipes: 'macros.recipes',
   mealPlan: 'macros.mealPlan',
   pantry: 'macros.pantry',
+  shoppingList: 'macros.shoppingList',
 } as const
+
+/** Adopta a lista do servidor, salvando a lista antiga deste dispositivo.
+ *
+ * Antes de sincronizar, a lista vivia em duas chaves soltas do localStorage.
+ * Se o servidor ainda não tem nada E este dispositivo tinha uma lista antiga,
+ * ela sobe (marcando escrita pendente). A dupla condição — servidor vazio e
+ * migração ainda não feita aqui — evita ressuscitar uma lista que foi limpa
+ * noutro dispositivo. */
+function adoptShoppingList(
+  fromServer: ShoppingList | undefined,
+  pending: { current: boolean },
+): ShoppingList {
+  const server = fromServer ?? EMPTY_SHOPPING
+  if (server.extras.length > 0 || server.checked.length > 0) return server
+  try {
+    if (localStorage.getItem(LEGACY_SHOP.done) === '1') return server
+    const legacy: ShoppingList = {
+      extras: JSON.parse(localStorage.getItem(LEGACY_SHOP.extras) || '[]'),
+      checked: JSON.parse(localStorage.getItem(LEGACY_SHOP.checked) || '[]'),
+    }
+    localStorage.setItem(LEGACY_SHOP.done, '1')
+    if (legacy.extras.length === 0 && legacy.checked.length === 0) return server
+    localStorage.removeItem(LEGACY_SHOP.extras)
+    localStorage.removeItem(LEGACY_SHOP.checked)
+    pending.current = true
+    return legacy
+  } catch {
+    return server
+  }
+}
 
 function readCache<T>(key: string, fallback: T): T {
   try {
@@ -89,6 +133,8 @@ export interface SyncedData {
   setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   pantry: PantryItem[]
   setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
+  shoppingList: ShoppingList
+  setShoppingList: React.Dispatch<React.SetStateAction<ShoppingList>>
 }
 
 export function useSyncedData(userId: number): SyncedData {
@@ -102,6 +148,7 @@ export function useSyncedData(userId: number): SyncedData {
   const [recipes, rawSetRecipes] = useState<Recipe[]>([])
   const [mealPlan, rawSetMealPlan] = useState<MealPlanEntry[]>([])
   const [pantry, rawSetPantry] = useState<PantryItem[]>([])
+  const [shoppingList, rawSetShoppingList] = useState<ShoppingList>(EMPTY_SHOPPING)
 
   // Filas de escrita pendentes (merged por dia) + flags para profile/foods/recipes/plano/despensa
   const pendingDays = useRef<Map<string, DayPatch>>(new Map())
@@ -110,12 +157,13 @@ export function useSyncedData(userId: number): SyncedData {
   const pendingRecipes = useRef(false)
   const pendingMealPlan = useRef(false)
   const pendingPantry = useRef(false)
+  const pendingShoppingList = useRef(false)
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const stateRef = useRef({ profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry })
-  stateRef.current = { profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry }
+  const stateRef = useRef({ profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry, shoppingList })
+  stateRef.current = { profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry, shoppingList }
 
   const flush = useCallback(async () => {
-    const { profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry } = stateRef.current
+    const { profile, diary, water, exercise, customFoods, recipes, mealPlan, pantry, shoppingList } = stateRef.current
 
     if (pendingProfile.current && profile) {
       pendingProfile.current = false
@@ -162,6 +210,15 @@ export function useSyncedData(userId: number): SyncedData {
       }
     }
 
+    if (pendingShoppingList.current) {
+      pendingShoppingList.current = false
+      try {
+        await api('/shopping-list', { method: 'PUT', body: shoppingList })
+      } catch {
+        pendingShoppingList.current = true
+      }
+    }
+
     for (const [date, patch] of [...pendingDays.current]) {
       // envia sempre o estado ATUAL do dia (last-writer-wins, replay-safe)
       const body: DayPatch = {}
@@ -200,6 +257,7 @@ export function useSyncedData(userId: number): SyncedData {
     rawSetRecipes(readCache<Recipe[]>(KEYS.recipes, []))
     rawSetMealPlan(readCache<MealPlanEntry[]>(KEYS.mealPlan, []))
     rawSetPantry(readCache<PantryItem[]>(KEYS.pantry, []))
+    rawSetShoppingList(readCache<ShoppingList>(KEYS.shoppingList, EMPTY_SHOPPING))
 
     let cancelled = false
     api<AllData>('/data/all')
@@ -219,6 +277,8 @@ export function useSyncedData(userId: number): SyncedData {
           rawSetRecipes(data.recipes ?? [])
           rawSetMealPlan(data.mealPlan ?? [])
           rawSetPantry(data.pantry ?? [])
+    rawSetShoppingList(data.shoppingList ?? EMPTY_SHOPPING)
+          rawSetShoppingList(adoptShoppingList(data.shoppingList, pendingShoppingList))
           writeCache(KEYS.profile, data.profile)
           writeCache(KEYS.diary, data.diary)
           writeCache(KEYS.water, data.water)
@@ -250,6 +310,7 @@ export function useSyncedData(userId: number): SyncedData {
       recipes: readCache<Recipe[]>(KEYS.recipes, []),
       mealPlan: readCache<MealPlanEntry[]>(KEYS.mealPlan, []),
       pantry: readCache<PantryItem[]>(KEYS.pantry, []),
+      shoppingList: readCache<ShoppingList>(KEYS.shoppingList, EMPTY_SHOPPING),
     }
     const data = await api<AllData>('/data/import', { method: 'POST', body: snapshot })
     rawSetProfile(data.profile)
@@ -274,6 +335,7 @@ export function useSyncedData(userId: number): SyncedData {
     rawSetRecipes([])
     rawSetMealPlan([])
     rawSetPantry([])
+    rawSetShoppingList(EMPTY_SHOPPING)
     setMigrationAvailable(false)
   }, [])
 
@@ -393,6 +455,19 @@ export function useSyncedData(userId: number): SyncedData {
     [scheduleFlush],
   )
 
+  const setShoppingList: React.Dispatch<React.SetStateAction<ShoppingList>> = useCallback(
+    (action) => {
+      rawSetShoppingList((prev) => {
+        const next = typeof action === 'function' ? action(prev) : action
+        writeCache(KEYS.shoppingList, next)
+        pendingShoppingList.current = true
+        scheduleFlush()
+        return next
+      })
+    },
+    [scheduleFlush],
+  )
+
   return useMemo(
     () => ({
       loading,
@@ -415,12 +490,14 @@ export function useSyncedData(userId: number): SyncedData {
       setMealPlan,
       pantry,
       setPantry,
+      shoppingList,
+      setShoppingList,
     }),
     [
       loading, migrationAvailable, importLocalData, dismissMigration,
       profile, setProfile, diary, setDiary, water, setWater,
       exercise, setExercise, customFoods, setCustomFoods, recipes, setRecipes,
-      mealPlan, setMealPlan, pantry, setPantry,
+      mealPlan, setMealPlan, pantry, setPantry, shoppingList, setShoppingList,
     ],
   )
 }

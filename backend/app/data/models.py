@@ -157,3 +157,18 @@ class DbCustomFood(Base):
     saturates: Mapped[float | None] = mapped_column(Float, nullable=True)
     salt: Mapped[float | None] = mapped_column(Float, nullable=True)
     portions: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{label,grams}]
+
+
+class DbShoppingList(Base):
+    """Lista de compras do utilizador: uma linha, dois arrays JSON.
+
+    `extras` são itens escritos à mão (nomes); `checked` são as chaves dos
+    itens já na cesta. Ambos são substituídos por inteiro a cada escrita, como
+    o resto da sincronização.
+    """
+
+    __tablename__ = "shopping_lists"
+
+    user_id: Mapped[int] = mapped_column(_user_fk(), primary_key=True)
+    extras: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    checked: Mapped[list] = mapped_column(JSON, nullable=False, default=list)

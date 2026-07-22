@@ -1,8 +1,8 @@
 """Pydantic schemas mirroring src/types.ts exactly (camelCase field names)."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 MealId = Literal["madrugada", "breakfast", "lunch", "snack", "dinner", "supper"]
 Unit = Literal["g", "ml"]
@@ -116,6 +116,17 @@ class PantryItem(BaseModel):
     expiresOn: str | None = Field(default=None, max_length=10)
 
 
+# nomes de itens e chaves de riscado: curtos por natureza, limitados por item
+ShopText = Annotated[str, StringConstraints(max_length=120)]
+
+
+class ShoppingList(BaseModel):
+    """Itens escritos à mão e riscados da lista de compras."""
+
+    extras: list[ShopText] = Field(default=[], max_length=200)
+    checked: list[ShopText] = Field(default=[], max_length=500)
+
+
 class AllData(BaseModel):
     profile: Profile | None
     diary: dict[str, list[Entry]]
@@ -125,6 +136,7 @@ class AllData(BaseModel):
     recipes: list[Recipe] = []
     mealPlan: list[MealPlanEntry] = []
     pantry: list[PantryItem] = []
+    shoppingList: ShoppingList = ShoppingList()
 
 
 class DayUpsert(BaseModel):
@@ -144,6 +156,7 @@ class ImportPayload(BaseModel):
     recipes: list[Recipe] = Field(default=[], max_length=200)
     mealPlan: list[MealPlanEntry] = Field(default=[], max_length=200)
     pantry: list[PantryItem] = Field(default=[], max_length=500)
+    shoppingList: ShoppingList = ShoppingList()
 
 
 # ImportPayload é a AllData mais tolerante (tudo opcional) — recipes já incluído acima.

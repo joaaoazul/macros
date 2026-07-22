@@ -80,6 +80,7 @@ export default function App() {
     profile: rawProfile, setProfile, diary, setDiary,
     water, setWater, exercise, setExercise, customFoods, setCustomFoods,
     recipes, setRecipes, mealPlan, setMealPlan, pantry, setPantry,
+    shoppingList, setShoppingList,
   } = data
 
   /** Regista os itens de uma receita na refeição escolhida, no dia de hoje. */
@@ -153,6 +154,8 @@ export default function App() {
             setMealPlan={setMealPlan}
             pantry={pantry}
             setPantry={setPantry}
+            shoppingList={shoppingList}
+            setShoppingList={setShoppingList}
             onLog={logRecipeToday}
           />
         )}

@@ -20,6 +20,7 @@ import {
 import { analyzeMeal } from '../lib/ai'
 import { defaultExpiryFor, daysUntil, expiryStatus, recipesCookableFrom, recipesToUseUp, sortByExpiry } from '../lib/pantry'
 import { haptic, uid } from '../lib/store'
+import type { ShoppingList } from '../lib/sync'
 import { useToast } from '../lib/toast'
 import { placeInSlots, recipeLabel, suggestedForMeal, type PlanMeal, type SlotTarget } from '../lib/planner'
 import LogPortionSheet from './LogPortionSheet'
@@ -36,11 +37,13 @@ interface Props {
   setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   pantry: PantryItem[]
   setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
+  shoppingList: ShoppingList
+  setShoppingList: React.Dispatch<React.SetStateAction<ShoppingList>>
   /** regista no diário de hoje uma refeição já planeada */
   onLog: (items: RecipeItem[], meal: MealId) => void
 }
 
-export default function Planner({ recipes, customFoods, diary, mealPlan, setMealPlan, pantry, setPantry, onLog }: Props) {
+export default function Planner({ recipes, customFoods, diary, mealPlan, setMealPlan, pantry, setPantry, shoppingList, setShoppingList, onLog }: Props) {
   const [slot, setSlot] = useState<SlotTarget | null>(null)
   const [logging, setLogging] = useState<{ entry: MealPlanEntry; meal: MealId } | null>(null)
   const [editing, setEditing] = useState<{ entry: MealPlanEntry; meal: PlanMeal } | null>(null)
@@ -238,6 +241,8 @@ export default function Planner({ recipes, customFoods, diary, mealPlan, setMeal
           plan={mealPlan}
           pantry={pantry}
           customFoods={customFoods}
+          shoppingList={shoppingList}
+          setShoppingList={setShoppingList}
           onBack={() => setView('plan')}
         />
       )}
@@ -247,6 +252,7 @@ export default function Planner({ recipes, customFoods, diary, mealPlan, setMeal
           setPantry={setPantry}
           recipes={recipes}
           customFoods={customFoods}
+          setShoppingList={setShoppingList}
           onBack={() => setView('plan')}
         />
       )}
@@ -597,30 +603,29 @@ function FoodSuggest({
   )
 }
 
-const CHECKED_KEY = 'macros.shopChecked'
-const EXTRAS_KEY = 'macros.shopExtra'
-
 /** Lista de compras derivada, agrupada por corredor, com check-off e produtos OFF. */
-function ShoppingListView({ plan, pantry, customFoods, onBack }: { plan: MealPlanEntry[]; pantry: PantryItem[]; customFoods: Food[]; onBack: () => void }) {
-  const [extras, setExtras] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(EXTRAS_KEY) || '[]') as string[]
-    } catch {
-      return []
-    }
-  })
+function ShoppingListView({
+  plan,
+  pantry,
+  customFoods,
+  shoppingList,
+  setShoppingList,
+  onBack,
+}: {
+  plan: MealPlanEntry[]
+  pantry: PantryItem[]
+  customFoods: Food[]
+  shoppingList: ShoppingList
+  setShoppingList: React.Dispatch<React.SetStateAction<ShoppingList>>
+  onBack: () => void
+}) {
+  const extras = shoppingList.extras
   const groups = useMemo(
     () => withExtras(buildShoppingList(plan, pantry), extras),
     [plan, pantry, extras],
   )
   const total = groups.reduce((s, g) => s + g.items.length, 0)
-  const [checked, setChecked] = useState<Set<string>>(() => {
-    try {
-      return new Set(JSON.parse(localStorage.getItem(CHECKED_KEY) || '[]') as string[])
-    } catch {
-      return new Set()
-    }
-  })
+  const checked = useMemo(() => new Set(shoppingList.checked), [shoppingList.checked])
   const [finding, setFinding] = useState<ShoppingItem | null>(null)
   const [newItem, setNewItem] = useState('')
   const toast = useToast()
@@ -631,29 +636,15 @@ function ShoppingListView({ plan, pantry, customFoods, onBack }: { plan: MealPla
   )
 
   // Os riscados são guardados por chave; quando o plano muda, as chaves antigas
-  // deixam de existir e ficariam a acumular no localStorage para sempre.
+  // deixam de existir e ficariam a acumular para sempre. Só escreve quando há
+  // mesmo o que podar, senão cada mudança de plano dava um PUT à toa.
   useEffect(() => {
     const live = new Set(groups.flatMap((g) => g.items.map((i) => i.key)))
-    setChecked((cur) => {
-      const next = new Set([...cur].filter((k) => live.has(k)))
-      if (next.size === cur.size) return cur
-      try {
-        localStorage.setItem(CHECKED_KEY, JSON.stringify([...next]))
-      } catch {
-        /* cache opcional */
-      }
-      return next
+    setShoppingList((cur) => {
+      const next = cur.checked.filter((k) => live.has(k))
+      return next.length === cur.checked.length ? cur : { ...cur, checked: next }
     })
-  }, [groups])
-
-  const saveExtras = (list: string[]) => {
-    setExtras(list)
-    try {
-      localStorage.setItem(EXTRAS_KEY, JSON.stringify(list))
-    } catch {
-      /* cache opcional */
-    }
-  }
+  }, [groups, setShoppingList])
 
   const addExtraNamed = (raw: string) => {
     const name = raw.trim()
@@ -663,10 +654,13 @@ function ShoppingListView({ plan, pantry, customFoods, onBack }: { plan: MealPla
       return
     }
     haptic(10)
-    saveExtras([...extras, name])
+    setShoppingList((cur) => ({ ...cur, extras: [...cur.extras, name] }))
     setNewItem('')
   }
   const addExtra = () => addExtraNamed(newItem)
+
+  const removeExtra = (key: string) =>
+    setShoppingList((cur) => ({ ...cur, extras: cur.extras.filter((e) => extraItem(e).key !== key) }))
 
   const share = async () => {
     const text = shoppingListText(groups, checked)
@@ -683,16 +677,12 @@ function ShoppingListView({ plan, pantry, customFoods, onBack }: { plan: MealPla
 
   const toggle = (key: string) => {
     haptic(10)
-    setChecked((cur) => {
-      const next = new Set(cur)
-      next.has(key) ? next.delete(key) : next.add(key)
-      try {
-        localStorage.setItem(CHECKED_KEY, JSON.stringify([...next]))
-      } catch {
-        /* cache opcional */
-      }
-      return next
-    })
+    setShoppingList((cur) => ({
+      ...cur,
+      checked: cur.checked.includes(key)
+        ? cur.checked.filter((k) => k !== key)
+        : [...cur.checked, key],
+    }))
   }
 
   return (
@@ -789,7 +779,7 @@ function ShoppingListView({ plan, pantry, customFoods, onBack }: { plan: MealPla
                     </button>
                     {item.key.startsWith('extra|') && (
                       <button
-                        onClick={() => saveExtras(extras.filter((e) => extraItem(e).key !== item.key))}
+                        onClick={() => removeExtra(item.key)}
                         aria-label={`Remover ${item.name}`}
                         className="press shrink-0 text-muted"
                       >
@@ -904,12 +894,14 @@ function PantryView({
   setPantry,
   recipes,
   customFoods,
+  setShoppingList,
   onBack,
 }: {
   pantry: PantryItem[]
   setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
   recipes: Recipe[]
   customFoods: Food[]
+  setShoppingList: React.Dispatch<React.SetStateAction<ShoppingList>>
   onBack: () => void
 }) {
   const [tab, setTab] = useState<'stock' | 'have' | 'recurring'>('stock')
@@ -1004,15 +996,12 @@ function PantryView({
     haptic(15)
     remove(it.id)
     if (confirm(`Juntar "${it.name}" à lista de compras?`)) {
-      try {
-        const extras = JSON.parse(localStorage.getItem(EXTRAS_KEY) || '[]') as string[]
-        if (!extras.some((e) => e.toLowerCase() === it.name.toLowerCase())) {
-          localStorage.setItem(EXTRAS_KEY, JSON.stringify([...extras, it.name]))
-        }
-        toast('Na lista de compras')
-      } catch {
-        /* cache opcional */
-      }
+      setShoppingList((cur) =>
+        cur.extras.some((e) => e.toLowerCase() === it.name.toLowerCase())
+          ? cur
+          : { ...cur, extras: [...cur.extras, it.name] },
+      )
+      toast('Na lista de compras')
     }
   }
 

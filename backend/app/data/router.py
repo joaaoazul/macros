@@ -15,6 +15,7 @@ from app.data.models import (
     DbExercise,
     DbMealPlanEntry,
     DbPantryItem,
+    DbShoppingList,
     DbProfile,
     DbRecipe,
     DbWater,
@@ -29,6 +30,7 @@ from app.data.schemas import (
     ImportPayload,
     MealPlanEntry,
     PantryItem,
+    ShoppingList,
     Profile,
     Recipe,
     Weight,
@@ -187,6 +189,10 @@ async def _load_all(db: AsyncSession, user_id: int) -> AllData:
         ).scalars()
     ]
 
+    shopping = (
+        await db.execute(select(DbShoppingList).where(DbShoppingList.user_id == user_id))
+    ).scalar_one_or_none()
+
     return AllData(
         profile=_profile_out(profile) if profile else None,
         diary=diary,
@@ -196,6 +202,11 @@ async def _load_all(db: AsyncSession, user_id: int) -> AllData:
         recipes=recipes,
         mealPlan=meal_plan,
         pantry=pantry,
+        shoppingList=(
+            ShoppingList(extras=shopping.extras, checked=shopping.checked)
+            if shopping
+            else ShoppingList()
+        ),
     )
 
 
@@ -333,6 +344,24 @@ async def put_pantry(
     return body
 
 
+@router.put("/shopping-list", response_model=ShoppingList)
+async def put_shopping_list(
+    body: ShoppingList,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ShoppingList:
+    """Upsert: uma linha por utilizador, substituída por inteiro."""
+    row = (
+        await db.execute(select(DbShoppingList).where(DbShoppingList.user_id == user.id))
+    ).scalar_one_or_none()
+    if row is None:
+        db.add(DbShoppingList(user_id=user.id, extras=body.extras, checked=body.checked))
+    else:
+        row.extras = body.extras
+        row.checked = body.checked
+    return body
+
+
 @router.get("/weights", response_model=list[Weight])
 async def list_weights(
     db: AsyncSession = Depends(get_db),
@@ -422,6 +451,18 @@ async def import_data(
     for p in _dedupe(body.pantry, lambda p: p.id):
         if p.id not in existing_pantry_ids:
             db.add(_pantry_row(user.id, p))
+
+    # a importação preenche lacunas, nunca substitui o que já existe
+    if (body.shoppingList.extras or body.shoppingList.checked) and not (
+        current.shoppingList.extras or current.shoppingList.checked
+    ):
+        db.add(
+            DbShoppingList(
+                user_id=user.id,
+                extras=body.shoppingList.extras,
+                checked=body.shoppingList.checked,
+            )
+        )
 
     await db.flush()
     return await _load_all(db, user.id)

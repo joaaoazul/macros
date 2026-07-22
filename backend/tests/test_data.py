@@ -214,3 +214,60 @@ async def test_delete_account_requires_password_and_cascades(client):
         "/api/v1/auth/login", json={"email": "ana@example.com", "password": "password-forte-123"}
     )
     assert resp.status_code == 401
+
+
+# ── lista de compras sincronizada ───────────────────────────────────────────
+
+
+async def test_shopping_list_defaults_empty(client):
+    await register_user(client)
+    body = (await client.get("/api/v1/data/all")).json()
+    assert body["shoppingList"] == {"extras": [], "checked": []}
+
+
+async def test_shopping_list_round_trip(client):
+    await register_user(client)
+    payload = {"extras": ["Café", "Papel de cozinha"], "checked": ["extra|cafe"]}
+    r = await client.put("/api/v1/shopping-list", json=payload)
+    assert r.status_code == 200, r.text
+    assert (await client.get("/api/v1/data/all")).json()["shoppingList"] == payload
+
+
+async def test_shopping_list_replaces_wholesale(client):
+    """Segunda escrita substitui — é uma lista, não um histórico."""
+    await register_user(client)
+    await client.put("/api/v1/shopping-list", json={"extras": ["Café"], "checked": []})
+    await client.put("/api/v1/shopping-list", json={"extras": ["Chá"], "checked": []})
+    assert (await client.get("/api/v1/data/all")).json()["shoppingList"]["extras"] == ["Chá"]
+
+
+async def test_shopping_list_rejects_oversize(client):
+    await register_user(client)
+    too_many = await client.put(
+        "/api/v1/shopping-list", json={"extras": [f"item {i}" for i in range(201)], "checked": []}
+    )
+    assert too_many.status_code == 422
+    too_long = await client.put(
+        "/api/v1/shopping-list", json={"extras": ["x" * 121], "checked": []}
+    )
+    assert too_long.status_code == 422
+
+
+async def test_shopping_list_requires_auth(client):
+    r = await client.put("/api/v1/shopping-list", json={"extras": [], "checked": []})
+    assert r.status_code == 401
+
+
+async def test_import_carries_shopping_list_without_clobbering(client):
+    await register_user(client)
+    await client.post(
+        "/api/v1/data/import",
+        json={"shoppingList": {"extras": ["Café"], "checked": []}},
+    )
+    assert (await client.get("/api/v1/data/all")).json()["shoppingList"]["extras"] == ["Café"]
+    # já havia lista: a importação não a substitui
+    await client.post(
+        "/api/v1/data/import",
+        json={"shoppingList": {"extras": ["Chá"], "checked": []}},
+    )
+    assert (await client.get("/api/v1/data/all")).json()["shoppingList"]["extras"] == ["Café"]
