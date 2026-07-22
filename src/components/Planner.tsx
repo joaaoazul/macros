@@ -26,7 +26,7 @@ import { placeInSlots, recipeLabel, suggestedForMeal, type PlanMeal, type SlotTa
 import LogPortionSheet from './LogPortionSheet'
 import PantryPhotoSheet from './PantryPhotoSheet'
 import PlanTargetSheet from './PlanTargetSheet'
-import { Button, Card, ScreenHeader, SegmentedControl, Stepper, Z } from './ui'
+import { Button, Card, ConfirmSheet, ScreenHeader, SegmentedControl, Stepper, Z } from './ui'
 
 interface Props {
   recipes: Recipe[]
@@ -49,6 +49,7 @@ export default function Planner({ recipes, customFoods, diary, mealPlan, setMeal
   const [editing, setEditing] = useState<{ entry: MealPlanEntry; meal: PlanMeal } | null>(null)
   const [copying, setCopying] = useState<{ entry: MealPlanEntry; meal: PlanMeal } | null>(null)
   const [view, setView] = useState<'plan' | 'list' | 'pantry'>('plan')
+  const [confirmClear, setConfirmClear] = useState(false)
   const today = todayWeekday()
   const toast = useToast()
 
@@ -68,9 +69,9 @@ export default function Planner({ recipes, customFoods, diary, mealPlan, setMeal
     )
 
   const clearWeek = () => {
-    if (!confirm('Limpar o plano da semana toda?')) return
     haptic(20)
     setMealPlan([])
+    setConfirmClear(false)
   }
 
   const setEntry = (day: number, meal: 'lunch' | 'dinner', entry: MealPlanEntry | null) => {
@@ -112,7 +113,7 @@ export default function Planner({ recipes, customFoods, diary, mealPlan, setMeal
 
       {plannedCount > 0 && (
         <button
-          onClick={clearWeek}
+          onClick={() => setConfirmClear(true)}
           className="press w-full text-center text-xs font-medium text-muted"
         >
           Limpar a semana
@@ -206,6 +207,17 @@ export default function Planner({ recipes, customFoods, diary, mealPlan, setMeal
         />
       )}
 
+      {confirmClear && (
+        <ConfirmSheet
+          title="Limpar a semana toda?"
+          body="Apaga as refeições planeadas dos sete dias. A lista de compras passa a refletir isso."
+          confirmLabel="Limpar a semana"
+          destructive
+          onConfirm={clearWeek}
+          onClose={() => setConfirmClear(false)}
+        />
+      )}
+
       {editing && (
         <EntrySheet
           entry={editing.entry}
@@ -253,6 +265,7 @@ export default function Planner({ recipes, customFoods, diary, mealPlan, setMeal
           recipes={recipes}
           customFoods={customFoods}
           setShoppingList={setShoppingList}
+          setMealPlan={setMealPlan}
           onBack={() => setView('plan')}
         />
       )}
@@ -895,6 +908,7 @@ function PantryView({
   recipes,
   customFoods,
   setShoppingList,
+  setMealPlan,
   onBack,
 }: {
   pantry: PantryItem[]
@@ -902,6 +916,7 @@ function PantryView({
   recipes: Recipe[]
   customFoods: Food[]
   setShoppingList: React.Dispatch<React.SetStateAction<ShoppingList>>
+  setMealPlan: React.Dispatch<React.SetStateAction<MealPlanEntry[]>>
   onBack: () => void
 }) {
   const [tab, setTab] = useState<'stock' | 'have' | 'recurring'>('stock')
@@ -911,6 +926,8 @@ function PantryView({
   const [qty, setQty] = useState('1')
   const [expiresOn, setExpiresOn] = useState('')
   const [photoSheet, setPhotoSheet] = useState(false)
+  const [finished, setFinished] = useState<PantryItem | null>(null)
+  const [planning, setPlanning] = useState<Recipe | null>(null)
   const toast = useToast()
 
   const items = tab === 'stock' ? sortByExpiry(pantry.filter((p) => p.kind === 'stock')) : pantry.filter((p) => p.kind === tab)
@@ -991,11 +1008,16 @@ function PantryView({
     setPantry((p) => p.map((x) => (x.id === it.id ? { ...x, qty: next } : x)))
   }
 
-  /** "Acabou": sai do stock e, se quiseres, volta já para a lista de compras. */
+  /** "Acabou": sai do stock e pergunta se volta já para a lista de compras. */
   const finish = (it: PantryItem) => {
     haptic(15)
     remove(it.id)
-    if (confirm(`Juntar "${it.name}" à lista de compras?`)) {
+    setFinished(it)
+  }
+
+  const addFinishedToList = () => {
+    const it = finished
+    if (it) {
       setShoppingList((cur) =>
         cur.extras.some((e) => e.toLowerCase() === it.name.toLowerCase())
           ? cur
@@ -1003,6 +1025,7 @@ function PantryView({
       )
       toast('Na lista de compras')
     }
+    setFinished(null)
   }
 
   return (
@@ -1049,14 +1072,19 @@ function PantryView({
             {suggestions.map((r) => {
               const label = r.name ?? r.items.map((i) => i.foodName).join(' + ')
               return (
-                <div key={r.id} className="flex items-center gap-2.5 text-sm">
+                <button
+                  key={r.id}
+                  onClick={() => setPlanning(r)}
+                  className="row-press -mx-1 flex w-full items-center gap-2.5 rounded-lg px-1 py-1 text-left text-sm"
+                >
                   <span aria-hidden>{r.emoji}</span>
                   <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
-                </div>
+                  <span className="shrink-0 text-[11px] font-semibold text-accent">Planear</span>
+                </button>
               )
             })}
             <p className="text-xs text-muted">
-              Usam {expiring.map((p) => p.name).slice(0, 3).join(', ')}{expiring.length > 3 ? '…' : ''} — regista-as nas Receitas.
+              Usam {expiring.map((p) => p.name).slice(0, 3).join(', ')}{expiring.length > 3 ? '…' : ''}.
             </p>
           </Card>
         )}
@@ -1161,6 +1189,37 @@ function PantryView({
           <p className="px-1 py-6 text-center text-sm text-muted">Ainda nada aqui.</p>
         )}
       </div>
+
+      {finished && (
+        <ConfirmSheet
+          title={`"${finished.name}" acabou`}
+          body="Queres juntá-lo já à lista de compras?"
+          confirmLabel="Juntar à lista"
+          onConfirm={addFinishedToList}
+          onClose={() => setFinished(null)}
+        />
+      )}
+
+      {planning && (
+        <PlanTargetSheet
+          title={recipeLabel(planning)}
+          emoji={planning.emoji}
+          occupied={() => false}
+          onClose={() => setPlanning(null)}
+          onConfirm={(targets) => {
+            setMealPlan((plan) =>
+              placeInSlots(
+                plan,
+                { name: recipeLabel(planning), emoji: planning.emoji, items: planning.items },
+                targets,
+                uid,
+              ),
+            )
+            toast(targets.length === 1 ? 'Planeado para 1 refeição' : `Planeado para ${targets.length} refeições`)
+            setPlanning(null)
+          }}
+        />
+      )}
 
       {photoSheet && (
         <PantryPhotoSheet

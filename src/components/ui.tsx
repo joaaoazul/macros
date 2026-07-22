@@ -210,6 +210,49 @@ export function SegmentedControl<T extends string>({
   )
 }
 
+/** Confirmação ao estilo iOS, em vez do `confirm()` do browser.
+ *
+ * O diálogo nativo mostra o domínio do site e ignora o tema — num ecrã que
+ * finge ser uma app, denuncia logo que não é. */
+export function ConfirmSheet({
+  title,
+  body,
+  confirmLabel,
+  destructive,
+  onConfirm,
+  onClose,
+}: {
+  title: string
+  body?: string
+  confirmLabel: string
+  destructive?: boolean
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className={`fixed inset-0 ${Z.top} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
+      <div
+        className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5"
+        onClick={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <h2 className="text-center text-lg font-bold">{title}</h2>
+        {body && <p className="mt-1 text-center text-sm text-ink-2">{body}</p>}
+        <div className="mt-5 space-y-2">
+          <Button full size="lg" variant={destructive ? 'danger' : 'primary'} onClick={onConfirm}>
+            {confirmLabel}
+          </Button>
+          <Button full size="lg" variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** Contador −/valor/＋. Estava escrito três vezes (doses, stock, foto da
  * despensa), com fundos diferentes em cada cópia. */
 export function Stepper({
