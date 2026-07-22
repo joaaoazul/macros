@@ -182,7 +182,7 @@ export default function PantryPhotoSheet({ onAdd, onClose }: Props) {
                           setRows((rs) => rs.map((x, j) => (j === i ? { ...x, expiresOn: e.target.value } : x)))
                         }
                         aria-label={`Validade de ${r.name}`}
-                        className="mt-0.5 rounded-lg bg-bg px-2 py-1 text-[11px] tabular-nums text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent"
+                        className="mt-0.5 w-full min-w-0 rounded-lg bg-bg px-2 py-1 text-[11px] tabular-nums text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent"
                       />
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">

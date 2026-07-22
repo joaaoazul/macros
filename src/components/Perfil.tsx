@@ -283,8 +283,11 @@ function BodyMetricsCard({
         </div>
       </div>
 
+      {/* min-w-0 nas colunas: um <input type="date"> tem largura intrínseca no
+          Safari e, como os itens de grelha são min-width:auto, empurrava a
+          coluna para cima da vizinha — a data ficava por baixo da gordura. */}
       <div className="grid grid-cols-2 gap-4">
-        <label className="block">
+        <label className="block min-w-0">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
             Nascimento
           </span>
@@ -293,12 +296,12 @@ function BodyMetricsCard({
             value={profile.birthdate ?? ''}
             max={new Date().toISOString().slice(0, 10)}
             onChange={(e) => onRecompute({ birthdate: e.target.value || undefined })}
-            className="w-full rounded-lg bg-bg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent"
+            className="w-full min-w-0 rounded-lg bg-bg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent"
             aria-label="Data de nascimento"
           />
           <span className="mt-1 block text-[11px] text-muted">Idade: {effectiveAge} anos</span>
         </label>
-        <label className="block">
+        <label className="block min-w-0">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">
             Gordura (%)
           </span>
