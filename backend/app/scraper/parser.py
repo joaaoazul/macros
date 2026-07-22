@@ -183,6 +183,46 @@ def _nutrition_per_serving(nutrition) -> dict | None:
     return present or None
 
 
+_MICRO_ING_RE = re.compile(
+    r'itemprop=["\'](?:recipeIngredient|ingredients)["\'][^>]*>(.*?)</', re.IGNORECASE | re.DOTALL
+)
+_MICRO_YIELD_RE = re.compile(
+    r'itemprop=["\']recipeYield["\'][^>]*?(?:content=["\'](.*?)["\'][^>]*>|>(.*?)</)',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _microdata_recipe(html: str) -> dict | None:
+    """Recipe via microdata (itemprop) para sites sem JSON-LD.
+
+    Só devolve algo se houver ≥2 linhas de ingredientes — uma só ocorrência
+    costuma ser lixo de template, e o fallback de título já cobre esse caso.
+    """
+    lines: list[str] = []
+    for raw in _MICRO_ING_RE.findall(html):
+        line = _clean(raw)
+        if line and line not in lines:
+            lines.append(line)
+    if len(lines) < 2:
+        return None
+
+    name = ""
+    m = _OG_TITLE_RE.search(html) or _TITLE_RE.search(html)
+    if m:
+        name = _clean(m.group(1))
+    if not name:
+        name = "Receita importada"
+
+    servings = 1
+    ym = _MICRO_YIELD_RE.search(html)
+    if ym:
+        n = _num(ym.group(1) or ym.group(2))
+        if n is not None and n >= 1:
+            servings = min(int(round(n)), 99)
+
+    return {"name": name, "emoji": "🍲", "servings": servings, "ingredients": lines[:60]}
+
+
 def parse(html: str) -> dict:
     """Devolve {'food': …|None, 'recipe': …|None, 'name': str, 'source': …}.
 
@@ -229,6 +269,11 @@ def parse(html: str) -> dict:
             if brand:
                 food["brand"] = _clean(brand)
             return {"food": food, "recipe": None, "name": name, "source": "product"}
+
+    # fallback: microdata (schema.org via itemprop) — sites antigos sem JSON-LD
+    micro = _microdata_recipe(html)
+    if micro is not None:
+        return {"food": None, "recipe": micro, "name": micro["name"], "source": "recipe"}
 
     # fallback: og:title ou <title>
     m = _OG_TITLE_RE.search(html) or _TITLE_RE.search(html)

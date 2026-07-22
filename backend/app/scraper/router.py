@@ -79,8 +79,18 @@ async def _fetch(url: str) -> str:
     Assim os headers chegam primeiro e abortamos a meio do corpo.
     """
     current = url
+    # Headers de browser real: muitos sites de receitas (WordPress/Cloudflare)
+    # devolvem 403 a User-Agents de bot, o que aparecia como "não consegui ler".
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8",
+    }
     async with httpx.AsyncClient(
-        timeout=TIMEOUT_SECONDS, follow_redirects=False, headers={"User-Agent": "MacrosBot/1.0"}
+        timeout=TIMEOUT_SECONDS, follow_redirects=False, headers=headers
     ) as client:
         for _ in range(MAX_REDIRECTS + 1):
             safe = safe_outbound_url(current, _ALLOWED_SCHEMES)

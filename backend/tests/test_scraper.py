@@ -82,6 +82,33 @@ def test_parse_none_when_empty():
     assert parse("<html></html>")["source"] == "none"
 
 
+MICRODATA_HTML = """
+<html><head><title>Arroz de pato tradicional | Receitas PT</title></head>
+<body itemscope itemtype="https://schema.org/Recipe">
+  <span itemprop="recipeYield" content="4 doses"></span>
+  <ul>
+    <li itemprop="recipeIngredient">400 g de arroz</li>
+    <li itemprop="recipeIngredient">1 pato pequeno</li>
+    <li itemprop="recipeIngredient">100 g de <b>chouriço</b></li>
+  </ul>
+</body></html>
+"""
+
+
+def test_parse_microdata_recipe_fallback():
+    r = parse(MICRODATA_HTML)
+    assert r["source"] == "recipe"
+    rec = r["recipe"]
+    assert rec["servings"] == 4
+    assert rec["ingredients"] == ["400 g de arroz", "1 pato pequeno", "100 g de chouriço"]
+    assert "Arroz de pato" in rec["name"]
+
+
+def test_parse_microdata_needs_two_ingredients():
+    html = '<html><li itemprop="recipeIngredient">1 ovo</li></html>'
+    assert parse(html)["source"] == "none"
+
+
 def test_ssrf_blocks_private_and_scheme():
     assert safe_outbound_url("ftp://x/y", ("http", "https")) is None
     with patch("app.net.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 80))]):
