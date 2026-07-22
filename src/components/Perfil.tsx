@@ -815,10 +815,10 @@ function ContaCard() {
         <div className="text-xs font-semibold uppercase tracking-wide text-muted">Conta</div>
         <div className="mt-0.5 font-medium">{user?.email}</div>
       </div>
-      <button onClick={doExport} className="block w-full p-4 text-left text-sm font-medium text-accent">
+      <button onClick={doExport} className="row-press block w-full p-4 text-left text-sm font-medium text-accent">
         Exportar os meus dados (JSON)
       </button>
-      <button onClick={doLogout} className="block w-full p-4 text-left text-sm font-medium text-accent">
+      <button onClick={doLogout} className="row-press block w-full p-4 text-left text-sm font-medium text-accent">
         Terminar sessão
       </button>
       <div className="p-4">

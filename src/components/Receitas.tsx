@@ -517,7 +517,7 @@ function IngredientPicker({
                       setSelected(f)
                       setGrams('100')
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
+                    className="row-press flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
                   >
                     <span className="text-xl" aria-hidden>{f.emoji}</span>
                     <div className="min-w-0 flex-1">

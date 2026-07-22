@@ -85,7 +85,7 @@ export default function Conversations({ socket, onOpen, onBack }: Props) {
               <button
                 key={c.id}
                 onClick={() => onOpen(c)}
-                className="animate-in flex w-full items-center gap-3 p-4 text-left transition-colors active:bg-bg"
+                className="animate-in row-press flex w-full items-center gap-3 p-4 text-left"
                 style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
               >
                 {c.type === 'group' ? (

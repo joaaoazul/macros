@@ -582,7 +582,7 @@ function ShareCard({
       : Math.round(Number(payload.kcal) || 0)
   return (
     <div className={`w-60 overflow-hidden rounded-3xl ${mine ? 'bg-accent text-white' : 'bg-surface'}`}>
-      <button onClick={(e) => { e.stopPropagation(); onOpenPicker() }} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+      <button onClick={(e) => { e.stopPropagation(); onOpenPicker() }} className="row-press flex w-full items-center gap-3 px-4 py-3 text-left">
         <span className="text-2xl">{emoji}</span>
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-wide opacity-70">

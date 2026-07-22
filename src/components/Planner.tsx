@@ -76,10 +76,10 @@ export default function Planner({ recipes, customFoods, mealPlan, setMealPlan, p
   }
 
   if (view === 'list') {
-    return <ShoppingListView plan={mealPlan} pantry={pantry} onBack={() => setView('plan')} />
+    return <ShoppingListView plan={mealPlan} pantry={pantry} customFoods={customFoods} onBack={() => setView('plan')} />
   }
   if (view === 'pantry') {
-    return <PantryView pantry={pantry} setPantry={setPantry} recipes={recipes} onBack={() => setView('plan')} />
+    return <PantryView pantry={pantry} setPantry={setPantry} recipes={recipes} customFoods={customFoods} onBack={() => setView('plan')} />
   }
 
   return (
@@ -242,6 +242,7 @@ function SlotPicker({
   const [query, setQuery] = useState('')
   const [foodSel, setFoodSel] = useState<Food | null>(null)
   const [grams, setGrams] = useState('150')
+  const offResults = useOffSearch(query)
 
   const q = query.trim().toLowerCase()
   const matchedRecipes = recipes.filter((r) => {
@@ -320,7 +321,7 @@ function SlotPicker({
                       <button
                         key={r.id}
                         onClick={() => onPick(label, r.emoji, r.items)}
-                        className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
+                        className="row-press flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
                       >
                         <span className="text-xl" aria-hidden>{r.emoji}</span>
                         <div className="min-w-0 flex-1">
@@ -339,7 +340,7 @@ function SlotPicker({
                     <button
                       key={f.id}
                       onClick={() => { setFoodSel(f); setGrams('150') }}
-                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
+                      className="row-press flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
                     >
                       <span className="text-xl" aria-hidden>{f.emoji}</span>
                       <div className="min-w-0 flex-1 truncate text-sm font-medium">{f.name}</div>
@@ -347,7 +348,23 @@ function SlotPicker({
                   ))}
                 </>
               )}
-              {matchedRecipes.length === 0 && matchedFoods.length === 0 && (
+              {offResults.length > 0 && (
+                <>
+                  <div className="pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted">Open Food Facts</div>
+                  {offResults.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => { setFoodSel(f); setGrams('150') }}
+                      className="row-press flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-surface"
+                    >
+                      <span className="text-xl" aria-hidden>{f.emoji}</span>
+                      <div className="min-w-0 flex-1 truncate text-sm font-medium">{f.name}</div>
+                      {f.brand && <span className="shrink-0 truncate text-xs text-muted">{f.brand}</span>}
+                    </button>
+                  ))}
+                </>
+              )}
+              {matchedRecipes.length === 0 && matchedFoods.length === 0 && offResults.length === 0 && (
                 <p className="px-2 py-6 text-center text-sm text-muted">
                   {q ? 'Sem resultados.' : 'Escreve para procurar receitas ou alimentos.'}
                 </p>
@@ -360,11 +377,74 @@ function SlotPicker({
   )
 }
 
+/** Pesquisa no Open Food Facts com debounce e abort da anterior. */
+function useOffSearch(query: string) {
+  const [results, setResults] = useState<Food[]>([])
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 3) {
+      setResults([])
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const r = await searchOpenFoodFacts(q, controller.signal)
+        setResults(r.slice(0, 6))
+      } catch {
+        /* rede/abort: fica sem sugestões OFF */
+      }
+    }, 450)
+    return () => {
+      controller.abort()
+      clearTimeout(timer)
+    }
+  }, [query])
+  return results
+}
+
+/** Sugestões por baixo de um campo de nome: os teus alimentos (incluindo os
+ * criados por IA/importados) + base local + Open Food Facts. */
+function FoodSuggest({
+  query,
+  customFoods,
+  onPick,
+}: {
+  query: string
+  customFoods: Food[]
+  onPick: (f: Food) => void
+}) {
+  const foods = useMemo(() => [...customFoods, ...FOOD_DB], [customFoods])
+  const local = useMemo(
+    () => (query.trim().length >= 2 ? searchFoods(foods, query).slice(0, 5) : []),
+    [foods, query],
+  )
+  const off = useOffSearch(query)
+  const seen = new Set(local.map((f) => f.name.toLowerCase()))
+  const merged = [...local, ...off.filter((f) => !seen.has(f.name.toLowerCase())).slice(0, 4)]
+  if (merged.length === 0) return null
+  return (
+    <Card className="mt-2 divide-y divide-line overflow-hidden">
+      {merged.map((f) => (
+        <button
+          key={f.id}
+          onClick={() => onPick(f)}
+          className="row-press flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left"
+        >
+          <span aria-hidden>{f.emoji}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{f.name}</span>
+          {f.brand && <span className="shrink-0 truncate text-xs text-muted">{f.brand}</span>}
+        </button>
+      ))}
+    </Card>
+  )
+}
+
 const CHECKED_KEY = 'macros.shopChecked'
 const EXTRAS_KEY = 'macros.shopExtra'
 
 /** Lista de compras derivada, agrupada por corredor, com check-off e produtos OFF. */
-function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pantry: PantryItem[]; onBack: () => void }) {
+function ShoppingListView({ plan, pantry, customFoods, onBack }: { plan: MealPlanEntry[]; pantry: PantryItem[]; customFoods: Food[]; onBack: () => void }) {
   const [extras, setExtras] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem(EXTRAS_KEY) || '[]') as string[]
@@ -418,8 +498,8 @@ function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pan
     }
   }
 
-  const addExtra = () => {
-    const name = newItem.trim()
+  const addExtraNamed = (raw: string) => {
+    const name = raw.trim()
     if (!name) return
     if (extras.some((e) => e.toLowerCase() === name.toLowerCase())) {
       setNewItem('')
@@ -429,6 +509,7 @@ function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pan
     saveExtras([...extras, name])
     setNewItem('')
   }
+  const addExtra = () => addExtraNamed(newItem)
 
   const share = async () => {
     const text = shoppingListText(groups, checked)
@@ -522,6 +603,10 @@ function ShoppingListView({ plan, pantry, onBack }: { plan: MealPlanEntry[]; pan
             Juntar
           </button>
         </div>
+
+        {newItem.trim().length >= 2 && (
+          <FoodSuggest query={newItem} customFoods={customFoods} onPick={(f) => addExtraNamed(f.name)} />
+        )}
 
         {groups.map((g) => (
           <section key={g.aisle.id} className="animate-in">
@@ -669,15 +754,18 @@ function PantryView({
   pantry,
   setPantry,
   recipes,
+  customFoods,
   onBack,
 }: {
   pantry: PantryItem[]
   setPantry: React.Dispatch<React.SetStateAction<PantryItem[]>>
   recipes: Recipe[]
+  customFoods: Food[]
   onBack: () => void
 }) {
   const [tab, setTab] = useState<'stock' | 'have' | 'recurring'>('stock')
   const [name, setName] = useState('')
+  const [pickedEmoji, setPickedEmoji] = useState('')
   const [grams, setGrams] = useState('')
   const [qty, setQty] = useState('1')
   const [expiresOn, setExpiresOn] = useState('')
@@ -709,17 +797,18 @@ function PantryView({
     haptic(15)
     const item: PantryItem =
       tab === 'have'
-        ? { id: uid(), kind: 'have', name: n, emoji: '✅' }
+        ? { id: uid(), kind: 'have', name: n, emoji: pickedEmoji || '✅' }
         : tab === 'recurring'
-          ? { id: uid(), kind: 'recurring', name: n, emoji: '🔁', grams: Number(grams) > 0 ? Number(grams) : 500, unit: 'g' }
+          ? { id: uid(), kind: 'recurring', name: n, emoji: pickedEmoji || '🔁', grams: Number(grams) > 0 ? Number(grams) : 500, unit: 'g' }
           : {
-              id: uid(), kind: 'stock', name: n, emoji: '🧺',
+              id: uid(), kind: 'stock', name: n, emoji: pickedEmoji || '🧺',
               qty: Number(qty) > 0 ? Number(qty) : 1,
               // sem data escolhida, sugere um prazo típico pelo nome (sempre editável depois de ver)
               expiresOn: expiresOn || defaultExpiryFor(n),
             }
     setPantry((p) => [...p, item])
     setName('')
+    setPickedEmoji('')
     setGrams('')
     setQty('1')
     setExpiresOn('')
@@ -828,7 +917,10 @@ function PantryView({
           <div className="flex items-center gap-2">
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+                setPickedEmoji('')
+              }}
               onKeyDown={(e) => e.key === 'Enter' && add()}
               placeholder={tab === 'have' ? 'ex.: Azeite' : tab === 'recurring' ? 'ex.: Aveia' : 'ex.: Frango'}
               className="min-w-0 flex-1 rounded-xl bg-bg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
@@ -853,6 +945,16 @@ function PantryView({
               Juntar
             </button>
           </div>
+          {!pickedEmoji && name.trim().length >= 2 && (
+            <FoodSuggest
+              query={name}
+              customFoods={customFoods}
+              onPick={(f) => {
+                setName(f.name)
+                setPickedEmoji(f.emoji)
+              }}
+            />
+          )}
           {tab === 'stock' && (
             <label className="mt-2 flex items-center gap-2 px-0.5">
               <span className="text-xs text-muted">Validade</span>

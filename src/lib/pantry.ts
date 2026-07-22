@@ -77,8 +77,10 @@ export function shelfLifeDays(name: string): number {
 
 /** Data de validade sugerida (ISO) para um alimento acabado de adicionar. */
 export function defaultExpiryFor(name: string, today = todayISODate()): string {
-  const base = Date.parse(`${today}T00:00:00`)
-  const d = new Date(base + shelfLifeDays(name) * 86_400_000)
+  // setDate em vez de somar ms: um prazo que atravessa a mudança de hora
+  // (DST) aterrava às 23:00 do dia anterior e sugeria a data errada
+  const d = new Date(`${today}T00:00:00`)
+  d.setDate(d.getDate() + shelfLifeDays(name))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 

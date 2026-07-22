@@ -128,7 +128,7 @@ export default function Friends({ onMessage }: Props) {
             <button
               key={f.id}
               onClick={() => setProfileUser(f.user.username)}
-              className="flex w-full items-center gap-3 p-4 text-left"
+              className="row-press flex w-full items-center gap-3 p-4 text-left"
             >
               <Avatar avatar={f.user.avatar} avatarPhoto={f.user.avatarPhoto} size={40} />
               <div className="min-w-0 flex-1">

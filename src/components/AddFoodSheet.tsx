@@ -644,7 +644,7 @@ function MicroRow({ label, value }: { label: string; value: number }) {
 function FoodRow({ food, onPick, onInfo }: { food: Food; onPick: (f: Food) => void; onInfo: (f: Food) => void }) {
   return (
     <li className="flex items-center">
-      <button onClick={() => onPick(food)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
+      <button onClick={() => onPick(food)} className="row-press flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
         <span className="text-xl" aria-hidden>
           {food.emoji}
         </span>
@@ -675,7 +675,7 @@ function RecipeRow({ recipe, onLog }: { recipe: Recipe; onLog: () => void }) {
   const label = recipe.name ?? recipe.items.map((i) => i.foodName).join(' + ')
   return (
     <li>
-      <button onClick={onLog} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
+      <button onClick={onLog} className="row-press flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left transition-colors hover:bg-surface">
         <span className="text-xl" aria-hidden>{recipe.emoji}</span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">
