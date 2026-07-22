@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Food } from '../types'
 import { foodTips, getAnthropicKey, type FoodTips } from '../lib/ai'
 import ShareSheet, { foodShare } from './social/ShareSheet'
+import { Z } from './ui'
 
 interface Props {
   food: Food
@@ -43,7 +44,7 @@ export default function FoodCard({ food, onChoose, onClose }: Props) {
   const hasAiKey = !!getAnthropicKey()
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.modal} flex items-end justify-center bg-black/40`} onClick={onClose}>
       <div
         className="sheet-panel flex max-h-[90dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}
@@ -51,7 +52,6 @@ export default function FoodCard({ food, onChoose, onClose }: Props) {
         aria-modal="true"
         aria-label={`Detalhes de ${food.name}`}
       >
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
 
         <div className="flex items-start justify-between px-5 pt-3">
           <div className="flex items-center gap-3">

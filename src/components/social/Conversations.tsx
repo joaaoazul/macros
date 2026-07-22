@@ -10,7 +10,7 @@ import {
 import { haptic } from '../../lib/store'
 import type { SocialSocket } from '../../lib/ws'
 import Avatar from './Avatar'
-import { Card } from '../ui'
+import { Card, EmptyState, Z } from '../ui'
 
 interface Props {
   socket: SocialSocket
@@ -41,7 +41,7 @@ export default function Conversations({ socket, onOpen, onBack }: Props) {
   }, [socket])
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-bg">
+    <div className={`fixed inset-0 ${Z.overlay} overflow-y-auto bg-bg`}>
       <header className="flex items-end justify-between px-5 pb-2 pt-[max(1.75rem,env(safe-area-inset-top))]">
         <div>
           <button onClick={onBack} className="text-sm font-medium text-accent">‹ Social</button>
@@ -73,11 +73,11 @@ export default function Conversations({ socket, onOpen, onBack }: Props) {
           </Card>
         )}
         {convs !== null && convs.length === 0 && (
-          <div className="py-10 text-center">
-            <div className="text-4xl" aria-hidden>💬</div>
-            <p className="mt-3 font-semibold">Sem conversas</p>
-            <p className="mt-1 text-sm text-ink-2">Abre o perfil de um amigo, ou cria um grupo com o +.</p>
-          </div>
+          <EmptyState
+            emoji="💬"
+            title="Sem conversas"
+            hint="Abre o perfil de um amigo, ou cria um grupo com o +."
+          />
         )}
         {convs !== null && convs.length > 0 && (
           <Card className="divide-y divide-line">
@@ -162,7 +162,7 @@ function NewGroupSheet({ onClose, onCreated }: { onClose: () => void; onCreated:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.screen} flex items-end bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div className="sheet-panel max-h-[88vh] w-full overflow-y-auto rounded-t-3xl bg-bg p-5 scroll-contain" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
         <h2 className="mb-4 text-xl font-bold">Novo grupo</h2>

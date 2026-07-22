@@ -15,6 +15,7 @@ import { foodScraper } from '../lib/social'
 import { uid } from '../lib/store'
 import { useToast } from '../lib/toast'
 import RestaurantSheet from './RestaurantSheet'
+import { Z } from './ui'
 
 const BarcodeScanner = lazy(() => import('./BarcodeScanner'))
 const AiMealAnalysis = lazy(() => import('./AiMealAnalysis'))
@@ -196,7 +197,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
   const mealLabel = MEALS.find((m) => m.id === meal)?.label ?? ''
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40`} onClick={onClose}>
       <div
         className="sheet-panel flex h-[88dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}
@@ -204,7 +205,6 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
         aria-modal="true"
         aria-label={`Adicionar alimento ao ${mealLabel}`}
       >
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
 
         <header className="flex items-center justify-between px-5 pt-3">
           <h2 className="text-lg font-bold">Adicionar ao {mealLabel}</h2>
@@ -524,7 +524,7 @@ export default function AddFoodSheet({ meal, customFoods, setCustomFoods, recipe
         )}
 
         {cameraMenu && (
-          <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40" onClick={() => setCameraMenu(false)}>
+          <div className={`fixed inset-0 ${Z.sheet} flex items-end justify-center bg-black/40`} onClick={() => setCameraMenu(false)}>
             <div
               className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-4"
               onClick={(e) => e.stopPropagation()}
@@ -699,7 +699,7 @@ function RecipeRow({ recipe, onLog }: { recipe: Recipe; onLog: () => void }) {
 function NameRecipeSheet({ onCancel, onSave }: { onCancel: () => void; onSave: (name: string) => void }) {
   const [name, setName] = useState('')
   return (
-    <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40" onClick={onCancel}>
+    <div className={`fixed inset-0 ${Z.sheet} flex items-end justify-center bg-black/40`} onClick={onCancel}>
       <div
         className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-4"
         onClick={(e) => e.stopPropagation()}

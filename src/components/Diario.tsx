@@ -13,7 +13,7 @@ import LogPortionSheet from './LogPortionSheet'
 const CopyDaySheet = lazy(() => import('./CopyDaySheet'))
 import AguaDetail from './details/AguaDetail'
 import Rings from './Rings'
-import { Card, Chevron, CircleButton, LargeTitle } from './ui'
+import { Card, Chevron, CircleButton, LargeTitle, Z } from './ui'
 
 interface Props {
   profile: Profile
@@ -479,7 +479,7 @@ function AddExerciseSheet({ onAdd, onClose }: { onAdd: (e: Exercise) => void; on
   const valid = name.trim().length > 0 && Number(kcal) > 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40`} onClick={onClose}>
       <div
         className="w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
         onClick={(e) => e.stopPropagation()}

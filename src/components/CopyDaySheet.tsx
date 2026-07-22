@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import type { Diary, Entry } from '../types'
 import { sumEntries } from '../lib/calc'
 import { formatDatePT, uid } from '../lib/store'
+import { Z } from './ui'
 
 interface Props {
   diary: Diary
@@ -36,7 +37,7 @@ export default function CopyDaySheet({ diary, currentDate, onCopy, onClose }: Pr
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.modal} flex items-end justify-center bg-black/40`} onClick={onClose}>
       <div
         className="sheet-panel flex max-h-[80dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}
@@ -44,7 +45,6 @@ export default function CopyDaySheet({ diary, currentDate, onCopy, onClose }: Pr
         aria-modal="true"
         aria-label="Copiar dia"
       >
-        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden />
         <div className="px-5 pt-3">
           <h2 className="text-lg font-bold">Copiar de outro dia</h2>
           <p className="mt-0.5 text-sm text-muted">As refeições são adicionadas ao dia atual.</p>

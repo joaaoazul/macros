@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { notifications as api, notificationEmoji, type AppNotification } from '../../lib/notifications'
 import type { SocialSocket } from '../../lib/ws'
-import { ListSkeleton } from '../ui'
+import { EmptyState, ListSkeleton, ScreenHeader, Z } from '../ui'
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -52,22 +52,13 @@ export default function NotificationCenter({ socket, onBack }: { socket: SocialS
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-bg">
-      <header className="flex items-center gap-3 border-b border-line/70 bg-surface/80 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
-        <button onClick={onBack} aria-label="Voltar" className="press text-accent">
-          ‹ <span className="text-sm font-medium">Voltar</span>
-        </button>
-        <div className="font-semibold">Notificações</div>
-      </header>
+    <div className={`fixed inset-0 ${Z.screen} flex flex-col bg-bg`}>
+      <ScreenHeader backLabel="Voltar" onBack={onBack} title="Notificações" />
 
       <div className="mx-auto w-full max-w-md flex-1 space-y-2 overflow-y-auto px-4 py-3 scroll-contain">
         {items === null && <ListSkeleton rows={4} />}
         {items?.length === 0 && (
-          <div className="animate-in py-16 text-center">
-            <div className="text-4xl" aria-hidden>🔔</div>
-            <p className="mt-3 font-semibold">Tudo em dia</p>
-            <p className="mt-1 text-sm text-ink-2">As tuas notificações aparecem aqui.</p>
-          </div>
+          <EmptyState emoji="🔔" title="Tudo em dia" hint="As tuas notificações aparecem aqui." />
         )}
         {items?.map((n, i) => (
           <div

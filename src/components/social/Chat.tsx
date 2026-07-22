@@ -17,6 +17,7 @@ import { useToast } from '../../lib/toast'
 import type { Food, Recipe } from '../../types'
 import type { SocialSocket } from '../../lib/ws'
 import Avatar from './Avatar'
+import { Z } from '../ui'
 
 interface Pending {
   clientId: string
@@ -280,8 +281,8 @@ export default function Chat({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-bg">
-      <header className="flex items-center gap-3 border-b border-line/70 bg-surface/80 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
+    <div className={`fixed inset-0 ${Z.screen} flex flex-col bg-bg`}>
+      <header className="flex items-center gap-3 bar-blur hairline-b px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         <button onClick={onBack} aria-label="Voltar" className="press text-accent">
           ‹ <span className="text-sm font-medium">Voltar</span>
         </button>
@@ -429,7 +430,7 @@ export default function Chat({
       </div>
 
       {lightbox && (
-        <div className="animate-fade fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
+        <div className={`animate-fade fixed inset-0 ${Z.modal} flex items-center justify-center bg-black/90 p-4`} onClick={() => setLightbox(null)}>
           <img src={`data:image/jpeg;base64,${lightbox}`} alt="Foto" className="max-h-full max-w-full rounded-2xl" />
         </div>
       )}
@@ -675,7 +676,7 @@ function GroupInfoSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.modal} flex items-end bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div className="sheet-panel max-h-[85vh] w-full overflow-y-auto rounded-t-3xl bg-bg p-5 scroll-contain" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
         <div className="mb-4 flex items-center gap-3">
@@ -850,7 +851,7 @@ function PhotoButton({ onCamera, onGallery, disabled }: { onCamera: () => void; 
     <div className="relative">
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className={`fixed inset-0 ${Z.raised}`} onClick={() => setOpen(false)} />
           <div className="animate-pop absolute bottom-12 left-0 z-20 w-40 overflow-hidden rounded-2xl bg-surface shadow-lg">
             <button onClick={() => { setOpen(false); onCamera() }} className="press flex w-full items-center gap-2 px-4 py-3 text-sm">
               📷 Tirar foto

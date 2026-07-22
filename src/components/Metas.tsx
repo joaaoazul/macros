@@ -3,7 +3,7 @@ import type { Profile } from '../types'
 import { splitFromTargets, targetsFromSplit } from '../lib/calc'
 import MacrosDetail from './details/MacrosDetail'
 import TargetExplainer from './TargetExplainer'
-import { Card, LargeTitle } from './ui'
+import { Card, LargeTitle, Z } from './ui'
 
 interface Props {
   profile: Profile
@@ -199,7 +199,7 @@ function EditSheet({
   const valid = total === 100 && kcalN >= 800 && kcalN <= 8000
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40`} onClick={onClose}>
       <div
         className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-2"
         onClick={(e) => e.stopPropagation()}

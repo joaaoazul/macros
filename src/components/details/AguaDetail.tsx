@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Profile, WaterLog } from '../../types'
 import { shiftDate, todayISO } from '../../lib/store'
 import { BarChart } from '../charts'
-import { Card } from '../ui'
+import { Card, Z } from '../ui'
 
 interface Props {
   profile: Profile
@@ -44,7 +44,7 @@ export default function AguaDetail({ profile, setProfile, water, onClose }: Prop
   }
 
   return (
-    <div className="sheet-panel scroll-contain fixed inset-0 z-50 overflow-y-auto bg-bg">
+    <div className={`sheet-panel scroll-contain fixed inset-0 ${Z.screen} overflow-y-auto bg-bg`}>
       <div className="mx-auto max-w-md px-4 pb-10">
         <header className="pt-5">
           <button onClick={onClose} className="text-sm font-medium text-accent">

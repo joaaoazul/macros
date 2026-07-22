@@ -17,7 +17,7 @@ import Progresso from './components/Progresso'
 import Receitas from './components/Receitas'
 import Perfil from './components/Perfil'
 import Social from './components/social/Social'
-import { IconBook, IconChart, IconPeople, IconPerson, IconRecipe, IconTarget } from './components/ui'
+import { IconBook, IconChart, IconPeople, IconPerson, IconRecipe, IconTarget, Z } from './components/ui'
 
 type Tab = 'diario' | 'metas' | 'progresso' | 'receitas' | 'social' | 'perfil'
 
@@ -202,7 +202,7 @@ export default function App() {
       </nav>
 
       {showPlans && billingState.data && (
-        <div className="fixed inset-0 z-[60] overflow-y-auto bg-bg">
+        <div className={`fixed inset-0 ${Z.modal} overflow-y-auto bg-bg`}>
           <Paywall status={billingState.data} onClose={() => setShowPlans(false)} />
         </div>
       )}

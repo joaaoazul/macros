@@ -4,7 +4,7 @@ import { api, ApiError } from '../../lib/api'
 import { shiftDate, todayISO } from '../../lib/store'
 import { formatRate, weightRatePerWeek } from '../../lib/trend'
 import { LineChart } from '../charts'
-import { Card } from '../ui'
+import { Card, Z } from '../ui'
 
 interface Props {
   profile: Profile
@@ -97,7 +97,7 @@ export default function PesoDetail({ profile, onWeightToday, onClose }: Props) {
   }
 
   return (
-    <div className="sheet-panel scroll-contain fixed inset-0 z-50 overflow-y-auto bg-bg">
+    <div className={`sheet-panel scroll-contain fixed inset-0 ${Z.screen} overflow-y-auto bg-bg`}>
       <div className="mx-auto max-w-md px-4 pb-10">
         <header className="pt-5">
           <button onClick={onClose} className="text-sm font-medium text-accent">

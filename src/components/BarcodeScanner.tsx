@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
+import { Z } from './ui'
 
 interface Props {
   onDetected: (code: string) => void
@@ -78,7 +79,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-black" role="dialog" aria-modal="true" aria-label="Ler código de barras">
+    <div className={`fixed inset-0 ${Z.modal} flex flex-col bg-black`} role="dialog" aria-modal="true" aria-label="Ler código de barras">
       <header className="flex items-center justify-between px-5 pt-4 text-white">
         <h2 className="text-base font-semibold">Ler código de barras</h2>
         <button onClick={onClose} className="rounded-full px-3 py-1.5 text-white/80" aria-label="Fechar">

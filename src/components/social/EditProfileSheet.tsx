@@ -6,6 +6,7 @@ import { downscaleImage } from '../../lib/ai'
 import { AVATARS } from '../../lib/avatars'
 import { social, type SocialMe } from '../../lib/social'
 import Avatar from './Avatar'
+import { Z } from '../ui'
 
 interface Props {
   me: SocialMe
@@ -48,7 +49,7 @@ export default function EditProfileSheet({ me, onSaved, onClose }: Props) {
   }
 
   return (
-    <div className="sheet-panel scroll-contain fixed inset-0 z-50 overflow-y-auto bg-bg">
+    <div className={`sheet-panel scroll-contain fixed inset-0 ${Z.screen} overflow-y-auto bg-bg`}>
       <div className="mx-auto max-w-md px-5 pb-10">
         <header className="flex items-center justify-between pt-5">
           <button onClick={onClose} className="text-sm font-medium text-accent">‹ Perfil</button>

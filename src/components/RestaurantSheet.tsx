@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react'
 import type { Food, RecipeItem } from '../types'
 import { searchFoods } from '../lib/foods'
 import { haptic } from '../lib/store'
-import { Card, Z } from './ui'
+import { Card, ScreenHeader, Z } from './ui'
 
 interface Props {
   foods: Food[]
@@ -125,16 +125,12 @@ export default function RestaurantSheet({ foods, usage, onAdd, onCreateFood, onC
 
   return (
     <div className={`fixed inset-0 ${Z.sheet} flex flex-col bg-bg`}>
-      <header className="flex items-center justify-between border-b border-line/70 bg-surface/80 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
-        <button onClick={onClose} className="press text-accent">
-          ‹ <span className="text-sm font-medium">Voltar</span>
-        </button>
-        <div className="text-center">
-          <div className="font-semibold leading-tight">Modo restaurante</div>
-          <div className="text-[11px] text-muted">conta unidades, não gramas</div>
-        </div>
-        <span className="w-12" />
-      </header>
+      <ScreenHeader
+        backLabel="Voltar"
+        onBack={onClose}
+        title="Modo restaurante"
+        subtitle="conta unidades, não gramas"
+      />
 
       <div className="mx-auto w-full max-w-md flex-1 space-y-3 overflow-y-auto px-4 py-3 scroll-contain">
         {chosen.length > 0 && (

@@ -74,7 +74,7 @@ export default function RecipeLibrary({
 
   return (
     <div className={`fixed inset-0 ${Z.sheet} flex flex-col bg-bg`}>
-      <header className="flex items-center justify-between border-b border-line/70 bg-surface/80 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
+      <header className="flex items-center justify-between bar-blur hairline-b px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
         <div>
           <h2 className="text-lg font-bold">Biblioteca de receitas</h2>
           <p className="text-xs text-muted">Receitas prontas a adicionar às tuas</p>

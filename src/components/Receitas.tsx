@@ -12,7 +12,7 @@ import Planner from './Planner'
 import RecipeLibrary from './RecipeLibrary'
 import PlanTargetSheet from './PlanTargetSheet'
 import ShareSheet, { recipeShare } from './social/ShareSheet'
-import { Card, LargeTitle, SegmentedControl } from './ui'
+import { Card, LargeTitle, SegmentedControl, Z } from './ui'
 
 /** Limite de receitas por utilizador imposto pelo backend (put_recipes). */
 const MAX_RECIPES = 200
@@ -284,7 +284,7 @@ function ImportRecipeSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div
         className="sheet-panel w-full max-w-md rounded-t-[1.75rem] bg-bg px-5 pb-8 pt-4"
         onClick={(e) => e.stopPropagation()}
@@ -524,7 +524,7 @@ function IngredientPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sheet-backdrop" onClick={onClose}>
+    <div className={`fixed inset-0 ${Z.screen} flex items-end justify-center bg-black/40 sheet-backdrop`} onClick={onClose}>
       <div
         className="sheet-panel flex h-[80dvh] w-full max-w-md flex-col rounded-t-[1.75rem] bg-bg"
         onClick={(e) => e.stopPropagation()}

@@ -26,7 +26,7 @@ import { placeInSlots, recipeLabel, suggestedForMeal, type PlanMeal, type SlotTa
 import LogPortionSheet from './LogPortionSheet'
 import PantryPhotoSheet from './PantryPhotoSheet'
 import PlanTargetSheet from './PlanTargetSheet'
-import { Button, Card, ConfirmSheet, ScreenHeader, SegmentedControl, Stepper, Z } from './ui'
+import { Button, Card, ConfirmSheet, EmptyState, ScreenHeader, SegmentedControl, Stepper, Z } from './ui'
 
 interface Props {
   recipes: Recipe[]
@@ -729,11 +729,11 @@ function ShoppingListView({
 
       <div className="mx-auto w-full max-w-md flex-1 space-y-4 overflow-y-auto px-4 py-4 scroll-contain">
         {total === 0 && (
-          <div className="animate-in py-16 text-center">
-            <div className="text-4xl" aria-hidden>🛒</div>
-            <p className="mt-3 font-semibold">Lista vazia</p>
-            <p className="mt-1 text-sm text-ink-2">Planeia refeições ou adiciona recorrentes na despensa.</p>
-          </div>
+          <EmptyState
+            emoji="🛒"
+            title="Lista vazia"
+            hint="Planeia refeições ou adiciona recorrentes na despensa."
+          />
         )}
 
         {/* nem tudo o que se compra vem de uma receita */}

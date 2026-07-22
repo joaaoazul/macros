@@ -2,7 +2,7 @@ import type { Diary, ExerciseLog, Profile, WaterLog } from '../../types'
 import { MEALS } from '../../types'
 import { sumEntries } from '../../lib/calc'
 import { formatDatePT } from '../../lib/store'
-import { Card } from '../ui'
+import { Card, Z } from '../ui'
 
 interface Props {
   iso: string
@@ -23,7 +23,7 @@ export default function DayDetail({ iso, profile, diary, water, exercise, onClos
   const exerciseKcal = exercises.reduce((s, e) => s + e.kcal, 0)
 
   return (
-    <div className="sheet-panel scroll-contain fixed inset-0 z-50 overflow-y-auto bg-bg">
+    <div className={`sheet-panel scroll-contain fixed inset-0 ${Z.screen} overflow-y-auto bg-bg`}>
       <div className="mx-auto max-w-md px-4 pb-10">
         <header className="flex items-center gap-3 pt-5">
           <button onClick={onClose} className="text-sm font-medium text-accent">
