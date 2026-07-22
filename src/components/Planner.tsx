@@ -16,6 +16,7 @@ import {
   withExtras,
   type ShoppingItem,
 } from '../lib/shopping'
+import { analyzeMeal } from '../lib/ai'
 import { defaultExpiryFor, daysUntil, expiryStatus, recipesCookableFrom, recipesToUseUp, sortByExpiry } from '../lib/pantry'
 import { haptic, uid } from '../lib/store'
 import { useToast } from '../lib/toast'
@@ -243,6 +244,30 @@ function SlotPicker({
   const [foodSel, setFoodSel] = useState<Food | null>(null)
   const [grams, setGrams] = useState('150')
   const offResults = useOffSearch(query)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiErr, setAiErr] = useState('')
+
+  /** Descreve a refeição à IA e planeia o slot com os alimentos devolvidos. */
+  const describeToAI = async () => {
+    setAiBusy(true)
+    setAiErr('')
+    try {
+      const res = await analyzeMeal({ description: query.trim() })
+      if (res.foods.length === 0) {
+        setAiErr('A IA não reconheceu alimentos nessa descrição.')
+        return
+      }
+      const items: RecipeItem[] = res.foods.map((f) => ({
+        foodName: f.name, emoji: f.emoji, grams: f.grams, unit: f.unit,
+        kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat,
+      }))
+      onPick(query.trim(), res.foods[0]?.emoji ?? '🍽️', items)
+    } catch (e) {
+      setAiErr(e instanceof Error ? e.message : 'Não foi possível analisar agora.')
+    } finally {
+      setAiBusy(false)
+    }
+  }
 
   const q = query.trim().toLowerCase()
   const matchedRecipes = recipes.filter((r) => {
@@ -312,6 +337,24 @@ function SlotPicker({
               />
             </div>
             <div className="scroll-contain mt-3 flex-1 overflow-y-auto px-5 pb-6">
+              {q.length >= 3 && (
+                <>
+                  <button
+                    onClick={() => void describeToAI()}
+                    disabled={aiBusy}
+                    className="press mb-2 flex w-full items-center gap-3 rounded-xl bg-accent-soft px-4 py-3 text-left disabled:opacity-60"
+                  >
+                    <span className="text-xl" aria-hidden>✨</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-accent">
+                        {aiBusy ? 'A analisar…' : `Descrever à IA: "${query.trim()}"`}
+                      </span>
+                      <span className="block text-xs text-muted">A IA estima os alimentos e as macros</span>
+                    </span>
+                  </button>
+                  {aiErr && <p className="mb-2 px-1 text-xs font-medium text-critical">{aiErr}</p>}
+                </>
+              )}
               {matchedRecipes.length > 0 && (
                 <>
                   <div className="pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-muted">Receitas</div>
