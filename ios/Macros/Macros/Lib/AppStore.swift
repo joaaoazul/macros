@@ -12,11 +12,23 @@ import Combine
 
 @MainActor
 final class AppStore: ObservableObject {
-    @Published var profile: Profile? { didSet { save(profile, key: Keys.profile) } }
+    @Published var profile: Profile? {
+        didSet {
+            save(profile, key: Keys.profile)
+            pushProfile()
+        }
+    }
     @Published var diary: Diary { didSet { save(diary, key: Keys.diary) } }
     @Published var water: WaterLog { didSet { save(water, key: Keys.water) } }
     @Published var exercise: ExerciseLog { didSet { save(exercise, key: Keys.exercise) } }
     @Published var customFoods: [Food] { didSet { save(customFoods, key: Keys.customFoods) } }
+
+    /// Há dados guardados neste dispositivo de antes de existir conta — a
+    /// app oferece importá-los (ver hydrateFromServer/migrateLocalDataToServer).
+    @Published var migrationAvailable = false
+    @Published var isSyncing = false
+
+    private let api = APIClient.shared
 
     private enum Keys {
         static let profile = "macros.profile"
@@ -53,16 +65,19 @@ final class AppStore: ObservableObject {
 
     func addEntry(_ entry: Entry, on date: String) {
         diary[date, default: []].append(entry)
+        pushDay(date)
     }
 
     func removeEntry(id: String, on date: String) {
         diary[date]?.removeAll { $0.id == id }
+        pushDay(date)
     }
 
     func updateEntry(_ updated: Entry, on date: String) {
         guard var list = diary[date], let idx = list.firstIndex(where: { $0.id == updated.id }) else { return }
         list[idx] = updated
         diary[date] = list
+        pushDay(date)
     }
 
     // MARK: - Água
@@ -71,6 +86,7 @@ final class AppStore: ObservableObject {
 
     func addWater(_ ml: Double, on date: String) {
         water[date] = max(0, (water[date] ?? 0) + ml)
+        pushDay(date)
     }
 
     // MARK: - Exercício
@@ -79,10 +95,12 @@ final class AppStore: ObservableObject {
 
     func addExercise(_ ex: Exercise, on date: String) {
         exercise[date, default: []].append(ex)
+        pushDay(date)
     }
 
     func removeExercise(id: String, on date: String) {
         exercise[date]?.removeAll { $0.id == id }
+        pushDay(date)
     }
 
     // MARK: - Alimentos
@@ -91,18 +109,94 @@ final class AppStore: ObservableObject {
 
     func addCustomFood(_ food: Food) {
         customFoods.append(food)
+        pushCustomFoods()
     }
 
     // MARK: - Reposição
 
-    /// Apaga todos os dados locais (perfil, diário, água, exercício e alimentos
-    /// personalizados) e volta ao onboarding.
+    /// Limpa a cópia local (perfil, diário, água, exercício e alimentos
+    /// personalizados) neste dispositivo — usado ao terminar sessão. Não
+    /// apaga nada no servidor (a conta mantém os dados).
     func resetAll() {
         profile = nil
         diary = [:]
         water = [:]
         exercise = [:]
         customFoods = []
+        migrationAvailable = false
+    }
+
+    // MARK: - Sincronização com o backend
+
+    /// Chamado depois de autenticar: traz os dados da conta (o servidor
+    /// ganha), ou — se a conta ainda estiver vazia mas já houver dados neste
+    /// dispositivo (uso antes de teres conta) — oferece importá-los.
+    /// Equivalente nativo do fluxo migrationAvailable/importLocalData em App.tsx.
+    func hydrateFromServer() async {
+        isSyncing = true
+        defer { isSyncing = false }
+        do {
+            let remote: RemoteAllData = try await api.get("/data/all")
+            if remote.profile != nil {
+                applyRemote(remote)
+                migrationAvailable = false
+            } else if profile != nil {
+                migrationAvailable = true
+            }
+        } catch {
+            // Sem ligação — continua com a cópia local guardada no dispositivo.
+        }
+    }
+
+    private func applyRemote(_ remote: RemoteAllData) {
+        profile = remote.profile
+        diary = remote.diary
+        water = remote.water
+        exercise = remote.exercise
+        customFoods = remote.customFoods
+    }
+
+    /// Envia os dados guardados neste dispositivo para a conta (preenche
+    /// lacunas; o que já está na conta não é substituído — ver backend
+    /// POST /data/import).
+    func migrateLocalDataToServer() async {
+        isSyncing = true
+        defer { isSyncing = false }
+        let payload = ImportPayload(
+            profile: profile, diary: diary,
+            water: water.mapValues { Int($0.rounded()) },
+            exercise: exercise, customFoods: customFoods
+        )
+        if let remote: RemoteAllData = try? await api.post("/data/import", payload) {
+            applyRemote(remote)
+        }
+        migrationAvailable = false
+    }
+
+    func dismissMigration() {
+        migrationAvailable = false
+    }
+
+    /// Envios em segundo plano, best-effort: a cópia local (guardada acima)
+    /// já é a fonte de verdade no dispositivo, por isso um erro de rede aqui
+    /// fica só registado — a próxima escrita tenta outra vez.
+    func pushProfile() {
+        guard let profile else { return }
+        Task { let _: Profile? = try? await api.put("/profile", profile) }
+    }
+
+    func pushDay(_ iso: String) {
+        let request = DayUpsertRequest(
+            entries: diary[iso] ?? [],
+            waterMl: Int((water[iso] ?? 0).rounded()),
+            exercises: exercise[iso] ?? []
+        )
+        Task { let _: DayUpsertRequest? = try? await api.put("/days/\(iso)", request) }
+    }
+
+    func pushCustomFoods() {
+        let foods = customFoods
+        Task { let _: [Food]? = try? await api.put("/custom-foods", foods) }
     }
 
     // MARK: - Exportação

@@ -86,6 +86,7 @@ src/
 
 ## App iOS nativa
 
-Existe um porte nativo em Swift/SwiftUI do núcleo de tracking (onboarding,
-diário, metas, água, exercício, progresso e perfil), 100% local e sem as
-funcionalidades que dependem do backend. Ver [`ios/README.md`](ios/README.md).
+Existe um porte nativo em Swift/SwiftUI do núcleo de tracking (conta,
+onboarding, diário, metas, água, exercício, progresso e perfil), a falar
+com este mesmo backend (com cópia local para uso offline). Ver
+[`ios/README.md`](ios/README.md).

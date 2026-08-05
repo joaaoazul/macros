@@ -51,5 +51,7 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView().environmentObject(AppStore())
+    ContentView()
+        .environmentObject(AppStore())
+        .environmentObject(AuthService())
 }

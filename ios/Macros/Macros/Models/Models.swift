@@ -53,6 +53,28 @@ struct Targets: Codable, Equatable {
     var carbs: Int
     var fat: Int
     var waterMl: Int
+
+    init(kcal: Int, protein: Int, carbs: Int, fat: Int, waterMl: Int) {
+        self.kcal = kcal
+        self.protein = protein
+        self.carbs = carbs
+        self.fat = fat
+        self.waterMl = waterMl
+    }
+
+    /// O backend guarda estes campos como `float` (ver backend/app/data/schemas.py);
+    /// decodifica com tolerância em vez de exigir um Int exato no JSON.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func readInt(_ key: CodingKeys) throws -> Int {
+            Int((try c.decode(Double.self, forKey: key)).rounded())
+        }
+        kcal = try readInt(.kcal)
+        protein = try readInt(.protein)
+        carbs = try readInt(.carbs)
+        fat = try readInt(.fat)
+        waterMl = try readInt(.waterMl)
+    }
 }
 
 struct Profile: Codable, Equatable {

@@ -12,14 +12,16 @@ import UIKit
 
 struct PerfilView: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var auth: AuthService
     @Binding var profile: Profile
 
     @State private var weightText: String
     @State private var waterMlText: String
     @State private var heightText: String
     @State private var bodyFatText: String
-    @State private var showResetConfirm = false
+    @State private var showLogoutConfirm = false
     @State private var showExporter = false
+    @State private var loggingOut = false
 
     init(profile: Binding<Profile>) {
         _profile = profile
@@ -54,17 +56,25 @@ struct PerfilView: View {
                 metricsCard
                 goalCard
                 activityCard
+                accountCard
                 dataCard
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
         .background(AppColor.bg.ignoresSafeArea())
-        .confirmationDialog("Apagar todos os dados?", isPresented: $showResetConfirm, titleVisibility: .visible) {
-            Button("Apagar tudo", role: .destructive) { store.resetAll() }
+        .confirmationDialog("Terminar sessão?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+            Button("Terminar sessão", role: .destructive) {
+                Task {
+                    loggingOut = true
+                    await auth.logout()
+                    store.resetAll()
+                    loggingOut = false
+                }
+            }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("Isto apaga o perfil, o diário, a água e o exercício guardados neste dispositivo. Não é possível desfazer.")
+            Text("Os teus dados continuam guardados na tua conta — só saem deste dispositivo.")
         }
         .sheet(isPresented: $showExporter) {
             if let data = store.exportJSON(), let text = String(data: data, encoding: .utf8) {
@@ -256,6 +266,36 @@ struct PerfilView: View {
         }
     }
 
+    // MARK: - Conta
+
+    private var accountCard: some View {
+        BareCard {
+            VStack(spacing: 0) {
+                Text("Conta")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppColor.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 4)
+
+                if let email = auth.user?.email {
+                    Text(email)
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20).padding(.bottom, 14)
+                }
+                Divider().overlay(AppColor.line).padding(.leading, 20)
+                Button(role: .destructive) { showLogoutConfirm = true } label: {
+                    Text(loggingOut ? "A terminar sessão…" : "Terminar sessão")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(AppColor.critical)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20).padding(.vertical, 14)
+                }
+                .disabled(loggingOut)
+            }
+        }
+    }
+
     // MARK: - Dados locais
 
     private var dataCard: some View {
@@ -271,14 +311,6 @@ struct PerfilView: View {
                     Text("Exportar os meus dados (JSON)")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(AppColor.accent)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20).padding(.vertical, 14)
-                }
-                Divider().overlay(AppColor.line).padding(.leading, 20)
-                Button(role: .destructive) { showResetConfirm = true } label: {
-                    Text("Repor todos os dados…")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(AppColor.critical)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20).padding(.vertical, 14)
                 }

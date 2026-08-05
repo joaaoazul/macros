@@ -11,11 +11,13 @@ import SwiftUI
 @main
 struct MacrosApp: App {
     @StateObject private var store = AppStore()
+    @StateObject private var auth = AuthService()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environmentObject(store)
+                .environmentObject(auth)
         }
     }
 }
