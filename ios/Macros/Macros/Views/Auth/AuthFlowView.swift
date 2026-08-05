@@ -33,6 +33,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var busy = false
     @State private var showServer = false
+    @State private var showForgotPassword = false
     @State private var serverURL = APIClient.shared.baseURLString
 
     private var valid: Bool { !email.trimmingCharacters(in: .whitespaces).isEmpty && !password.isEmpty }
@@ -70,15 +71,23 @@ struct LoginView: View {
                     }
                 }
 
-                Button("Ainda não tens conta? Cria uma", action: onSwitchToRegister)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AppColor.accent)
-                    .frame(maxWidth: .infinity)
+                VStack(spacing: 10) {
+                    Button("Ainda não tens conta? Cria uma", action: onSwitchToRegister)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppColor.accent)
+                    Button("Esqueci-me da password") { showForgotPassword = true }
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AppColor.muted)
+                }
+                .frame(maxWidth: .infinity)
+
+                LegalLinksFooter()
 
                 serverField
             }
             .padding(24)
         }
+        .sheet(isPresented: $showForgotPassword) { ForgotPasswordSheet() }
     }
 
     private var serverField: some View {
@@ -163,8 +172,83 @@ struct RegisterView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(AppColor.accent)
                     .frame(maxWidth: .infinity)
+
+                LegalLinksFooter()
             }
             .padding(24)
         }
+    }
+}
+
+/// Ligações para a Política de Privacidade e Termos de Serviço — a app web
+/// já os serve (src/pages/Privacidade.tsx, Termos.tsx), por isso abrimos aí
+/// em vez de duplicar o texto legal nesta app.
+private struct LegalLinksFooter: View {
+    var body: some View {
+        HStack(spacing: 16) {
+            Link("Termos de Serviço", destination: URL(string: "https://macros.joaoazul.dev/termos")!)
+            Link("Política de Privacidade", destination: URL(string: "https://macros.joaoazul.dev/privacidade")!)
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(AppColor.muted)
+        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
+        .padding(.top, 4)
+    }
+}
+
+/// Pede o email de reposição de password (POST /auth/forgot-password). A
+/// app não trata o link do email — abre no browser (página web já existente).
+private struct ForgotPasswordSheet: View {
+    @EnvironmentObject var auth: AuthService
+    @Environment(\.dismiss) private var dismiss
+    @State private var email = ""
+    @State private var busy = false
+    @State private var resultMessage: String?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Escreve o email da tua conta. Se existir, enviamos uma ligação para repor a password.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColor.ink2)
+
+                TextField("Email", text: $email)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(MacrosFieldStyle())
+
+                if let resultMessage {
+                    Text(resultMessage).font(.system(size: 13)).foregroundStyle(AppColor.good)
+                }
+                if let errorMessage {
+                    Text(errorMessage).font(.system(size: 13)).foregroundStyle(AppColor.critical)
+                }
+
+                PrimaryButton(title: busy ? "A enviar…" : "Enviar", disabled: email.trimmingCharacters(in: .whitespaces).isEmpty || busy) {
+                    Task {
+                        busy = true
+                        errorMessage = nil
+                        switch await auth.requestPasswordReset(email: email.trimmingCharacters(in: .whitespaces)) {
+                        case .success(let message): resultMessage = message
+                        case .failure(let message): errorMessage = message
+                        }
+                        busy = false
+                    }
+                }
+                Spacer()
+            }
+            .padding(20)
+            .background(AppColor.bg.ignoresSafeArea())
+            .navigationTitle("Repor password")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Fechar") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }

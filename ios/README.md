@@ -77,6 +77,7 @@ ios/Macros/
       Sheets/AddFoodSheet.swift — pesquisa + quantidade + alimento personalizado
     Assets.xcassets/, Preview Content/
   generate_project.py
+  generate_icon.py
 ```
 
 ## Conta e sincronização
@@ -116,8 +117,9 @@ Portado tal e qual (mesmas fórmulas e mesmos dados):
 - Progresso: aderência ao plano, streak, atingimento médio por macro,
   calendário e gráfico de barras dos últimos 7/14/30 dias.
 - Alimentos personalizados e medidas caseiras (porções) por alimento.
-- Conta (registo/login/logout) e sincronização com o backend, incluindo a
-  migração de dados locais para a conta.
+- Conta (registo/login/logout/"esqueci-me da password"/eliminar conta) e
+  sincronização com o backend, incluindo a migração de dados locais para a
+  conta.
 
 ## O que não foi portado (fora do âmbito acordado)
 
@@ -127,13 +129,51 @@ Portado tal e qual (mesmas fórmulas e mesmos dados):
   local está disponível; criar um alimento novo é manual.
 - **Billing/Paywall** (ver nota acima), **notificações push**, **análise de
   refeições por IA** e a **consola de administração**.
-- Verificação de email, "esqueci-me da password" e eliminação de conta
-  (GDPR) — o backend já os expõe, mas não têm ecrã nesta app.
+- Verificação de email — o backend já a expõe (`/auth/verify-email`), mas
+  não tem ecrã nesta app (não bloqueia o uso: `email_verified` só é
+  relevante se o backend tiver `RESEND_API_KEY` configurado).
 - Funcionalidades avançadas do diário web (seleção múltipla, copiar
   dia/refeição, guardar como receita, check-in do plano) e o histórico
   detalhado de peso/água (`PesoDetail`/`AguaDetail`) ficaram simplificados
   a favor de um diário direto (registar, ver, apagar).
 
-`PerfilView` mostra o email da conta e "Terminar sessão" (limpa só a cópia
-local; os dados continuam na conta), mais "Exportar os meus dados (JSON)"
-como cópia de segurança local.
+`PerfilView` mostra o email da conta, "Terminar sessão" (limpa só a cópia
+local; os dados continuam na conta), "Eliminar conta…" (definitivo, pede a
+password — guideline 5.1.1(v) da App Store) e "Exportar os meus dados
+(JSON)" como cópia de segurança local.
+
+## Estado para TestFlight
+
+Feito a partir deste ambiente (sem Xcode/macOS disponível aqui — nada
+disto foi compilado nem corrido num simulador/dispositivo real):
+
+- [x] Ícone da app (1024×1024, sem alfa) — `Assets.xcassets/AppIcon.appiconset/icon-1024.png`,
+      gerado por `generate_icon.py` a partir da identidade dos anéis de
+      atividade. Substitui por um desenho definitivo quando quiseres.
+- [x] Eliminar conta a partir da app (guideline 5.1.1(v)) — `PerfilView` → "Eliminar conta…".
+- [x] "Esqueci-me da password" (pede o email; a reposição em si abre a
+      página web já existente, `/repor-password`).
+- [x] Ligações para Termos de Serviço e Política de Privacidade nos ecrãs
+      de login/registo.
+- [x] Contrato de rede (registo, login, perfil, dias, alimentos, `data/all`,
+      `data/import`, eliminar conta, esqueci-me da password) validado contra
+      uma instância real do backend (SQLite de dev) antes de cada commit.
+
+Por fazer — precisa mesmo de um Mac com Xcode:
+
+- [ ] **Compilar e corrigir o que falhar.** É o passo mais importante: este
+      código nunca foi compilado. `open ios/Macros/Macros.xcodeproj`, ⌘B,
+      corrigir erros.
+- [ ] Correr num simulador e, pelo menos uma vez, num iPhone físico.
+- [ ] Conta de programador Apple + Bundle ID + Team de assinatura (hoje
+      `com.joaoazul.macros` / "Automatic" são placeholders em
+      `generate_project.py`).
+- [ ] Arquivar (Product → Archive) e enviar para o App Store Connect
+      (Xcode trata da maior parte da validação/compliance de exportação —
+      responde "não" a criptografia não-standard, só usamos HTTPS).
+- [ ] Criar o grupo de testadores no TestFlight (internos chegam para
+      começar; externos passam por uma revisão leve da Apple).
+- [ ] Preencher a ficha "App Privacy" no App Store Connect — a app recolhe
+      email, peso, % de gordura corporal e diário alimentar.
+- [ ] Screenshots (pelo menos um tamanho de iPhone) e nota de teste para
+      os revisores/testadores explicando que é preciso criar conta.

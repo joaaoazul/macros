@@ -2,8 +2,8 @@
 //  PerfilView.swift
 //  Macros
 //
-//  Peso, TMB, IMC, meta de água, objetivo e atividade — equivalente nativo
-//  (simplificado para uma app 100% local, sem conta/backend) de
+//  Peso, TMB, IMC, meta de água, objetivo, atividade e conta — equivalente
+//  nativo (simplificado; sem social/billing/notificações) de
 //  src/components/Perfil.tsx.
 //
 
@@ -21,6 +21,7 @@ struct PerfilView: View {
     @State private var bodyFatText: String
     @State private var showLogoutConfirm = false
     @State private var showExporter = false
+    @State private var showDeleteAccount = false
     @State private var loggingOut = false
 
     init(profile: Binding<Profile>) {
@@ -79,6 +80,11 @@ struct PerfilView: View {
         .sheet(isPresented: $showExporter) {
             if let data = store.exportJSON(), let text = String(data: data, encoding: .utf8) {
                 ShareSheet(items: [text])
+            }
+        }
+        .sheet(isPresented: $showDeleteAccount) {
+            DeleteAccountSheet {
+                store.resetAll()
             }
         }
     }
@@ -292,6 +298,14 @@ struct PerfilView: View {
                         .padding(.horizontal, 20).padding(.vertical, 14)
                 }
                 .disabled(loggingOut)
+                Divider().overlay(AppColor.line).padding(.leading, 20)
+                Button(role: .destructive) { showDeleteAccount = true } label: {
+                    Text("Eliminar conta…")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(AppColor.critical)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20).padding(.vertical, 14)
+                }
             }
         }
     }
@@ -381,4 +395,71 @@ struct ShareSheet: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+/// Elimina a conta definitivamente (GDPR "direito ao esquecimento") — pede a
+/// password atual para confirmar, tal como ContaCard em src/components/Perfil.tsx.
+/// Requisito da App Store (guideline 5.1.1(v)): quem cria conta na app tem de
+/// a poder eliminar a partir da própria app.
+private struct DeleteAccountSheet: View {
+    var onDeleted: () -> Void
+
+    @EnvironmentObject var auth: AuthService
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+    @State private var busy = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Isto elimina a tua conta e todos os dados dos nossos servidores, permanentemente. Não é possível desfazer.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColor.ink2)
+
+                SecureField("A tua password", text: $password)
+                    .textContentType(.password)
+                    .textFieldStyle(MacrosFieldStyle())
+
+                if let errorMessage {
+                    Text(errorMessage).font(.system(size: 13)).foregroundStyle(AppColor.critical)
+                }
+
+                Button(action: confirm) {
+                    Text(busy ? "A eliminar…" : "Sim, eliminar tudo")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .foregroundStyle(.white)
+                        .background(AppColor.critical)
+                        .clipShape(Capsule())
+                }
+                .disabled(password.isEmpty || busy)
+                Spacer()
+            }
+            .padding(20)
+            .background(AppColor.bg.ignoresSafeArea())
+            .navigationTitle("Eliminar conta")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func confirm() {
+        Task {
+            busy = true
+            errorMessage = nil
+            switch await auth.deleteAccount(password: password) {
+            case .success:
+                onDeleted()
+                dismiss()
+            case .failure(let message):
+                errorMessage = message
+            }
+            busy = false
+        }
+    }
 }

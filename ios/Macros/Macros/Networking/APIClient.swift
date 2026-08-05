@@ -96,6 +96,10 @@ final class APIClient {
         try await send(path, method: "POST", body: Optional<EmptyBody>.none)
     }
 
+    func delete<Body: Encodable, Response: Decodable>(_ path: String, _ body: Body) async throws -> Response {
+        try await send(path, method: "DELETE", body: body)
+    }
+
     func put<Body: Encodable, Response: Decodable>(_ path: String, _ body: Body) async throws -> Response {
         try await send(path, method: "PUT", body: body)
     }

@@ -65,4 +65,31 @@ final class AuthService: ObservableObject {
         user = nil
         state = .loggedOut
     }
+
+    /// Pede o email de reposição de password. A ligação no email abre a
+    /// página web (src/pages/ReporPassword.tsx) — não há deep link nativo
+    /// nesta app; depois de repor, volta aqui e inicia sessão normalmente.
+    @discardableResult
+    func requestPasswordReset(email: String) async -> Result<String, String> {
+        do {
+            let response: MessageResponse = try await api.post("/auth/forgot-password", ForgotPasswordRequest(email: email))
+            return .success(response.message)
+        } catch {
+            return .failure((error as? APIError)?.message ?? "Não foi possível pedir a reposição de password.")
+        }
+    }
+
+    /// Elimina a conta (GDPR, "direito ao esquecimento") — permanente, apaga
+    /// tudo no servidor. Confirmado com a password atual.
+    @discardableResult
+    func deleteAccount(password: String) async -> Result<Void, String> {
+        do {
+            let _: MessageResponse = try await api.delete("/gdpr/account", DeleteAccountRequest(password: password))
+            user = nil
+            state = .loggedOut
+            return .success(())
+        } catch {
+            return .failure((error as? APIError)?.message ?? "Não foi possível eliminar a conta.")
+        }
+    }
 }

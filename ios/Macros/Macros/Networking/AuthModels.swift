@@ -36,3 +36,13 @@ struct UserAccount: Codable, Equatable {
 struct MessageResponse: Decodable {
     let message: String
 }
+
+struct ForgotPasswordRequest: Encodable {
+    var email: String
+}
+
+/// Equivalente a DeleteAccountRequest (backend/app/data/schemas.py) — usado
+/// por DELETE /gdpr/account.
+struct DeleteAccountRequest: Encodable {
+    var password: String
+}
