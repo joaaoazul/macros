@@ -83,3 +83,9 @@ src/
     Perfil.tsx        # peso, TMB, IMC, água, objetivo e atividade
 
 ```
+
+## App iOS nativa
+
+Existe um porte nativo em Swift/SwiftUI do núcleo de tracking (onboarding,
+diário, metas, água, exercício, progresso e perfil), 100% local e sem as
+funcionalidades que dependem do backend. Ver [`ios/README.md`](ios/README.md).
