@@ -1,5 +1,20 @@
 apply plugin: 'com.android.application'
 
+// Assinatura de release. As credenciais vêm de android/keystore.properties
+// (fora do git) ou de variáveis de ambiente, para a CI conseguir assinar sem
+// haver segredos no repositório. Ver docs/PLAY_STORE.md.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
+def signingValue = { String key, String envName ->
+    keystoreProperties.getProperty(key) ?: System.getenv(envName)
+}
+
+def keystorePath = signingValue('storeFile', 'ANDROID_KEYSTORE_FILE')
+
 android {
     namespace = "dev.joaoazul.macros"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +22,10 @@ android {
         applicationId "dev.joaoazul.macros"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // A Play Store recusa uploads com um versionCode repetido; em CI vem do
+        // número da execução, localmente fica no valor abaixo.
+        versionCode Integer.parseInt(System.getenv('ANDROID_VERSION_CODE') ?: '1')
+        versionName System.getenv('ANDROID_VERSION_NAME') ?: '1.0'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +33,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword signingValue('storePassword', 'ANDROID_KEYSTORE_PASSWORD')
+                keyAlias signingValue('keyAlias', 'ANDROID_KEY_ALIAS')
+                keyPassword signingValue('keyPassword', 'ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            // Sem keystore configurada o build sai por assinar — serve para
+            // verificar que compila, não serve para a Play Store.
+            if (keystorePath) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

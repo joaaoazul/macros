@@ -69,13 +69,15 @@ Actions → Variables** para apontar à tua API.
 ### Release para a Play Store
 
 ```bash
+cd android
 keytool -genkey -v -keystore macros.keystore -alias macros -keyalg RSA -validity 10000
-cd android && ./gradlew :app:bundleRelease   # → .aab para a Play Store
+# credenciais em android/keystore.properties (ignorado pelo git)
+./gradlew :app:bundleRelease   # → .aab para a Play Store
 ```
 
-Configura a assinatura em `android/app/build.gradle` (ou em
-`capacitor.config.ts`, chave `android.buildOptions`) e **não versiones o
-keystore nem as passwords**.
+O guia completo — keystore, ficha da loja, declarações obrigatórias e o teste
+fechado de 14 dias que a Google exige a contas novas — está em
+[`docs/PLAY_STORE.md`](docs/PLAY_STORE.md).
 
 ### O que muda no nativo
 
