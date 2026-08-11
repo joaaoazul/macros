@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { MealId, RecipeItem } from './types'
 import { MEALS } from './types'
 import { withWaterTarget } from './lib/calc'
 import { api, ApiError } from './lib/api'
 import { entryFromRecipeItem } from './lib/recipes'
 import { haptic, todayISO } from './lib/store'
+import { registerBackHandler } from './lib/nativeShell'
 import { useAuth } from './lib/auth'
 import { useBillingStatus, trialDaysLeft, type BillingStatus } from './lib/billing'
 import { useSyncedData } from './lib/sync'
@@ -82,6 +83,17 @@ export default function App() {
     recipes, setRecipes, mealPlan, setMealPlan, pantry, setPantry,
     shoppingList, setShoppingList,
   } = data
+
+  // Botão voltar do Android: primeiro volta ao diário, só depois minimiza a app.
+  useEffect(
+    () =>
+      registerBackHandler(() => {
+        if (tab === 'diario') return false
+        setTab('diario')
+        return true
+      }),
+    [tab],
+  )
 
   /** Regista os itens de uma receita na refeição escolhida, no dia de hoje. */
   const logRecipeToday = (items: RecipeItem[], meal: MealId) => {

@@ -158,3 +158,57 @@ async def test_reset_password_flow_with_mocked_email(client, monkeypatch):
         json={"token": sent["token"], "new_password": "mais-outra-789xyz"},
     )
     assert resp.status_code == 422
+
+
+# --- Shell nativo (Capacitor) --------------------------------------------------
+# O APK serve os assets em https://localhost, por isso a API é cross-site para
+# ele: os cookies de sessão têm de sair com SameSite=None (e Secure, que os
+# browsers exigem em conjunto). A web continua same-origin, com SameSite=lax.
+
+NATIVE_ORIGIN = "https://localhost"
+
+
+def _set_cookie_headers(resp):
+    return resp.headers.get_list("set-cookie")
+
+
+async def test_native_origin_gets_cross_site_cookies(client):
+    resp = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "nativa@example.com", "password": PASSWORD, "name": "Nativa"},
+        headers={"Origin": NATIVE_ORIGIN},
+    )
+    assert resp.status_code == 201, resp.text
+    headers = _set_cookie_headers(resp)
+    assert headers, "esperava cookies de sessão"
+    for header in headers:
+        assert "samesite=none" in header.lower()
+        # SameSite=None sem Secure é recusado pelos browsers, mesmo em testes
+        # onde COOKIE_SECURE=false.
+        assert "secure" in header.lower()
+
+
+async def test_web_origin_keeps_lax_cookies(client):
+    resp = await register_user(client)
+    headers = _set_cookie_headers(resp)
+    assert headers, "esperava cookies de sessão"
+    for header in headers:
+        assert "samesite=lax" in header.lower()
+        assert "samesite=none" not in header.lower()
+
+
+async def test_unknown_origin_is_not_treated_as_native(client):
+    resp = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "outra@example.com", "password": PASSWORD, "name": "Outra"},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert resp.status_code == 201, resp.text
+    for header in _set_cookie_headers(resp):
+        assert "samesite=lax" in header.lower()
+
+
+async def test_native_origin_allowed_in_cors():
+    assert NATIVE_ORIGIN in settings.ALLOWED_ORIGINS
+    # a origem nativa não deve ter sido enfiada na lista da web
+    assert NATIVE_ORIGIN not in settings.CORS_ORIGINS

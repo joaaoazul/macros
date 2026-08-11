@@ -1,4 +1,7 @@
-/** Cliente da API: fetch same-origin com cookies httpOnly, CSRF header e refresh automático. */
+/** Cliente da API: fetch com cookies httpOnly, CSRF header e refresh automático.
+ *  Same-origin na web; no shell nativo aponta para `apiOrigin` (ver `native.ts`). */
+
+import { apiCredentials, apiUrl } from './native'
 
 export class ApiError extends Error {
   status: number
@@ -17,9 +20,9 @@ export function setOnSessionExpired(fn: () => void) {
 const BASE = '/api/v1'
 
 async function rawRequest(path: string, method: string, body?: unknown): Promise<Response> {
-  return fetch(`${BASE}${path}`, {
+  return fetch(apiUrl(`${BASE}${path}`), {
     method,
-    credentials: 'same-origin',
+    credentials: apiCredentials,
     headers: {
       'X-Requested-With': 'fetch',
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),

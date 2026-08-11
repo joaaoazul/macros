@@ -8,7 +8,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import write_audit_log
-from app.auth.cookies import clear_auth_cookies
+from app.auth.cookies import clear_auth_cookies, is_native_origin
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.security import verify_password
@@ -116,5 +116,5 @@ async def delete_account(
     user_id = user.id
     await write_audit_log(db, "account_deleted", user_id=user_id, detail=user.email)
     await db.execute(delete(User).where(User.id == user_id))  # data cascades
-    clear_auth_cookies(response)
+    clear_auth_cookies(response, cross_site=is_native_origin(request))
     return {"message": "Conta eliminada."}

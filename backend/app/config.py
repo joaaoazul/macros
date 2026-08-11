@@ -23,8 +23,18 @@ class Settings(BaseSettings):
     # Cookies
     COOKIE_SECURE: bool = True  # set false only for plain-http local dev
 
+    # Origens do shell nativo (Capacitor). O WebView do Android serve os assets
+    # da app em https://localhost, por isso a API é cross-site para ele: entra
+    # no CORS e recebe cookies SameSite=None (ver auth/cookies.py).
+    NATIVE_ORIGINS: list[str] = ["https://localhost"]
+
     # CORS — same-origin in production (nginx proxies /api), dev server origin for local
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "https://macros.joaoazul.dev"]
+
+    @property
+    def ALLOWED_ORIGINS(self) -> list[str]:
+        """Origens aceites em CORS e no handshake do WebSocket."""
+        return [*self.CORS_ORIGINS, *self.NATIVE_ORIGINS]
 
     # Email (Resend). Empty API key = email features disabled:
     # registration auto-verifies, password reset returns a friendly error.

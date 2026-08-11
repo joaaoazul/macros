@@ -1,0 +1,68 @@
+name: Android
+
+# Compila o APK Android (Capacitor) e publica-o como artefacto do workflow.
+# Os runners do GitHub já trazem o Android SDK, por isso não é preciso instalar
+# nada à mão.
+#
+# Variável opcional (Settings → Secrets and variables → Actions → Variables):
+#   VITE_API_ORIGIN — origem da API usada pela build nativa.
+#                     Sem ela usa-se o valor por omissão em src/lib/native.ts.
+#
+# Para uma build assinada de release (Play Store), ver a secção Android do README.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'backend/**'
+      - 'docs/**'
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - 'backend/**'
+      - 'docs/**'
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build web + typecheck
+        env:
+          VITE_API_ORIGIN: ${{ vars.VITE_API_ORIGIN }}
+        run: npm run build
+
+      - name: Sincronizar o projeto Android
+        run: npx cap sync android
+
+      - name: Compilar o APK de debug
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macros-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

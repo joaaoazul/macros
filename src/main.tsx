@@ -6,6 +6,8 @@ import App from './App.tsx'
 import { AuthProvider, useAuth } from './lib/auth'
 import { ToastProvider } from './lib/toast'
 import { registerServiceWorker } from './lib/push'
+import { isNative } from './lib/native'
+import { initNativeShell } from './lib/nativeShell'
 import Landing from './pages/Landing'
 
 const AdminConsole = lazy(() => import('./pages/admin/AdminConsole'))
@@ -52,7 +54,8 @@ createRoot(document.getElementById('root')!).render(
       <ToastProvider>
       <AuthProvider>
         <Routes>
-          <Route path="/" element={<Landing />} />
+          {/* na app instalada não faz sentido abrir na landing de marketing */}
+          <Route path="/" element={isNative ? <Navigate to="/app" replace /> : <Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registo" element={<Registo />} />
           <Route path="/recuperar-password" element={<RecuperarPassword />} />
@@ -85,3 +88,6 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+// depois do render: assim a splash nativa só sai com o primeiro ecrã já desenhado
+void initNativeShell()

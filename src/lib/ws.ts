@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshSession } from './api'
+import { wsUrl } from './native'
 import type { AppNotification } from './notifications'
 import type { Message } from './social'
 
@@ -74,8 +75,7 @@ export function useSocialSocket(enabled: boolean): SocialSocket {
 
   const connect = useCallback(function connectFn() {
     if (!enabled || wsRef.current) return
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/api/v1/ws`)
+    const ws = new WebSocket(wsUrl('/api/v1/ws'))
     wsRef.current = ws
 
     ws.onopen = () => {

@@ -1,6 +1,13 @@
-/** Web Push no cliente: registo do service worker, subscrição e cancelamento. */
+/** Notificações no cliente.
+ *
+ *  Web: Web Push — service worker, subscrição e cancelamento.
+ *  APK Android: o WebView não tem service worker, por isso os mesmos lembretes
+ *  são agendados como notificações locais (ver `nativeNotifications.ts`). A
+ *  interface do Perfil usa estas funções sem saber em qual dos dois está.
+ */
 
 import { api, ApiError } from './api'
+import { isNative } from './native'
 
 export type PushState = 'unsupported' | 'ios-needs-install' | 'denied' | 'off' | 'on'
 
@@ -19,10 +26,16 @@ function isStandalone(): boolean {
 }
 
 export function pushSupported(): boolean {
+  if (isNative) return true
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 }
 
 export async function getPushState(): Promise<PushState> {
+  if (isNative) {
+    const { checkNativePermission } = await import('./nativeNotifications')
+    const perm = await checkNativePermission()
+    return perm === 'granted' ? 'on' : perm === 'denied' ? 'denied' : 'off'
+  }
   if (!pushSupported()) {
     return isIosSafari() && !isStandalone() ? 'ios-needs-install' : 'unsupported'
   }
@@ -38,7 +51,8 @@ export async function getPushState(): Promise<PushState> {
 
 /** Regista o service worker (idempotente). Chamado no arranque. */
 export async function registerServiceWorker(): Promise<void> {
-  if (!('serviceWorker' in navigator)) return
+  // no APK os assets já são locais e não há Push API — o SW não serve de nada
+  if (isNative || !('serviceWorker' in navigator)) return
   try {
     await navigator.serviceWorker.register('/sw.js')
   } catch {
@@ -57,6 +71,16 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 
 /** Pede permissão, subscreve no browser e regista a subscrição no servidor. */
 export async function subscribeToPush(): Promise<PushState> {
+  if (isNative) {
+    const { requestNativePermission } = await import('./nativeNotifications')
+    const perm = await requestNativePermission()
+    if (perm !== 'granted') return perm === 'denied' ? 'denied' : 'off'
+    // com permissão dada, agenda já os lembretes guardados no servidor
+    const { listReminders } = await import('./reminders')
+    await listReminders().catch(() => {})
+    return 'on'
+  }
+
   if (!pushSupported()) throw new Error('unsupported')
 
   const permission = await Notification.requestPermission()
@@ -78,6 +102,12 @@ export async function subscribeToPush(): Promise<PushState> {
 }
 
 export async function unsubscribeFromPush(): Promise<PushState> {
+  if (isNative) {
+    const { cancelNativeReminders } = await import('./nativeNotifications')
+    await cancelNativeReminders().catch(() => {})
+    return 'off'
+  }
+
   try {
     const reg = await navigator.serviceWorker.ready
     const sub = await reg.pushManager.getSubscription()

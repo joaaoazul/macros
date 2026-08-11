@@ -65,6 +65,15 @@ export function uid(): string {
 }
 
 /** Vibração tátil curta (no-op onde não é suportado). */
-export function haptic(ms = 15): void {
+let hapticImpl = (ms: number): void => {
   navigator.vibrate?.(ms)
+}
+
+/** O shell nativo troca isto pelo motor de haptics do Android (ver `nativeShell.ts`). */
+export function setHapticImpl(fn: (ms: number) => void): void {
+  hapticImpl = fn
+}
+
+export function haptic(ms = 15): void {
+  hapticImpl(ms)
 }

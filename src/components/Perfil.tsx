@@ -7,6 +7,8 @@ import { useAuth } from '../lib/auth'
 import { ACTIVITY_LEVELS, GOALS, ageFromBirthdate, bmi, bmr, computeTargets } from '../lib/calc'
 import { BODY_FAT_PCT, HEIGHT_CM, inRange } from '../lib/limits'
 import { clearLocalCache } from '../lib/sync'
+import { saveBlob } from '../lib/download'
+import { apiCredentials, apiUrl } from '../lib/native'
 import { getPushState, subscribeToPush, unsubscribeFromPush, type PushState } from '../lib/push'
 import { listReminders, saveReminders, REMINDER_META, type Reminder } from '../lib/reminders'
 import {
@@ -780,18 +782,12 @@ function ContaCard() {
 
   const doExport = async () => {
     try {
-      const resp = await fetch('/api/v1/gdpr/export', {
-        credentials: 'same-origin',
+      const resp = await fetch(apiUrl('/api/v1/gdpr/export'), {
+        credentials: apiCredentials,
         headers: { 'X-Requested-With': 'fetch' },
       })
       if (!resp.ok) throw new Error()
-      const blob = await resp.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'macros-dados.json'
-      a.click()
-      URL.revokeObjectURL(url)
+      await saveBlob('macros-dados.json', await resp.blob())
     } catch {
       setError('Não foi possível exportar os dados.')
     }

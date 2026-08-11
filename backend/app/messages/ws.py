@@ -32,7 +32,7 @@ def _origin_allowed(ws: WebSocket) -> bool:
     origin = ws.headers.get("origin")
     if not origin:
         return True  # clientes não-browser (testes) não enviam Origin
-    allowed = set(settings.CORS_ORIGINS) | {str(settings.APP_URL).rstrip("/")}
+    allowed = set(settings.ALLOWED_ORIGINS) | {str(settings.APP_URL).rstrip("/")}
     return origin.rstrip("/") in allowed
 
 

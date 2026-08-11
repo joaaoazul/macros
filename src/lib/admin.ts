@@ -1,6 +1,7 @@
 /** Cliente da API do SOC admin + feed SSE de eventos de auditoria. */
 
 import { api } from './api'
+import { apiUrl } from './native'
 
 export interface DailyPoint {
   date: string
@@ -114,7 +115,7 @@ export const admin = {
 
 /** Abre o feed SSE. Devolve uma função de cleanup. */
 export function subscribeLiveFeed(onEvent: (e: LiveEvent) => void): () => void {
-  const es = new EventSource('/api/v1/admin/audit/stream', { withCredentials: true })
+  const es = new EventSource(apiUrl('/api/v1/admin/audit/stream'), { withCredentials: true })
   es.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data) as LiveEvent)

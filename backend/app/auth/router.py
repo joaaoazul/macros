@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import write_audit_log
-from app.auth.cookies import REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
+from app.auth.cookies import REFRESH_COOKIE, clear_auth_cookies, is_native_origin, set_auth_cookies
 from app.auth.dependencies import get_current_user
 from app.auth.models import EmailToken, InviteCode, User
 from app.auth.rate_limit import auth_rate_limit, forgot_rate_limit
@@ -41,11 +41,12 @@ from app.net import client_ip as _client_ip  # IP fiável via X-Real-IP (não sp
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-def _issue_session(response: Response, user: User) -> None:
+def _issue_session(response: Response, user: User, request: Request) -> None:
     set_auth_cookies(
         response,
         create_access_token(user.id, user.email),
         create_refresh_token(user.id),
+        cross_site=is_native_origin(request),
     )
 
 
@@ -137,7 +138,7 @@ async def register(
         await send_verification_email(user.email, raw)
 
     await write_audit_log(db, "register", user_id=user.id, ip=_client_ip(request))
-    _issue_session(response, user)
+    _issue_session(response, user, request)
     return user
 
 
@@ -191,7 +192,7 @@ async def login(
     await write_audit_log(db, action, user_id=user.id, ip=ip, severity=severity, user_agent=ua)
     if user.is_admin:
         await write_audit_log(db, "login", user_id=user.id, ip=ip, user_agent=ua)  # conta p/ dashboard
-    _issue_session(response, user)
+    _issue_session(response, user, request)
     return user
 
 
@@ -241,7 +242,7 @@ async def refresh(
 
     # Rotate: revoke the old refresh token, issue a fresh pair.
     await revoke_token(jti, user.id, datetime.fromtimestamp(exp, tz=timezone.utc), db)
-    _issue_session(response, user)
+    _issue_session(response, user, request)
     return user
 
 
@@ -266,7 +267,7 @@ async def logout(
             )
         except (jwt.InvalidTokenError, KeyError):
             pass
-    clear_auth_cookies(response)
+    clear_auth_cookies(response, cross_site=is_native_origin(request))
     await write_audit_log(db, "logout", user_id=user.id, ip=_client_ip(request))
     return MessageOut(message="Sessão terminada.")
 

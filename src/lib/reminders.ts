@@ -1,6 +1,7 @@
 /** Lembretes push: configuração por tipo (hora local + ativo). */
 
 import { api } from './api'
+import { isNative } from './native'
 
 export type ReminderKind =
   | 'water'
@@ -29,10 +30,19 @@ export const REMINDER_META: Record<ReminderKind, { label: string; emoji: string 
   plan_dinner: { label: 'Comeste o jantar planeado?', emoji: '🌙' },
 }
 
-export function listReminders(): Promise<Reminder[]> {
-  return api<Reminder[]>('/reminders')
+/** No APK os lembretes tocam via notificações locais — reagenda a cada leitura/escrita. */
+async function mirrorToDevice(reminders: Reminder[]): Promise<Reminder[]> {
+  if (isNative) {
+    const { syncNativeReminders } = await import('./nativeNotifications')
+    await syncNativeReminders(reminders).catch(() => {})
+  }
+  return reminders
 }
 
-export function saveReminders(reminders: Reminder[]): Promise<Reminder[]> {
-  return api<Reminder[]>('/reminders', { method: 'PUT', body: reminders })
+export async function listReminders(): Promise<Reminder[]> {
+  return mirrorToDevice(await api<Reminder[]>('/reminders'))
+}
+
+export async function saveReminders(reminders: Reminder[]): Promise<Reminder[]> {
+  return mirrorToDevice(await api<Reminder[]>('/reminders', { method: 'PUT', body: reminders }))
 }

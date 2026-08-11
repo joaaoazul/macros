@@ -18,7 +18,7 @@ Tracker de macros e nutrição — rápido, bonito e 100% local (os dados nunca 
 
 ## Stack
 
-React 19 · TypeScript · Vite · Tailwind CSS 4
+React 19 · TypeScript · Vite · Tailwind CSS 4 · Capacitor 8 (Android)
 
 ## Desenvolvimento
 
@@ -28,6 +28,77 @@ npm run dev       # servidor de desenvolvimento
 npm run build     # typecheck + build de produção
 npm run preview   # servir a build
 ```
+
+## App Android
+
+A mesma base de código corre como app nativa Android via [Capacitor](https://capacitorjs.com/):
+os assets da web vão dentro do APK (arranca offline, sem esperar pela rede) e o
+WebView serve-os em `https://localhost`.
+
+**Isso torna a API cross-origin**, e daí sai quase toda a configuração abaixo:
+
+- `VITE_API_ORIGIN` diz à build nativa onde vive a API. Sem ela usa-se o valor
+  por omissão em `src/lib/native.ts`. **Tem de ser HTTPS** — os cookies de sessão
+  saem com `SameSite=None`, que os browsers só aceitam com `Secure`.
+- O backend reconhece a origem nativa (`NATIVE_ORIGINS`, por omissão
+  `https://localhost`), aceita-a em CORS e no handshake do WebSocket, e só a
+  essa responde com cookies `SameSite=None`. A web continua same-origin com
+  `SameSite=lax` — a app instalada não afrouxa a proteção CSRF do site.
+- O `MainActivity` liga os cookies third-party no WebView, senão o handshake do
+  WebSocket saía sem cookie e levava 4401.
+
+### Compilar
+
+```bash
+npm install
+VITE_API_ORIGIN=https://macros.joaoazul.dev npm run build
+npx cap sync android          # copia a build e actualiza os plugins
+cd android && ./gradlew :app:assembleDebug
+# → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Instalar no telemóvel com `adb install -r <apk>`, ou abrir o projeto no Android
+Studio (`npx cap open android`). Repetir `npm run build && npx cap sync android`
+sempre que o código web mudar.
+
+O workflow `.github/workflows/android.yml` compila o APK de debug a cada push e
+publica-o como artefacto — útil por não precisar do SDK instalado localmente.
+Define a variável `VITE_API_ORIGIN` em **Settings → Secrets and variables →
+Actions → Variables** para apontar à tua API.
+
+### Release para a Play Store
+
+```bash
+keytool -genkey -v -keystore macros.keystore -alias macros -keyalg RSA -validity 10000
+cd android && ./gradlew :app:bundleRelease   # → .aab para a Play Store
+```
+
+Configura a assinatura em `android/app/build.gradle` (ou em
+`capacitor.config.ts`, chave `android.buildOptions`) e **não versiones o
+keystore nem as passwords**.
+
+### O que muda no nativo
+
+| | Web | Android |
+| --- | --- | --- |
+| Assets | servidos pelo nginx | dentro do APK |
+| API | same-origin (`/api`) | `VITE_API_ORIGIN`, cookies cross-site |
+| Notificações | Web Push (service worker) | notificações locais agendadas no dispositivo |
+| Guardar exportação GDPR | download do browser | escreve no cache e abre a folha de partilha |
+| Haptics | `navigator.vibrate` | motor de haptics do Android |
+| Voltar | histórico do browser | botão voltar → separador Diário → minimiza |
+| Arranque | landing de marketing | vai directo para `/app` |
+
+O service worker não é registado no APK: não há Push API dentro do WebView e os
+assets já são locais. Por isso os lembretes passam a notificações locais — as
+horas continuam a ser as que estão guardadas no servidor (`src/lib/reminders.ts`
+espelha-as para o dispositivo), mas tocam sem depender de rede.
+
+### Ícones e splash
+
+`assets/` é gerado a partir do ícone da PWA por
+`node scripts/generate-android-assets.mjs`; os recursos Android saem daí com
+`npx capacitor-assets generate --android`.
 
 ## Deploy
 
@@ -82,4 +153,16 @@ src/
     Progresso.tsx     # estatísticas e gráfico semanal
     Perfil.tsx        # peso, TMB, IMC, água, objetivo e atividade
 
+android/            # projeto nativo (Capacitor) — gerado, versionado
+assets/             # arte-fonte dos ícones e splash do Android
+capacitor.config.ts # id da app, webDir e configuração dos plugins nativos
+```
+
+No `src/lib/`, o que é específico do nativo:
+
+```
+native.ts             # detecção de plataforma e origem da API
+nativeShell.ts        # botão voltar, status bar, splash, haptics, links externos
+nativeNotifications.ts# lembretes como notificações locais
+download.ts           # guardar ficheiros (download na web, partilha no Android)
 ```
