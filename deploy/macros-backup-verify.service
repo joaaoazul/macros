@@ -1,0 +1,13 @@
+[Unit]
+Description=Ensaio de restauro do backup Macros
+Documentation=file:///opt/macros/docs/BACKUPS.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/macros
+# Restaura a cópia mais recente para uma base temporária, confirma que tem
+# conteúdo e apaga-a. Não toca na produção.
+ExecStart=/opt/macros/deploy/restore-db.sh --latest
+UMask=0077

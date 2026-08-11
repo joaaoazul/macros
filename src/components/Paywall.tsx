@@ -2,11 +2,92 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { billing, trialDaysLeft, type BillingStatus, type Plan } from '../lib/billing'
 import { useAuth } from '../lib/auth'
+import { isNative } from '../lib/native'
 
 /** Ecrã de subscrição. Sem onClose é o paywall obrigatório (trial acabou); com
  * onClose é voluntário (o utilizador em trial foi "ver planos"). */
-export default function Paywall({ status, onClose }: { status: BillingStatus; onClose?: () => void }) {
+export default function Paywall({
+  status,
+  onClose,
+  onRecheck,
+}: {
+  status: BillingStatus
+  onClose?: () => void
+  onRecheck?: () => void
+}) {
   const { logout } = useAuth()
+
+  // A Google Play exige que compras digitais consumidas dentro da app passem
+  // pelo Play Billing, e proíbe encaminhar para pagamento externo. No APK este
+  // ecrã limita-se a dizer o estado: sem preços, sem botão de compra e sem
+  // dizer onde se subscreve. A venda vive só na web. Ver docs/PLAY_STORE.md.
+  if (isNative) {
+    return <NativeAccessNotice status={status} onClose={onClose} onRecheck={onRecheck} onLogout={logout} />
+  }
+
+  return <WebPaywall status={status} onClose={onClose} onLogout={logout} />
+}
+
+function NativeAccessNotice({
+  status,
+  onClose,
+  onRecheck,
+  onLogout,
+}: {
+  status: BillingStatus
+  onClose?: () => void
+  onRecheck?: () => void
+  onLogout: () => Promise<void>
+}) {
+  const trialing = status.status === 'trialing'
+  const daysLeft = trialDaysLeft(status)
+
+  return (
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg px-6 py-10">
+      <div className="flex-1">
+        <span className="text-4xl" aria-hidden>🥗</span>
+        <h1 className="mt-4 text-3xl font-bold tracking-tight">
+          {trialing ? 'O teu teste está a terminar' : 'Sem acesso activo'}
+        </h1>
+        <p className="mt-2 text-ink-2">
+          {trialing && daysLeft > 0
+            ? `Faltam ${daysLeft} ${daysLeft === 1 ? 'dia' : 'dias'} de teste.`
+            : 'Esta conta não tem acesso activo neste momento. Os teus dados continuam guardados.'}
+        </p>
+      </div>
+
+      <div className="mt-8 space-y-3">
+        {onRecheck && (
+          <button
+            onClick={onRecheck}
+            className="w-full rounded-full bg-accent px-6 py-3.5 font-semibold text-white transition-opacity active:opacity-80"
+          >
+            Actualizar estado
+          </button>
+        )}
+        {onClose ? (
+          <button onClick={onClose} className="w-full rounded-full bg-surface px-6 py-3.5 font-semibold text-ink-2">
+            Continuar
+          </button>
+        ) : (
+          <button onClick={() => void onLogout()} className="w-full py-2 text-sm font-medium text-muted">
+            Terminar sessão
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function WebPaywall({
+  status,
+  onClose,
+  onLogout,
+}: {
+  status: BillingStatus
+  onClose?: () => void
+  onLogout: () => Promise<void>
+}) {
   const [plan, setPlan] = useState<Plan>('annual')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -75,7 +156,7 @@ export default function Paywall({ status, onClose }: { status: BillingStatus; on
             Agora não
           </button>
         ) : (
-          <button onClick={() => void logout()} className="w-full py-2 text-sm font-medium text-muted">
+          <button onClick={() => void onLogout()} className="w-full py-2 text-sm font-medium text-muted">
             Terminar sessão
           </button>
         )}

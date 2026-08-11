@@ -6,5 +6,6 @@ dist
 .env
 backend/venv
 backend/.venv
+backups
 __pycache__
 .pytest_cache

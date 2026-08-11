@@ -6,6 +6,7 @@ import { api, ApiError } from './lib/api'
 import { entryFromRecipeItem } from './lib/recipes'
 import { haptic, todayISO } from './lib/store'
 import { registerBackHandler } from './lib/nativeShell'
+import { isNative } from './lib/native'
 import { useAuth } from './lib/auth'
 import { useBillingStatus, trialDaysLeft, type BillingStatus } from './lib/billing'
 import { useSyncedData } from './lib/sync'
@@ -114,7 +115,7 @@ export default function App() {
   // Paywall ANTES do onboarding: um utilizador sem acesso não deve ver o setup.
   // Fail-open: só bloqueia quando o backend diz explicitamente access=false.
   if (billingState.data && !billingState.data.access) {
-    return <Paywall status={billingState.data} />
+    return <Paywall status={billingState.data} onRecheck={billingState.reload} />
   }
 
   if (migrationAvailable) {
@@ -237,9 +238,12 @@ function TrialBanner({ status, onSeePlans }: { status: BillingStatus; onSeePlans
           <>O teu teste termina hoje.</>
         )}
       </span>
-      <button onClick={onSeePlans} className="shrink-0 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white">
-        Ver planos
-      </button>
+      {/* sem CTA de compra no APK — ver Paywall.tsx e docs/PLAY_STORE.md */}
+      {!isNative && (
+        <button onClick={onSeePlans} className="shrink-0 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white">
+          Ver planos
+        </button>
+      )}
     </div>
   )
 }

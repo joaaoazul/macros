@@ -4,7 +4,7 @@
  * Falha aberto do lado do cliente — se o /status falhar, não bloqueamos (o backend
  * continua a ser o verdadeiro portão via require_access/402). */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 
 export interface BillingStatus {
@@ -34,14 +34,23 @@ export function trialDaysLeft(status: BillingStatus): number {
 interface BillingState {
   loading: boolean
   data: BillingStatus | null
+  /** Relê o estado. No Android é assim que o utilizador confirma uma
+   *  subscrição feita fora da app (ver Paywall). */
+  reload: () => void
 }
 
-/** Carrega o estado de billing uma vez. data=null enquanto carrega ou em erro
+/** Carrega o estado de billing. data=null enquanto carrega ou em erro
  * (fail-open: quem chama só bloqueia quando data.access é explicitamente false). */
 export function useBillingStatus(): BillingState {
-  const [state, setState] = useState<BillingState>({ loading: true, data: null })
+  const [state, setState] = useState<{ loading: boolean; data: BillingStatus | null }>({
+    loading: true,
+    data: null,
+  })
+  const [nonce, setNonce] = useState(0)
+
   useEffect(() => {
     let alive = true
+    setState((s) => ({ ...s, loading: true }))
     billing
       .status()
       .then((d) => alive && setState({ loading: false, data: d }))
@@ -49,6 +58,7 @@ export function useBillingStatus(): BillingState {
     return () => {
       alive = false
     }
-  }, [])
-  return state
+  }, [nonce])
+
+  return { ...state, reload: useCallback(() => setNonce((n) => n + 1), []) }
 }

@@ -102,6 +102,16 @@ espelha-as para o dispositivo), mas tocam sem depender de rede.
 `node scripts/generate-android-assets.mjs`; os recursos Android saem daí com
 `npx capacitor-assets generate --android`.
 
+## Backups
+
+A base de dados é copiada todos os dias para o Backblaze B2, cifrada, com
+ensaio de restauro semanal — ver [`docs/BACKUPS.md`](docs/BACKUPS.md).
+
+```bash
+./deploy/backup-db.sh            # copiar agora
+./deploy/restore-db.sh --latest  # ensaio de restauro (não toca na produção)
+```
+
 ## Deploy
 
 ### VPS (nginx, um comando)

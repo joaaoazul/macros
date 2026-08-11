@@ -8,7 +8,7 @@ import { ACTIVITY_LEVELS, GOALS, ageFromBirthdate, bmi, bmr, computeTargets } fr
 import { BODY_FAT_PCT, HEIGHT_CM, inRange } from '../lib/limits'
 import { clearLocalCache } from '../lib/sync'
 import { saveBlob } from '../lib/download'
-import { apiCredentials, apiUrl } from '../lib/native'
+import { apiCredentials, apiUrl, isNative } from '../lib/native'
 import { getPushState, subscribeToPush, unsubscribeFromPush, type PushState } from '../lib/push'
 import { listReminders, saveReminders, REMINDER_META, type Reminder } from '../lib/reminders'
 import {
@@ -685,7 +685,9 @@ function SubscriptionCard() {
           )}
         </div>
       </div>
-      {!status.comped && (
+      {/* No APK mostramos só o estado: a Play Store não deixa encaminhar para
+          pagamento externo, seja para comprar ou para gerir. Ver docs/PLAY_STORE.md. */}
+      {!status.comped && !isNative && (
         <button
           onClick={() => go(hasSub ? 'portal' : 'checkout')}
           disabled={busy}

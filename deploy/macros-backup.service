@@ -1,0 +1,13 @@
+[Unit]
+Description=Backup da base de dados Macros
+Documentation=file:///opt/macros/docs/BACKUPS.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Ajusta se clonaste o projeto noutro sítio.
+WorkingDirectory=/opt/macros
+ExecStart=/opt/macros/deploy/backup-db.sh
+# O dump tem dados de saúde: só o dono lê os ficheiros que saem daqui.
+UMask=0077

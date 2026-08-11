@@ -1,0 +1,12 @@
+[Unit]
+Description=Backup diário da base de dados Macros
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+# Se a máquina esteve desligada à hora marcada, corre assim que arrancar.
+Persistent=true
+# Espalha a hora, para não bater sempre no mesmo minuto.
+RandomizedDelaySec=20m
+
+[Install]
+WantedBy=timers.target
